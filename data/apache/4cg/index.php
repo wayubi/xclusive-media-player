@@ -297,12 +297,12 @@ function renderGrid(){
       video.loop = true;
       video.muted = muted;
       video.src = file;
-      video.ondblclick = () => startFullscreenFrom(allVideos.indexOf(file));
+      video.onclick = () => startFullscreenFrom(allVideos.indexOf(file));
       container.appendChild(video);
     } else if(['jpg','jpeg','png','gif'].includes(ext)){
       const img = document.createElement('img');
       img.src = file;
-      img.ondblclick = () => startFullscreenFrom(allVideos.indexOf(file));
+      img.onclick = () => startFullscreenFrom(allVideos.indexOf(file));
       container.appendChild(img);
     } else {
       container.innerHTML = `<div style="color:red; padding:4px;">Unsupported: ${file}</div>`;
