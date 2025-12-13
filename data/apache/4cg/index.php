@@ -232,7 +232,8 @@ a { text-decoration: none; color: #1e90ff; }
 /* Overlay */
 .video-container .overlay {
   position: absolute;
-  bottom: 4px;
+  top: 4px;        /* anchor to top */
+  bottom: auto;    /* reset bottom */
   left: 4px;
   right: 4px;
   background-color: rgba(0,0,0,0.7);
@@ -246,8 +247,12 @@ a { text-decoration: none; color: #1e90ff; }
   align-items: center;
   pointer-events: none;
   transition: opacity 0.2s;
+  z-index: 10;     /* make sure overlay is above image/audio */
 }
-.video-container:hover .overlay { opacity: 1; pointer-events: auto; }
+.video-container:hover .overlay { 
+  opacity: 1; 
+  pointer-events: auto; 
+}
 
 .overlay button {
   background-color: #ff4d4f;
@@ -455,32 +460,49 @@ function renderGrid(){
       img.ondblclick = () => startFullscreenFrom(allVideos.indexOf(file));
       container.appendChild(img);
     } else if (['mp3','wav','ogg'].includes(ext)) {
-        const audio = document.createElement('audio');
-        audio.controls = true;
-        audio.muted = muted;
-        audio.preload = 'metadata';
-        audio.style.width = '100%';
+      // container already exists
+      container.className = 'video-container';
+      container.style.display = 'flex';
+      container.style.flexDirection = 'column';
+      container.style.justifyContent = 'center';
+      container.style.alignItems = 'center';
+      container.style.height = '100%';
 
-        // single click → fullscreen audio player
-        audio.onclick = () => startFullscreenFrom(allVideos.indexOf(file));
+      // 1️⃣ Album cover
+      const img = document.createElement('img');
+      img.style.width = '100%';
+      img.style.flexGrow = '1'; // take available space
+      img.style.objectFit = 'contain';
+      img.style.cursor = 'pointer';
+      container.appendChild(img);
 
-        container.appendChild(audio);
+      fetch('getAudioCover.php?file=' + encodeURIComponent(file))
+        .then(res => res.json())
+        .then(data => { img.src = data.cover; });
 
-        requestAnimationFrame(() => {
-            audio.src = file;
-            audio.play().catch(()=>{});
-        });
+      // 2️⃣ Audio element
+      const audio = document.createElement('audio');
+      audio.controls = true;
+      audio.muted = muted;
+      audio.preload = 'metadata';
+      audio.style.width = '100%';
+      audio.onclick = () => startFullscreenFrom(allVideos.indexOf(file));
+      container.appendChild(audio);
 
-        // --- EXCLUSIVE UNMUTE: listen for volume/mute changes ---
-        audio.addEventListener('volumechange', () => {
-            if (!audio.muted) {
-                // mute all other media elements
-                const allMedia = document.querySelectorAll('#grid video, #grid audio');
-                allMedia.forEach(m => {
-                    if (m !== audio) m.muted = true;
-                });
-            }
-        });
+      requestAnimationFrame(() => {
+          audio.src = file;
+          audio.play().catch(()=>{});
+      });
+
+      // 3️⃣ Exclusive unmute
+      audio.addEventListener('volumechange', () => {
+          if (!audio.muted) {
+              const allMedia = document.querySelectorAll('#grid video, #grid audio');
+              allMedia.forEach(m => {
+                  if (m !== audio) m.muted = true;
+              });
+          }
+      });
     } else {
       container.innerHTML = `<div style="color:red; padding:4px;">Unsupported: ${file}</div>`;
     }
@@ -646,12 +668,19 @@ function shufflePlay(){
 // --------------------
 function submitForm(changedId=''){
   const form = document.getElementById('options-form');
+
   if(changedId==='selected-category'){
-    form.elements['selected-board'].selectedIndex=0;
-    form.elements['selected-folder'].selectedIndex=0;
+    const boardSelect = form.elements['selected-board'];
+    if(boardSelect) boardSelect.selectedIndex = 0;
+
+    const folderSelect = form.elements['selected-folder'];
+    if(folderSelect) folderSelect.selectedIndex = 0;
+
   } else if(changedId==='selected-board'){
-    form.elements['selected-folder'].selectedIndex=0;
+    const folderSelect = form.elements['selected-folder'];
+    if(folderSelect) folderSelect.selectedIndex = 0;
   }
+
   form.submit();
 }
 
