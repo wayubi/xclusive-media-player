@@ -281,6 +281,15 @@ let startIndex = 0;
 // --------------------
 function renderGrid(){
   const grid = document.getElementById('grid');
+
+  // Pause old videos to free resources
+  const oldVideos = grid.querySelectorAll('video');
+  oldVideos.forEach(v => {
+    v.pause();
+    v.src = '';
+    v.load();
+  });
+
   grid.innerHTML = '';
 
   const endIndex = Math.min(startIndex + totalCells, allVideos.length);
@@ -293,12 +302,20 @@ function renderGrid(){
     const ext = file.split('.').pop().toLowerCase();
     if(['mp4','webm'].includes(ext)){
       const video = document.createElement('video');
-      video.autoplay = true;
       video.loop = true;
       video.muted = muted;
-      video.src = file;
+      video.playsInline = true; // mobile inline autoplay
+      video.preload = 'metadata'; // only load metadata initially
       video.onclick = () => startFullscreenFrom(allVideos.indexOf(file));
+
+      // Only set src and play after inserted into DOM
       container.appendChild(video);
+      requestAnimationFrame(() => {
+        video.src = file;
+        video.play().catch(() => {
+          console.log('Video autoplay blocked, user interaction needed');
+        });
+      });
     } else if(['jpg','jpeg','png','gif'].includes(ext)){
       const img = document.createElement('img');
       img.src = file;
@@ -310,7 +327,7 @@ function renderGrid(){
 
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
-    overlay.innerHTML = `<span>${file}</span> <button onclick="deleteGridFile('${file}')">Delete</button>`;
+    overlay.innerHTML = `<span>${file}</span> <button onclick="deleteGridFile('${file}')" onkeydown="if(event.key==='Enter'){ deleteGridFile('${file}'); }">Delete</button>`;
     container.appendChild(overlay);
 
     grid.appendChild(container);
@@ -370,8 +387,9 @@ function startFullscreenPlayer(playlist, index=0){
 
   const video = document.createElement('video');
   video.src = playlist[i];
-  video.style.maxWidth='100%';
-  video.style.maxHeight='100%';
+  video.style.width = '100%';
+  video.style.height = '100%';
+  video.style.objectFit = 'contain';
   video.autoplay = true;
   video.muted = muted;
   video.controls = true;
@@ -403,15 +421,18 @@ function startFullscreenPlayer(playlist, index=0){
   }, {passive:false});
 
   const keyHandler = e => {
-    if(e.key==='Escape') close();
-    if(e.key==='Delete'){
+    if(e.key === 'Escape') close();
+    if(e.key === 'Delete') {
+      let confirmDelete = confirm('Delete this file?');
+      if(!confirmDelete) return;
+
       const deleted = playlist[i];
       playlist.splice(i,1);
       const idxAll = allVideos.indexOf(deleted);
-      if(idxAll!==-1) allVideos.splice(idxAll,1);
+      if(idxAll !== -1) allVideos.splice(idxAll,1);
       fetch('index.php?delete=' + encodeURIComponent(deleted));
       renderGrid();
-      if(playlist.length===0){ close(); return; }
+      if(playlist.length === 0){ close(); return; }
       play(i % playlist.length);
     }
   };
