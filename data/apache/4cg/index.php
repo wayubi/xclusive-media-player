@@ -2,8 +2,8 @@
 // =====================
 // CONFIG / SETTINGS
 // =====================
-$root_directory = './4chan-boards';
-$root_directory_absolute = getcwd() . '/4chan-boards';
+$root_directory = './volumes';
+$root_directory_absolute = getcwd() . '/volumes';
 
 $is_mobile = stripos($_SERVER['HTTP_USER_AGENT'], 'Mobile') !== false || stripos($_SERVER['HTTP_USER_AGENT'], 'Android') !== false;
 
