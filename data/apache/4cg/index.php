@@ -425,18 +425,40 @@ function startFullscreenPlayer(playlist, startIndex = 0) {
     }
   }, {passive: false});
 
-  // Escape key
-  const escHandler = (e) => {
+  // Escape & Delete key
+  const keyHandler = (e) => {
     if(e.key === 'Escape'){
       closeFullscreen();
-      document.removeEventListener('keydown', escHandler);
+      document.removeEventListener('keydown', keyHandler);
+    } 
+    else if(e.key === 'Delete') {
+      // Remove file from playlist
+      const deletedFile = playlist[startIndex];
+      playlist.splice(startIndex, 1);
+
+      // Trigger server-side delete
+      fetch('index.php?delete=' + encodeURIComponent(deletedFile));
+
+      // If playlist is empty, close fullscreen
+      if(playlist.length === 0){
+        closeFullscreen();
+        document.removeEventListener('keydown', keyHandler);
+        return;
+      }
+
+      // Play next video (or wrap around)
+      playVideo(startIndex);
     }
   };
-  document.addEventListener('keydown', escHandler);
+  document.addEventListener('keydown', keyHandler);
 
   // Play next video when current ends
   video.onended = () => {
-    playVideo(startIndex + 1);
+    if(playlist.length > 0){
+      playVideo(startIndex + 1);
+    } else {
+      closeFullscreen();
+    }
   };
 }
 
