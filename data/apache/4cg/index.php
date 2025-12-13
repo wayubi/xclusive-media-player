@@ -281,11 +281,13 @@ a { text-decoration: none; color: #1e90ff; }
   ?>
   <div class="video-container">
     <?php if(in_array($fileExt,['webm','mp4'])): ?>
-      <video autoplay loop <?php echo $muted ? 'muted' : ''; ?>>
+      <video autoplay loop <?php echo $muted ? 'muted' : ''; ?>
+             ondblclick="startFullscreenFrom('<?php echo addslashes($file); ?>')">
         <source src="<?php echo htmlspecialchars($file); ?>" type="video/<?php echo $fileExt; ?>">
       </video>
     <?php elseif(in_array($fileExt,['gif','jpg','jpeg','png'])): ?>
-      <img src="<?php echo htmlspecialchars($file); ?>" alt="<?php echo htmlspecialchars($fileName); ?>">
+      <img src="<?php echo htmlspecialchars($file); ?>" alt="<?php echo htmlspecialchars($fileName); ?>"
+           ondblclick="startFullscreenFrom('<?php echo addslashes($file); ?>')">
     <?php else: ?>
       <div style="color:red; padding:4px;">Unsupported: <?php echo htmlspecialchars($fileName); ?></div>
     <?php endif; ?>
@@ -357,30 +359,25 @@ function deleteFile(file) {
 </script>
 
 <script>
-const playlistFiles = <?php
-$allPlaylistFiles = [];
-if ($selected_folder === '__all__') {
-    // Play all videos from all folders under the board
-    foreach ($folders as $folder) {
-        $dir = "$root_directory/$selected_category/$selected_board/$folder";
-        $allPlaylistFiles = array_merge($allPlaylistFiles, getFiles($dir));
-    }
-} else {
-    $allPlaylistFiles = getFiles("$root_directory/$selected_category/$selected_board/$selected_folder");
-}
+// Convert PHP data to JS
+const currentGridFiles = <?php echo json_encode(array_map('addslashes', $currentFiles)); ?>;
 
-// Only include video files
-$allPlaylistFiles = array_filter($allPlaylistFiles, function($f){
-    $ext = strtolower(pathinfo($f, PATHINFO_EXTENSION));
-    return in_array($ext, ['webm','mp4']);
-});
-
-echo json_encode(array_values($allPlaylistFiles));
-?>;
+// All files in current folder (selected-folder)
+<?php
+$folderDir = "$root_directory/$selected_category/$selected_board/$selected_folder";
+$allFolderFiles = getFiles($folderDir);
+?>
+const allFolderFiles = <?php echo json_encode(array_map('addslashes', $allFolderFiles)); ?>;
 
 function startPlaylist(shuffle = false) {
-    const files = <?php echo json_encode(array_map(function($f){ return $f; }, getFiles($current_selected_directory))); ?>;
-    let playlist = shuffle ? [...files].sort(() => Math.random()-0.5) : files;
+    let playlist;
+
+    if (shuffle) {
+        playlist = [...allFolderFiles];
+        playlist.sort(() => Math.random() - 0.5); // Shuffle all files in folder
+    } else {
+        playlist = [...currentGridFiles]; // Play current grid
+    }
 
     // Create fullscreen container
     let container = document.createElement('div');
@@ -410,7 +407,6 @@ function startPlaylist(shuffle = false) {
     let index = 0;
     function playNext() {
         if (index >= playlist.length) {
-            exitFullscreen();
             container.remove();
             return;
         }
@@ -420,7 +416,6 @@ function startPlaylist(shuffle = false) {
     }
 
     video.onended = playNext;
-
     playNext();
 
     // Request fullscreen
@@ -428,16 +423,75 @@ function startPlaylist(shuffle = false) {
     else if (container.webkitRequestFullscreen) container.webkitRequestFullscreen();
     else if (container.msRequestFullscreen) container.msRequestFullscreen();
 
-    // Exit handler on Esc
+    // Exit handler
     document.addEventListener('fullscreenchange', () => {
-        if (!document.fullscreenElement) {
-            container.remove();
-        }
+        if (!document.fullscreenElement) container.remove();
     });
     document.addEventListener('webkitfullscreenchange', () => {
         if (!document.webkitFullscreenElement) container.remove();
     });
 }
+
+function startFullscreenFrom(file) {
+    // Create playlist starting with the double-clicked file
+    let playlist = [...allFolderFiles];
+
+    // Move the selected file to the front
+    let index = playlist.indexOf(file);
+    if(index > -1) {
+        playlist.splice(index, 1); // remove from current position
+        playlist.unshift(file);    // add to start
+    }
+
+    // Reuse same fullscreen player logic
+    let container = document.createElement('div');
+    container.id = 'fullscreen-player';
+    Object.assign(container.style, {
+        position: 'fixed',
+        top: '0',
+        left: '0',
+        width: '100%',
+        height: '100%',
+        backgroundColor: 'black',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: '9999'
+    });
+    document.body.appendChild(container);
+
+    let video = document.createElement('video');
+    video.autoplay = true;
+    video.controls = true;
+    video.muted = <?php echo $muted ? 'true' : 'false'; ?>;
+    video.style.maxWidth = '100%';
+    video.style.maxHeight = '100%';
+    container.appendChild(video);
+
+    let i = 0;
+    function playNext() {
+        if(i >= playlist.length) {
+            container.remove();
+            return;
+        }
+        video.src = playlist[i];
+        video.play();
+        i++;
+    }
+
+    video.onended = playNext;
+    playNext();
+
+    // Fullscreen request
+    if(container.requestFullscreen) container.requestFullscreen();
+    else if(container.webkitRequestFullscreen) container.webkitRequestFullscreen();
+    else if(container.msRequestFullscreen) container.msRequestFullscreen();
+
+    // Exit fullscreen cleanup
+    document.addEventListener('fullscreenchange', () => { if(!document.fullscreenElement) container.remove(); });
+    document.addEventListener('webkitfullscreenchange', () => { if(!document.webkitFullscreenElement) container.remove(); });
+}
+
 </script>
 
 </body>
