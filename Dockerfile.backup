@@ -1,0 +1,11 @@
+FROM php:apache
+
+# Add www-data to the root group
+# RUN usermod -a -G root www-data
+
+# Force Apache to run as root instead of www-data
+RUN sed -i 's/^User .*/User root/' /etc/apache2/apache2.conf \
+ && sed -i 's/^Group .*/Group root/' /etc/apache2/apache2.conf
+
+# Use the default command provided by the php:apache image
+CMD ["apache2-foreground"]
