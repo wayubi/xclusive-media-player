@@ -38,13 +38,30 @@ function getDirectories($path, $exclude = []) {
 }
 
 function getFiles($path) {
-    $files = glob($path . '/*', GLOB_BRACE);
-    $files = array_filter($files, function ($file) {
-        return substr($file, -7) !== '.backup' && substr($file, -9) !== '.original';
-    });
+    if (!is_dir($path)) return [];
+
+    $entries = glob($path . '/*');
+    $files = [];
+
+    foreach ($entries as $entry) {
+        // 🚫 skip directories
+        if (!is_file($entry)) continue;
+
+        // 🚫 skip backup/original artifacts
+        if (
+            str_ends_with($entry, '.backup') ||
+            str_ends_with($entry, '.original')
+        ) {
+            continue;
+        }
+
+        $files[] = $entry;
+    }
+
     usort($files, function ($a, $b) {
         return filemtime($b) <=> filemtime($a);
     });
+
     return $files;
 }
 
@@ -170,6 +187,12 @@ a { text-decoration: none; color: #1e90ff; }
   font-size: 14px;
   cursor: pointer;
   transition: 0.2s;
+}
+#options-form select[name="selected-folder"] {
+    max-width: 200px;       /* or whatever fits your layout */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 #options-form select:hover, #options-form button:hover { background-color: #3a3a3a; }
 #file-count, #audit-text { font-weight: bold; margin-left: 10px; margin-right: 10px; }
@@ -410,7 +433,7 @@ function renderGrid(){
     container.className = 'video-container';
 
     const ext = file.split('.').pop().toLowerCase();
-    if(['mp4','webm'].includes(ext)){
+    if(['mp4','webm', 'mkv'].includes(ext)){
       const video = document.createElement('video');
       video.loop = true;
       video.muted = muted;
@@ -431,6 +454,22 @@ function renderGrid(){
       img.src = file;
       img.ondblclick = () => startFullscreenFrom(allVideos.indexOf(file));
       container.appendChild(img);
+    } else if (['mp3','wav','ogg'].includes(ext)) {
+        const audio = document.createElement('audio');
+        audio.controls = true;
+        audio.muted = muted;
+        audio.preload = 'metadata';
+        audio.style.width = '100%';
+
+        // single click → fullscreen audio player
+        audio.onclick = () => startFullscreenFrom(allVideos.indexOf(file));
+
+        container.appendChild(audio);
+
+        requestAnimationFrame(() => {
+            audio.src = file;
+            audio.play().catch(()=>{});
+        });
     } else {
       container.innerHTML = `<div style="color:red; padding:4px;">Unsupported: ${file}</div>`;
     }
@@ -495,20 +534,23 @@ function startFullscreenPlayer(playlist, index=0){
   container.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:black;display:flex;align-items:center;justify-content:center;z-index:9999;';
   document.body.appendChild(container);
 
-  const video = document.createElement('video');
-  video.src = playlist[i];
-  video.style.width = '100%';
-  video.style.height = '100%';
-  video.style.objectFit = 'contain';
-  video.autoplay = true;
-  video.muted = muted;
-  video.controls = true;
-  container.appendChild(video);
+  const ext = playlist[i].split('.').pop().toLowerCase();
+  const media = ['mp3','wav','ogg'].includes(ext)
+      ? document.createElement('audio')
+      : document.createElement('video');
+  media.src = playlist[i];
+  media.autoplay = true;
+  media.muted = muted;
+  media.controls = true;
+  media.style.width = '100%';
+  media.style.height = '100%';
+  media.style.objectFit = 'contain';
+  container.appendChild(media);
 
   function play(idx){
-    i = (idx + playlist.length) % playlist.length;
-    video.src = playlist[i];
-    video.play();
+      i = (idx + playlist.length) % playlist.length;
+      media.src = playlist[i];
+      media.play().catch(()=>{});
   }
 
   function close(){
@@ -520,8 +562,8 @@ function startFullscreenPlayer(playlist, index=0){
     document.removeEventListener('keydown', keyHandler);
   }
 
-  video.ondblclick = close;
-  video.onended = () => play(i+1);
+  media.ondblclick = close;
+  media.onended = () => play(i + 1);
 
   // --- Wheel scroll for prev/next (fullscreen) ---
   container.addEventListener('wheel', function(e){
