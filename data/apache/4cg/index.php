@@ -391,7 +391,7 @@ function startFullscreenPlayer(playlist, index=0){
   video.ondblclick = close;
   video.onended = () => play(i+1);
 
-  // --- Wheel scroll for prev/next ---
+  // --- Wheel scroll for prev/next (fullscreen) ---
   container.addEventListener('wheel', function(e){
     e.preventDefault(); // prevent page scrolling
     if(e.deltaY > 0) play(i + 1); // scroll down → next
@@ -454,6 +454,26 @@ function audit(count){
   url.searchParams.set('fileCount',count);
   window.location.href = url.toString();
 }
+
+// --------------------
+// GRID SCROLL NAVIGATION
+// --------------------
+const grid = document.getElementById('grid');
+let scrollDebounce = false;
+
+grid.addEventListener('wheel', (e) => {
+    e.preventDefault(); // prevent page scrolling
+
+    if(scrollDebounce) return; // simple debounce
+    scrollDebounce = true;
+    setTimeout(() => scrollDebounce = false, 200); // 200ms between scrolls
+
+    if(e.deltaY < 0){
+        prevGrid(); // scroll up → next page
+    } else {
+        nextGrid(); // scroll down → previous page
+    }
+}, {passive:false});
 
 // --------------------
 // Initial render
