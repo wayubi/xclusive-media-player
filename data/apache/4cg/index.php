@@ -263,6 +263,8 @@ a { text-decoration: none; color: #1e90ff; }
 
     <input type="hidden" name="muted" value="<?php echo $muted ? 'true':'false'; ?>">
     <button type="button" id="mute-button" onclick="toggleMute()"><?php echo $muted ? '🔇':'🔊'; ?></button>
+    <button type="button" onclick="startPlaylist(false)">▶ Play All</button>
+    <button type="button" onclick="startPlaylist(true)">🔀 Shuffle</button>
     <button type="button" onclick="window.location.href=window.location.href">Refresh</button>
     <button type="button" onclick="window.location.href='index.php'">Clear</button>
     <button type="button" onclick="audit(<?php echo count($files); ?>)">Audit</button>
@@ -351,6 +353,71 @@ function deleteFile(file) {
         urlParams.set('delete', file);
         window.location.href = 'index.php?' + urlParams.toString();
     }
+}
+</script>
+
+<script>
+const playlistFiles = <?php
+$allPlaylistFiles = [];
+if ($selected_folder === '__all__') {
+    // Play all videos from all folders under the board
+    foreach ($folders as $folder) {
+        $dir = "$root_directory/$selected_category/$selected_board/$folder";
+        $allPlaylistFiles = array_merge($allPlaylistFiles, getFiles($dir));
+    }
+} else {
+    $allPlaylistFiles = getFiles("$root_directory/$selected_category/$selected_board/$selected_folder");
+}
+
+// Only include video files
+$allPlaylistFiles = array_filter($allPlaylistFiles, function($f){
+    $ext = strtolower(pathinfo($f, PATHINFO_EXTENSION));
+    return in_array($ext, ['webm','mp4']);
+});
+
+echo json_encode(array_values($allPlaylistFiles));
+?>;
+
+function startPlaylist(shuffle=false){
+    if(!playlistFiles || playlistFiles.length === 0){
+        alert("No videos to play in this folder!");
+        return;
+    }
+
+    let videos = [...playlistFiles];
+    if(shuffle){
+        // Shuffle array
+        for(let i=videos.length-1; i>0; i--){
+            let j = Math.floor(Math.random()*(i+1));
+            [videos[i], videos[j]] = [videos[j], videos[i]];
+        }
+    }
+
+    let index = 0;
+    const videoElement = document.createElement('video');
+    videoElement.style.width = '100%';
+    videoElement.style.height = '100%';
+    videoElement.style.backgroundColor = 'black';
+    videoElement.autoplay = true;
+    videoElement.controls = true;
+    videoElement.muted = <?php echo $muted ? 'true' : 'false'; ?>;
+
+    // Remove grid and form
+    document.body.innerHTML = '';
+    document.body.appendChild(videoElement);
+
+    function playNext(){
+        if(index >= videos.length){
+            location.reload(); // reload grid page when done
+            return;
+        }
+        videoElement.src = videos[index];
+        index++;
+        videoElement.play();
+    }
+
+    videoElement.onended = playNext;
+    playNext();
 }
 </script>
 
