@@ -384,6 +384,10 @@ function startFullscreenPlayer(playlist, index=0){
   }
 
   function close(){
+    // Sync grid page with current video
+    startIndex = Math.floor(allVideos.indexOf(playlist[i]) / totalCells) * totalCells;
+    renderGrid();
+
     container.remove();
     document.removeEventListener('keydown', keyHandler);
   }
