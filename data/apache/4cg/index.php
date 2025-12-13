@@ -430,11 +430,29 @@ function startFullscreenPlayer(playlist, startIndex = 0) {
     if(e.key === 'Escape'){
       closeFullscreen();
       document.removeEventListener('keydown', keyHandler);
-    } 
+    }
     else if(e.key === 'Delete') {
-      // Remove file from playlist
       const deletedFile = playlist[startIndex];
+
+      // Remove from playlist
       playlist.splice(startIndex, 1);
+
+      // Remove from allVideos as well (so grid sync works)
+      const idxInAll = allVideos.indexOf(deletedFile);
+      if(idxInAll !== -1) allVideos.splice(idxInAll, 1);
+
+      // Remove from grid
+      const containers = document.querySelectorAll('.video-container');
+      containers.forEach(c => {
+        const videoOrImg = c.querySelector('video, img');
+        if(videoOrImg){
+          // Convert absolute src to relative path
+          const srcRel = videoOrImg.getAttribute('src') || videoOrImg.querySelector('source')?.getAttribute('src');
+          if(srcRel && srcRel === deletedFile){
+            c.remove();
+          }
+        }
+      });
 
       // Trigger server-side delete
       fetch('index.php?delete=' + encodeURIComponent(deletedFile));
@@ -447,7 +465,7 @@ function startFullscreenPlayer(playlist, startIndex = 0) {
       }
 
       // Play next video (or wrap around)
-      playVideo(startIndex);
+      playVideo(startIndex % playlist.length);
     }
   };
   document.addEventListener('keydown', keyHandler);
