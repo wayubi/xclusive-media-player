@@ -470,6 +470,17 @@ function renderGrid(){
             audio.src = file;
             audio.play().catch(()=>{});
         });
+
+        // --- EXCLUSIVE UNMUTE: listen for volume/mute changes ---
+        audio.addEventListener('volumechange', () => {
+            if (!audio.muted) {
+                // mute all other media elements
+                const allMedia = document.querySelectorAll('#grid video, #grid audio');
+                allMedia.forEach(m => {
+                    if (m !== audio) m.muted = true;
+                });
+            }
+        });
     } else {
       container.innerHTML = `<div style="color:red; padding:4px;">Unsupported: ${file}</div>`;
     }
