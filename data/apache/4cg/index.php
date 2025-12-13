@@ -297,39 +297,60 @@ a { text-decoration: none; color: #1e90ff; }
 
 <script>
 var totalCells = <?php echo $total_cells; ?>;
-function toggleMute(){
-  let button = document.getElementById("mute-button");
-  let hidden = document.querySelector("input[name=muted]");
-  let muted = button.innerHTML==='🔇';
-  muted = !muted;
-  button.innerHTML = muted ? '🔇':'🔊';
-  hidden.value = muted ? 'true':'false';
-  submitForm();
+
+// Toggle mute button
+function toggleMute() {
+    const button = document.getElementById("mute-button");
+    const hidden = document.querySelector("input[name=muted]");
+    const muted = button.innerHTML === '🔇';
+    const newMuted = !muted;
+    button.innerHTML = newMuted ? '🔇' : '🔊';
+    hidden.value = newMuted ? 'true' : 'false';
+    submitForm(); // resubmit with new mute state
 }
-function submitForm(changedId=''){
+
+// Submit form when a select changes
+function submitForm(changedId='') {
     const form = document.getElementById('options-form');
-    // Remove problematic resetting — just submit
+
+    // Reset dependent selects
+    if (changedId === 'selected-category') {
+        form.elements['selected-board'].selectedIndex = 0;
+        form.elements['selected-folder'].selectedIndex = 0;
+    } else if (changedId === 'selected-board') {
+        form.elements['selected-folder'].selectedIndex = 0;
+    }
+
     form.submit();
 }
-function audit(fileCount){
-  let urlParams = new URLSearchParams(window.location.search);
-  window.location.href='index.php?'+urlParams.toString()+'&audited=true&fileCount='+fileCount;
+
+// Audit files
+function audit(fileCount) {
+    const urlParams = new URLSearchParams(window.location.search);
+    urlParams.set('audited', 'true');
+    urlParams.set('fileCount', fileCount);
+    window.location.href = 'index.php?' + urlParams.toString();
 }
-function navigateVideos(offset){
-  let urlParams = new URLSearchParams(window.location.search);
-  let start = parseInt(urlParams.get('start')||0)+offset;
-  let total = <?php echo count($files); ?>;
-  if(start<0) start=total+start;
-  else if(start>=total) start=0;
-  urlParams.set('start', start);
-  window.location.href='index.php?'+urlParams.toString();
+
+// Navigate through video pages
+function navigateVideos(offset) {
+    const urlParams = new URLSearchParams(window.location.search);
+    let start = parseInt(urlParams.get('start') || 0) + offset;
+    const total = <?php echo count($files); ?>;
+    if (start < 0) start = total + start;
+    else if (start >= total) start = 0;
+    urlParams.set('start', start);
+    window.location.href = 'index.php?' + urlParams.toString();
 }
-function deleteFile(file){
-  if(confirm('Delete this file?')){
-    let urlParams = new URLSearchParams(window.location.search);
-    urlParams.set('delete', file);
-    window.location.href='index.php?'+urlParams.toString();
-  }
+
+// Delete a file
+function deleteFile(file) {
+    if (!file) return;
+    if (confirm('Delete this file?')) {
+        const urlParams = new URLSearchParams(window.location.search);
+        urlParams.set('delete', file);
+        window.location.href = 'index.php?' + urlParams.toString();
+    }
 }
 </script>
 
