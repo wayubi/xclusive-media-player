@@ -263,8 +263,8 @@ a { text-decoration: none; color: #1e90ff; }
 
     <input type="hidden" name="muted" value="<?php echo $muted ? 'true':'false'; ?>">
     <button type="button" id="mute-button" onclick="toggleMute()"><?php echo $muted ? '🔇':'🔊'; ?></button>
-    <button type="button" onclick="startPlaylist(false)">▶ Play All</button>
-    <button type="button" onclick="startPlaylist(true)">🔀 Shuffle</button>
+    <button type="button" onclick="playAll()">▶ Play All</button>
+    <button type="button" onclick="shufflePlay()">🔀 Shuffle</button>
     <button type="button" onclick="window.location.href=window.location.href">Refresh</button>
     <button type="button" onclick="window.location.href='index.php'">Clear</button>
     <button type="button" onclick="audit(<?php echo count($files); ?>)">Audit</button>
@@ -274,20 +274,18 @@ a { text-decoration: none; color: #1e90ff; }
 </div>
 
 <div id="grid">
-  <?php foreach($currentFiles as $file):
+  <?php foreach($currentFiles as $loopIndex => $file):
       $folderName = basename(dirname($file));
       $fileName = basename($file);
       $fileExt = strtolower(pathinfo($file, PATHINFO_EXTENSION));
   ?>
   <div class="video-container">
     <?php if(in_array($fileExt,['webm','mp4'])): ?>
-      <video autoplay loop <?php echo $muted ? 'muted' : ''; ?>
-             ondblclick="startFullscreenFrom('<?php echo addslashes($file); ?>')">
+      <video autoplay loop <?php echo $muted ? 'muted' : ''; ?> ondblclick="startFullscreenFrom(<?php echo $startIndex + $loopIndex; ?>)">
         <source src="<?php echo htmlspecialchars($file); ?>" type="video/<?php echo $fileExt; ?>">
       </video>
     <?php elseif(in_array($fileExt,['gif','jpg','jpeg','png'])): ?>
-      <img src="<?php echo htmlspecialchars($file); ?>" alt="<?php echo htmlspecialchars($fileName); ?>"
-           ondblclick="startFullscreenFrom('<?php echo addslashes($file); ?>')">
+      <img src="<?php echo htmlspecialchars($file); ?>" alt="<?php echo htmlspecialchars($fileName); ?>" ondblclick="startFullscreenFrom(<?php echo $startIndex + $loopIndex; ?>)">
     <?php else: ?>
       <div style="color:red; padding:4px;">Unsupported: <?php echo htmlspecialchars($fileName); ?></div>
     <?php endif; ?>
@@ -359,139 +357,81 @@ function deleteFile(file) {
 </script>
 
 <script>
-// Convert PHP data to JS
-const currentGridFiles = <?php echo json_encode(array_map('addslashes', $currentFiles)); ?>;
+let allVideos = <?php 
+  $allFilesForFolder = getFiles("$root_directory/$selected_category/$selected_board/$selected_folder"); 
+  echo json_encode($allFilesForFolder); 
+?>;
+let muted = <?php echo $muted ? 'true' : 'false'; ?>;
 
-// All files in current folder (selected-folder)
-<?php
-$folderDir = "$root_directory/$selected_category/$selected_board/$selected_folder";
-$allFolderFiles = getFiles($folderDir);
-?>
-const allFolderFiles = <?php echo json_encode(array_map('addslashes', $allFolderFiles)); ?>;
+// --- Fullscreen Player Helper ---
+function startFullscreenPlayer(playlist, startIndex = 0) {
+  if(!playlist || playlist.length === 0) return;
+  startIndex = Math.min(Math.max(0, startIndex), playlist.length - 1);
 
-function startPlaylist(shuffle = false) {
-    let playlist;
+  const container = document.createElement('div');
+  container.style.position = 'fixed';
+  container.style.top = 0;
+  container.style.left = 0;
+  container.style.width = '100%';
+  container.style.height = '100%';
+  container.style.backgroundColor = 'black';
+  container.style.display = 'flex';
+  container.style.alignItems = 'center';
+  container.style.justifyContent = 'center';
+  container.style.zIndex = 9999;
+  document.body.appendChild(container);
 
-    if (shuffle) {
-        playlist = [...allFolderFiles];
-        playlist.sort(() => Math.random() - 0.5); // Shuffle all files in folder
+  const video = document.createElement('video');
+  video.src = playlist[startIndex];
+  video.style.maxWidth = '100%';
+  video.style.maxHeight = '100%';
+  video.autoplay = true;
+  video.muted = muted;
+  video.controls = true;
+  container.appendChild(video);
+
+  function closeFullscreen() {
+    document.body.removeChild(container);
+  }
+
+  video.ondblclick = closeFullscreen;
+  document.addEventListener('keydown', function escHandler(e){
+    if(e.key === 'Escape'){
+      closeFullscreen();
+      document.removeEventListener('keydown', escHandler);
+    }
+  });
+
+  video.onended = () => {
+    startIndex++;
+    if(startIndex < playlist.length){
+      video.src = playlist[startIndex];
+      video.play();
     } else {
-        playlist = [...currentGridFiles]; // Play current grid
+      closeFullscreen();
     }
-
-    // Create fullscreen container
-    let container = document.createElement('div');
-    container.id = 'fullscreen-player';
-    Object.assign(container.style, {
-        position: 'fixed',
-        top: '0',
-        left: '0',
-        width: '100%',
-        height: '100%',
-        backgroundColor: 'black',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: '9999'
-    });
-    document.body.appendChild(container);
-
-    let video = document.createElement('video');
-    video.autoplay = true;
-    video.controls = true;
-    video.muted = <?php echo $muted ? 'true' : 'false'; ?>;
-    video.style.maxWidth = '100%';
-    video.style.maxHeight = '100%';
-    container.appendChild(video);
-
-    let index = 0;
-    function playNext() {
-        if (index >= playlist.length) {
-            container.remove();
-            return;
-        }
-        video.src = playlist[index];
-        video.play();
-        index++;
-    }
-
-    video.onended = playNext;
-    playNext();
-
-    // Request fullscreen
-    if (container.requestFullscreen) container.requestFullscreen();
-    else if (container.webkitRequestFullscreen) container.webkitRequestFullscreen();
-    else if (container.msRequestFullscreen) container.msRequestFullscreen();
-
-    // Exit handler
-    document.addEventListener('fullscreenchange', () => {
-        if (!document.fullscreenElement) container.remove();
-    });
-    document.addEventListener('webkitfullscreenchange', () => {
-        if (!document.webkitFullscreenElement) container.remove();
-    });
+  };
 }
 
-function startFullscreenFrom(file) {
-    // Create playlist starting with the double-clicked file
-    let playlist = [...allFolderFiles];
-
-    // Move the selected file to the front
-    let index = playlist.indexOf(file);
-    if(index > -1) {
-        playlist.splice(index, 1); // remove from current position
-        playlist.unshift(file);    // add to start
-    }
-
-    // Reuse same fullscreen player logic
-    let container = document.createElement('div');
-    container.id = 'fullscreen-player';
-    Object.assign(container.style, {
-        position: 'fixed',
-        top: '0',
-        left: '0',
-        width: '100%',
-        height: '100%',
-        backgroundColor: 'black',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: '9999'
-    });
-    document.body.appendChild(container);
-
-    let video = document.createElement('video');
-    video.autoplay = true;
-    video.controls = true;
-    video.muted = <?php echo $muted ? 'true' : 'false'; ?>;
-    video.style.maxWidth = '100%';
-    video.style.maxHeight = '100%';
-    container.appendChild(video);
-
-    let i = 0;
-    function playNext() {
-        if(i >= playlist.length) {
-            container.remove();
-            return;
-        }
-        video.src = playlist[i];
-        video.play();
-        i++;
-    }
-
-    video.onended = playNext;
-    playNext();
-
-    // Fullscreen request
-    if(container.requestFullscreen) container.requestFullscreen();
-    else if(container.webkitRequestFullscreen) container.webkitRequestFullscreen();
-    else if(container.msRequestFullscreen) container.msRequestFullscreen();
-
-    // Exit fullscreen cleanup
-    document.addEventListener('fullscreenchange', () => { if(!document.fullscreenElement) container.remove(); });
-    document.addEventListener('webkitfullscreenchange', () => { if(!document.webkitFullscreenElement) container.remove(); });
+// --- Start from a specific video (grid double-click) ---
+function startFullscreenFrom(index){
+  startFullscreenPlayer(allVideos, index);
 }
 
+// --- Play All button ---
+function playAll(){
+  startFullscreenPlayer(allVideos, <?php echo $startIndex; ?>);
+}
+
+// --- Shuffle button ---
+function shufflePlay(){
+  let shuffled = [...allVideos];
+  for(let i=shuffled.length-1;i>0;i--){
+    const j = Math.floor(Math.random()* (i+1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  startFullscreenPlayer(shuffled, 0);
+}
 </script>
 
 </body>
