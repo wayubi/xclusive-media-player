@@ -146,7 +146,7 @@ a { text-decoration: none; color: #1e90ff; }
   transition: 0.2s;
 }
 #options-form select:hover, #options-form button:hover { background-color: #3a3a3a; }
-#file-count { font-weight: bold; margin-right: 10px; }
+#file-count, #audit-text { font-weight: bold; margin-left: 10px; margin-right: 10px; }
 
 /* ---------- Grid ---------- */
 #grid {
@@ -223,7 +223,7 @@ a { text-decoration: none; color: #1e90ff; }
 
 <div id="form">
   <form id="options-form" method="get" action="index.php">
-    <span id="file-count"><?php echo 1; ?> / <?php echo count($allFiles); ?> [ <?php echo htmlspecialchars($auditedText); ?> ]</span>
+    <span id="file-count"><?php echo 1; ?> / <?php echo count($allFiles); ?></span>
 
     <select name="selected-category" onchange="submitForm('selected-category')">
       <?php foreach ($categories as $category): ?>
@@ -265,6 +265,8 @@ a { text-decoration: none; color: #1e90ff; }
     <button type="button" onclick="audit(<?php echo count($allFiles); ?>)">Audit</button>
     <button type="button" onclick="prevGrid()"><</button>
     <button type="button" onclick="nextGrid()">></button>
+
+    <span id="audit-text">[ <?php echo htmlspecialchars($auditedText); ?> ]</span>
   </form>
 </div>
 
