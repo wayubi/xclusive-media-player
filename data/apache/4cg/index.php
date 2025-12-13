@@ -16,7 +16,6 @@ $selected_rows = $is_mobile ? 1 : ($_GET['rows'] ?? 2);
 $total_cells = $selected_columns * $selected_rows;
 
 $muted = !isset($_GET['muted']) || ($_GET['muted'] === 'true');
-$completed = $_GET['completed'] ?? false;
 $audited = $_GET['audited'] ?? false;
 $fileCount = $_GET['fileCount'] ?? 0;
 $delete_file = isset($_GET['delete']) ? rawurldecode($_GET['delete']) : null;
@@ -56,7 +55,7 @@ if ($delete_file && file_exists($delete_file)) {
     if (!file_exists($trashDirectory)) mkdir($trashDirectory, 0777, true);
     $trashFilePath = $trashDirectory . '/' . uniqid() . '_' . basename($delete_file);
     rename($delete_file, $trashFilePath);
-    header("Location: index.php?" . $_SERVER['QUERY_STRING']); // reload page
+    // For DOM-only flow, we don't redirect on delete anymore
     exit;
 }
 
@@ -87,24 +86,20 @@ if ($selected_folder === '__all__') {
         $allFiles = array_merge($allFiles, getFiles($dir));
     }
     usort($allFiles, function($a, $b){ return filemtime($b) <=> filemtime($a); });
-    $files = $allFiles;
 } else {
-    $files = getFiles($current_selected_directory);
+    $allFiles = getFiles($current_selected_directory);
 }
-
-$startIndex = max(0, (int)($_GET['start'] ?? 0));
-$currentFiles = array_slice($files, $startIndex, $total_cells);
 
 // =====================
 // ACTIONS
 // =====================
-if ($completed) {
-    $source = "$root_directory/$selected_category/$selected_board/$selected_folder";
-    $destination = "$root_directory/complete/$selected_board/$selected_folder";
-    rename($source, $destination);
-    header("Location: index.php?selected-category=$selected_category&selected-board=$selected_board");
-    exit;
-}
+// if ($completed) {
+//     $source = "$root_directory/$selected_category/$selected_board/$selected_folder";
+//     $destination = "$root_directory/complete/$selected_board/$selected_folder";
+//     rename($source, $destination);
+//     header("Location: index.php?selected-category=$selected_category&selected-board=$selected_board");
+//     exit;
+// }
 
 if ($audited) {
     file_put_contents($auditFile, date('m/d/y') . " / $fileCount" . PHP_EOL);
@@ -228,7 +223,7 @@ a { text-decoration: none; color: #1e90ff; }
 
 <div id="form">
   <form id="options-form" method="get" action="index.php">
-    <span id="file-count"><?php echo ($startIndex+1); ?> / <?php echo count($files); ?> [ <?php echo htmlspecialchars($auditedText); ?> ]</span>
+    <span id="file-count"><?php echo 1; ?> / <?php echo count($allFiles); ?> [ <?php echo htmlspecialchars($auditedText); ?> ]</span>
 
     <select name="selected-category" onchange="submitForm('selected-category')">
       <?php foreach ($categories as $category): ?>
@@ -267,238 +262,203 @@ a { text-decoration: none; color: #1e90ff; }
     <button type="button" onclick="shufflePlay()">🔀 Shuffle</button>
     <button type="button" onclick="window.location.href=window.location.href">Refresh</button>
     <button type="button" onclick="window.location.href='index.php'">Clear</button>
-    <button type="button" onclick="audit(<?php echo count($files); ?>)">Audit</button>
-    <button type="button" onclick="navigateVideos(-totalCells)"><</button>
-    <button type="button" onclick="navigateVideos(totalCells)">></button>
+    <button type="button" onclick="audit(<?php echo count($allFiles); ?>)">Audit</button>
+    <button type="button" onclick="prevGrid()"><</button>
+    <button type="button" onclick="nextGrid()">></button>
   </form>
 </div>
 
-<div id="grid">
-  <?php foreach($currentFiles as $loopIndex => $file):
-      $folderName = basename(dirname($file));
-      $fileName = basename($file);
-      $fileExt = strtolower(pathinfo($file, PATHINFO_EXTENSION));
-  ?>
-  <div class="video-container">
-    <?php if(in_array($fileExt,['webm','mp4'])): ?>
-      <video autoplay loop <?php echo $muted ? 'muted' : ''; ?> ondblclick="startFullscreenFrom(<?php echo $startIndex + $loopIndex; ?>)">
-        <source src="<?php echo htmlspecialchars($file); ?>" type="video/<?php echo $fileExt; ?>">
-      </video>
-    <?php elseif(in_array($fileExt,['gif','jpg','jpeg','png'])): ?>
-      <img src="<?php echo htmlspecialchars($file); ?>" alt="<?php echo htmlspecialchars($fileName); ?>" ondblclick="startFullscreenFrom(<?php echo $startIndex + $loopIndex; ?>)">
-    <?php else: ?>
-      <div style="color:red; padding:4px;">Unsupported: <?php echo htmlspecialchars($fileName); ?></div>
-    <?php endif; ?>
-    <div class="overlay">
-      <span><?php echo htmlspecialchars("$folderName / $fileName"); ?></span>
-      <button onclick="deleteFile('<?php echo rawurlencode($file); ?>')">Delete</button>
-    </div>
-  </div>
-  <?php endforeach; ?>
-</div>
+<div id="grid"></div>
 
 <script>
-var totalCells = <?php echo $total_cells; ?>;
-
-// Toggle mute button
-function toggleMute() {
-    const button = document.getElementById("mute-button");
-    const hidden = document.querySelector("input[name=muted]");
-    const muted = button.innerHTML === '🔇';
-    const newMuted = !muted;
-    button.innerHTML = newMuted ? '🔇' : '🔊';
-    hidden.value = newMuted ? 'true' : 'false';
-    submitForm(); // resubmit with new mute state
-}
-
-// Submit form when a select changes
-function submitForm(changedId='') {
-    const form = document.getElementById('options-form');
-
-    // Reset dependent selects
-    if (changedId === 'selected-category') {
-        form.elements['selected-board'].selectedIndex = 0;
-        form.elements['selected-folder'].selectedIndex = 0;
-    } else if (changedId === 'selected-board') {
-        form.elements['selected-folder'].selectedIndex = 0;
-    }
-
-    form.submit();
-}
-
-// Audit files
-function audit(fileCount) {
-    const urlParams = new URLSearchParams(window.location.search);
-    urlParams.set('audited', 'true');
-    urlParams.set('fileCount', fileCount);
-    window.location.href = 'index.php?' + urlParams.toString();
-}
-
-// Navigate through video pages
-function navigateVideos(offset) {
-    const urlParams = new URLSearchParams(window.location.search);
-    let start = parseInt(urlParams.get('start') || 0) + offset;
-    const total = <?php echo count($files); ?>;
-    if (start < 0) start = total + start;
-    else if (start >= total) start = 0;
-    urlParams.set('start', start);
-    window.location.href = 'index.php?' + urlParams.toString();
-}
-
-// Delete a file
-function deleteFile(file) {
-    if (!file) return;
-    if (confirm('Delete this file?')) {
-        const urlParams = new URLSearchParams(window.location.search);
-        urlParams.set('delete', file);
-        window.location.href = 'index.php?' + urlParams.toString();
-    }
-}
-</script>
-
-<script>
-let allVideos = <?php 
-if ($selected_folder === '__all__') {
-    $allFilesForFolder = [];
-    foreach ($folders as $folder) {
-        $dir = "$root_directory/$selected_category/$selected_board/$folder";
-        $allFilesForFolder = array_merge($allFilesForFolder, getFiles($dir));
-    }
-    usort($allFilesForFolder, function($a, $b){ return filemtime($b) <=> filemtime($a); });
-} else {
-    $allFilesForFolder = getFiles("$root_directory/$selected_category/$selected_board/$selected_folder");
-}
-echo json_encode($allFilesForFolder); 
-?>;
+let allVideos = <?php echo json_encode($allFiles); ?>;
 let muted = <?php echo $muted ? 'true' : 'false'; ?>;
+let totalCells = <?php echo $total_cells; ?>;
+let startIndex = 0;
 
-// --- Fullscreen Player Helper ---
-function startFullscreenPlayer(playlist, startIndex = 0) {
-  if(!playlist || playlist.length === 0) return;
-  startIndex = Math.min(Math.max(0, startIndex), playlist.length - 1);
+// --------------------
+// Grid Rendering
+// --------------------
+function renderGrid(){
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+
+  const endIndex = Math.min(startIndex + totalCells, allVideos.length);
+  const visible = allVideos.slice(startIndex, endIndex);
+
+  visible.forEach((file,i) => {
+    const container = document.createElement('div');
+    container.className = 'video-container';
+
+    const ext = file.split('.').pop().toLowerCase();
+    if(['mp4','webm'].includes(ext)){
+      const video = document.createElement('video');
+      video.autoplay = true;
+      video.loop = true;
+      video.muted = muted;
+      video.src = file;
+      video.ondblclick = () => startFullscreenFrom(allVideos.indexOf(file));
+      container.appendChild(video);
+    } else if(['jpg','jpeg','png','gif'].includes(ext)){
+      const img = document.createElement('img');
+      img.src = file;
+      img.ondblclick = () => startFullscreenFrom(allVideos.indexOf(file));
+      container.appendChild(img);
+    } else {
+      container.innerHTML = `<div style="color:red; padding:4px;">Unsupported: ${file}</div>`;
+    }
+
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.innerHTML = `<span>${file}</span> <button onclick="deleteGridFile('${file}')">Delete</button>`;
+    container.appendChild(overlay);
+
+    grid.appendChild(container);
+  });
+
+  document.getElementById('file-count').innerText = `${startIndex+1} / ${allVideos.length}`;
+}
+
+// --------------------
+// Navigation
+// --------------------
+function nextGrid(){
+  startIndex = (startIndex + totalCells) % allVideos.length;
+  renderGrid();
+}
+function prevGrid(){
+  startIndex = (startIndex - totalCells + allVideos.length) % allVideos.length;
+  renderGrid();
+}
+
+// --------------------
+// Delete file
+// --------------------
+function deleteGridFile(file){
+  if(!confirm('Delete this file?')) return;
+  const idx = allVideos.indexOf(file);
+  if(idx !== -1) allVideos.splice(idx,1);
+
+  // Trigger server-side delete
+  fetch('index.php?delete=' + encodeURIComponent(file));
+
+  // Adjust startIndex if needed
+  if(startIndex >= allVideos.length) startIndex = Math.max(0, allVideos.length - totalCells);
+
+  renderGrid();
+}
+
+// --------------------
+// Mute toggle
+// --------------------
+function toggleMute(){
+  muted = !muted;
+  document.getElementById('mute-button').innerHTML = muted ? '🔇':'🔊';
+  renderGrid();
+}
+
+// --------------------
+// Fullscreen player
+// --------------------
+function startFullscreenPlayer(playlist, index=0){
+  if(!playlist.length) return;
+  let i = index;
 
   const container = document.createElement('div');
-  container.style.position = 'fixed';
-  container.style.top = 0;
-  container.style.left = 0;
-  container.style.width = '100%';
-  container.style.height = '100%';
-  container.style.backgroundColor = 'black';
-  container.style.display = 'flex';
-  container.style.alignItems = 'center';
-  container.style.justifyContent = 'center';
-  container.style.zIndex = 9999;
+  container.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:black;display:flex;align-items:center;justify-content:center;z-index:9999;';
   document.body.appendChild(container);
 
   const video = document.createElement('video');
-  video.src = playlist[startIndex];
-  video.style.maxWidth = '100%';
-  video.style.maxHeight = '100%';
+  video.src = playlist[i];
+  video.style.maxWidth='100%';
+  video.style.maxHeight='100%';
   video.autoplay = true;
   video.muted = muted;
   video.controls = true;
   container.appendChild(video);
 
-  function closeFullscreen() {
-    if(container.parentNode) document.body.removeChild(container);
-  }
-
-  function playVideo(index) {
-    startIndex = (index + playlist.length) % playlist.length; // wrap-around
-    video.src = playlist[startIndex];
+  function play(idx){
+    i = (idx + playlist.length) % playlist.length;
+    video.src = playlist[i];
     video.play();
   }
 
-  // --- Close fullscreen ---
-  video.ondblclick = closeFullscreen; // double-click
-  video.onauxclick = (e) => { // middle-click closes fullscreen
-    if(e.button === 1) closeFullscreen();
-  };
+  function close(){
+    container.remove();
+    document.removeEventListener('keydown', keyHandler);
+  }
+
+  video.ondblclick = close;
+  video.onended = () => play(i+1);
 
   // --- Wheel scroll for prev/next ---
   container.addEventListener('wheel', function(e){
     e.preventDefault(); // prevent page scrolling
-    if(e.deltaY > 0) {
-      playVideo(startIndex + 1); // scroll down → next
-    } else {
-      playVideo(startIndex - 1); // scroll up → previous
-    }
-  }, {passive: false});
+    if(e.deltaY > 0) play(i + 1); // scroll down → next
+    else play(i - 1); // scroll up → previous
+  }, {passive:false});
 
-  // Escape & Delete key
-  const keyHandler = (e) => {
-    if(e.key === 'Escape'){
-      closeFullscreen();
-      document.removeEventListener('keydown', keyHandler);
-    }
-    else if(e.key === 'Delete') {
-      const deletedFile = playlist[startIndex];
-
-      // Remove from playlist
-      playlist.splice(startIndex, 1);
-
-      // Remove from allVideos as well (so grid sync works)
-      const idxInAll = allVideos.indexOf(deletedFile);
-      if(idxInAll !== -1) allVideos.splice(idxInAll, 1);
-
-      // Remove from grid
-      const containers = document.querySelectorAll('.video-container');
-      containers.forEach(c => {
-        const videoOrImg = c.querySelector('video, img');
-        if(videoOrImg){
-          // Convert absolute src to relative path
-          const srcRel = videoOrImg.getAttribute('src') || videoOrImg.querySelector('source')?.getAttribute('src');
-          if(srcRel && srcRel === deletedFile){
-            c.remove();
-          }
-        }
-      });
-
-      // Trigger server-side delete
-      fetch('index.php?delete=' + encodeURIComponent(deletedFile));
-
-      // If playlist is empty, close fullscreen
-      if(playlist.length === 0){
-        closeFullscreen();
-        document.removeEventListener('keydown', keyHandler);
-        return;
-      }
-
-      // Play next video (or wrap around)
-      playVideo(startIndex % playlist.length);
+  const keyHandler = e => {
+    if(e.key==='Escape') close();
+    if(e.key==='Delete'){
+      const deleted = playlist[i];
+      playlist.splice(i,1);
+      const idxAll = allVideos.indexOf(deleted);
+      if(idxAll!==-1) allVideos.splice(idxAll,1);
+      fetch('index.php?delete=' + encodeURIComponent(deleted));
+      renderGrid();
+      if(playlist.length===0){ close(); return; }
+      play(i % playlist.length);
     }
   };
   document.addEventListener('keydown', keyHandler);
-
-  // Play next video when current ends
-  video.onended = () => {
-    if(playlist.length > 0){
-      playVideo(startIndex + 1);
-    } else {
-      closeFullscreen();
-    }
-  };
 }
 
-// --- Start from a specific video (grid double-click) ---
-function startFullscreenFrom(index){
-  startFullscreenPlayer(allVideos, index);
+// --------------------
+// Grid double-click
+// --------------------
+function startFullscreenFrom(idx){
+  startFullscreenPlayer(allVideos, idx);
 }
 
-// --- Play All button ---
-function playAll(){
-  startFullscreenPlayer(allVideos, <?php echo $startIndex; ?>);
-}
-
-// --- Shuffle button ---
+// --------------------
+// Play all / shuffle
+// --------------------
+function playAll(){ startFullscreenPlayer(allVideos, startIndex); }
 function shufflePlay(){
   let shuffled = [...allVideos];
   for(let i=shuffled.length-1;i>0;i--){
-    const j = Math.floor(Math.random()* (i+1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    const j=Math.floor(Math.random()*(i+1));
+    [shuffled[i],shuffled[j]]=[shuffled[j],shuffled[i]];
   }
-  startFullscreenPlayer(shuffled, 0);
+  startFullscreenPlayer(shuffled,0);
 }
+
+// --------------------
+// Form helpers
+// --------------------
+function submitForm(changedId=''){
+  const form = document.getElementById('options-form');
+  if(changedId==='selected-category'){
+    form.elements['selected-board'].selectedIndex=0;
+    form.elements['selected-folder'].selectedIndex=0;
+  } else if(changedId==='selected-board'){
+    form.elements['selected-folder'].selectedIndex=0;
+  }
+  form.submit();
+}
+
+function audit(count){
+  const url = new URL(window.location.href);
+  url.searchParams.set('audited','true');
+  url.searchParams.set('fileCount',count);
+  window.location.href = url.toString();
+}
+
+// --------------------
+// Initial render
+// --------------------
+renderGrid();
 </script>
 
 </body>
