@@ -24,10 +24,11 @@ $delete_file = isset($_GET['delete']) ? rawurldecode($_GET['delete']) : null;
 // HELPER FUNCTIONS
 // =====================
 function getDirectories($path, $exclude = []) {
-    $list = glob($path . '/*');
+    if (!is_dir($path)) return [];
+
     $dirs = [];
-    foreach ($list as $l) {
-        $name = basename($l);
+    foreach (glob($path . '/*', GLOB_ONLYDIR) as $dir) {
+        $name = basename($dir);
         if (!in_array($name, $exclude)) {
             $dirs[] = $name;
         }
@@ -84,15 +85,27 @@ $auditedText = file_exists($auditFile) ? trim(file_get_contents($auditFile)) : '
 // =====================
 // FILE COLLECTION
 // =====================
+$boardPath = "$root_directory/$selected_category/$selected_board";
+
 if ($selected_folder === '__all__') {
     $allFiles = [];
+
+    // 1️⃣ Files directly in the board folder
+    $allFiles = array_merge($allFiles, getFiles($boardPath));
+
+    // 2️⃣ Files inside each subfolder
     foreach ($folders as $folder) {
-        $dir = "$root_directory/$selected_category/$selected_board/$folder";
+        $dir = "$boardPath/$folder";
         $allFiles = array_merge($allFiles, getFiles($dir));
     }
-    usort($allFiles, function($a, $b){ return filemtime($b) <=> filemtime($a); });
+
+    // 3️⃣ Sort newest first
+    usort($allFiles, function ($a, $b) {
+        return filemtime($b) <=> filemtime($a);
+    });
+
 } else {
-    $allFiles = getFiles($current_selected_directory);
+    $allFiles = getFiles("$boardPath/$selected_folder");
 }
 
 // =====================
@@ -274,12 +287,16 @@ a { text-decoration: none; color: #1e90ff; }
       <?php endforeach; ?>
     </select>
 
+    <?php if (!empty($folders)): ?>
     <select name="selected-folder" onchange="submitForm('selected-folder')">
       <option value="__all__" <?php if ($selected_folder === '__all__') echo 'selected'; ?>>All folders</option>
       <?php foreach ($folders as $folder): ?>
-        <option <?php if ($selected_folder==$folder) echo 'selected'; ?> value="<?php echo $folder; ?>"><?php echo $folder; ?></option>
+        <option <?php if ($selected_folder==$folder) echo 'selected'; ?> value="<?php echo $folder; ?>">
+          <?php echo $folder; ?>
+        </option>
       <?php endforeach; ?>
     </select>
+    <?php endif; ?>
 
     <select name="columns" onchange="submitForm()">
       <?php for ($c=1;$c<=5;$c++): ?>
