@@ -378,46 +378,65 @@ $allPlaylistFiles = array_filter($allPlaylistFiles, function($f){
 echo json_encode(array_values($allPlaylistFiles));
 ?>;
 
-function startPlaylist(shuffle=false){
-    if(!playlistFiles || playlistFiles.length === 0){
-        alert("No videos to play in this folder!");
-        return;
-    }
+function startPlaylist(shuffle = false) {
+    const files = <?php echo json_encode(array_map(function($f){ return $f; }, getFiles($current_selected_directory))); ?>;
+    let playlist = shuffle ? [...files].sort(() => Math.random()-0.5) : files;
 
-    let videos = [...playlistFiles];
-    if(shuffle){
-        // Shuffle array
-        for(let i=videos.length-1; i>0; i--){
-            let j = Math.floor(Math.random()*(i+1));
-            [videos[i], videos[j]] = [videos[j], videos[i]];
-        }
-    }
+    // Create fullscreen container
+    let container = document.createElement('div');
+    container.id = 'fullscreen-player';
+    Object.assign(container.style, {
+        position: 'fixed',
+        top: '0',
+        left: '0',
+        width: '100%',
+        height: '100%',
+        backgroundColor: 'black',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: '9999'
+    });
+    document.body.appendChild(container);
+
+    let video = document.createElement('video');
+    video.autoplay = true;
+    video.controls = true;
+    video.muted = <?php echo $muted ? 'true' : 'false'; ?>;
+    video.style.maxWidth = '100%';
+    video.style.maxHeight = '100%';
+    container.appendChild(video);
 
     let index = 0;
-    const videoElement = document.createElement('video');
-    videoElement.style.width = '100%';
-    videoElement.style.height = '100%';
-    videoElement.style.backgroundColor = 'black';
-    videoElement.autoplay = true;
-    videoElement.controls = true;
-    videoElement.muted = <?php echo $muted ? 'true' : 'false'; ?>;
-
-    // Remove grid and form
-    document.body.innerHTML = '';
-    document.body.appendChild(videoElement);
-
-    function playNext(){
-        if(index >= videos.length){
-            location.reload(); // reload grid page when done
+    function playNext() {
+        if (index >= playlist.length) {
+            exitFullscreen();
+            container.remove();
             return;
         }
-        videoElement.src = videos[index];
+        video.src = playlist[index];
+        video.play();
         index++;
-        videoElement.play();
     }
 
-    videoElement.onended = playNext;
+    video.onended = playNext;
+
     playNext();
+
+    // Request fullscreen
+    if (container.requestFullscreen) container.requestFullscreen();
+    else if (container.webkitRequestFullscreen) container.webkitRequestFullscreen();
+    else if (container.msRequestFullscreen) container.msRequestFullscreen();
+
+    // Exit handler on Esc
+    document.addEventListener('fullscreenchange', () => {
+        if (!document.fullscreenElement) {
+            container.remove();
+        }
+    });
+    document.addEventListener('webkitfullscreenchange', () => {
+        if (!document.webkitFullscreenElement) container.remove();
+    });
 }
 </script>
 
