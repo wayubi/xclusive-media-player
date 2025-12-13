@@ -72,7 +72,12 @@ $folders = getDirectories("$root_directory/$selected_category/$selected_board");
 sort($folders);
 if (!$selected_folder) $selected_folder = $folders[0];
 
-$current_selected_directory = "$root_directory/$selected_category/$selected_board/$selected_folder";
+if ($selected_folder === '__all__') {
+    $current_selected_directory = "$root_directory/$selected_category/$selected_board";
+} else {
+    $current_selected_directory = "$root_directory/$selected_category/$selected_board/$selected_folder";
+}
+
 $auditFile = "$current_selected_directory/.audited";
 $auditedText = file_exists($auditFile) ? trim(file_get_contents($auditFile)) : '';
 
@@ -115,6 +120,14 @@ if ($audited) {
 <title>Video Grid</title>
 <style>
 /* ---------- General ---------- */
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: calc(var(--vh, 1vh) * 100);
+  overflow: hidden; /* prevent scrolling */
+}
+
 body {
   margin: 0;
   padding: 0;
@@ -152,10 +165,10 @@ a { text-decoration: none; color: #1e90ff; }
 #grid {
   display: grid;
   grid-template-columns: repeat(<?php echo $selected_columns; ?>, 1fr);
-  grid-template-rows: repeat(<?php echo $selected_rows; ?>, minmax(0, 1fr));
+  grid-template-rows: repeat(<?php echo $selected_rows; ?>, 1fr);
   gap: 8px;
   padding: 10px;
-  height: calc(100vh - 72px);
+  height: calc(var(--vh, 1vh) * 100 - 72px); /* 72px for the form */
 }
 
 .video-container {
@@ -214,8 +227,32 @@ a { text-decoration: none; color: #1e90ff; }
 
 /* ---------- Responsive ---------- */
 @media (max-width: 768px) {
-  #grid { grid-template-columns: 1fr; grid-template-rows: repeat(auto-fill, minmax(200px, 1fr)); }
-  #form { flex-direction: column; gap: 8px; }
+  #form {
+    flex-direction: row;   /* keep it horizontal */
+    justify-content: space-between;
+    gap: 6px;
+    padding: 6px 10px;
+  }
+
+  /* hide unnecessary controls */
+  #form span[id="file-count"],
+  #form select[name="columns"],
+  #form select[name="rows"],
+  #form button[id="refresh"],
+  #form button[id="clear"],
+  #form button[id="audit"],
+  #form button[id="previous"],
+  #form button[id="next"],
+  #form span[id="audit-text"] {
+    display: none;
+  }
+  #grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+    height: calc(var(--vh, 1vh) * 100 - 72px); /* adjust 72px if form height changes */
+    gap: 0;
+    padding: 0;
+  }
 }
 </style>
 </head>
@@ -257,14 +294,68 @@ a { text-decoration: none; color: #1e90ff; }
     </select>
 
     <input type="hidden" name="muted" value="<?php echo $muted ? 'true':'false'; ?>">
-    <button type="button" id="mute-button" onclick="toggleMute()"><?php echo $muted ? '🔇':'🔊'; ?></button>
-    <button type="button" onclick="playAll()">▶ Play All</button>
-    <button type="button" onclick="shufflePlay()">🔀 Shuffle</button>
-    <button type="button" onclick="window.location.href=window.location.href">Refresh</button>
-    <button type="button" onclick="window.location.href='index.php'">Clear</button>
-    <button type="button" onclick="audit(<?php echo count($allFiles); ?>)">Audit</button>
-    <button type="button" onclick="prevGrid()"><</button>
-    <button type="button" onclick="nextGrid()">></button>
+
+    <button type="button"
+            id="mute-button"
+            onclick="toggleMute()"
+            title="Mute / Unmute"
+            aria-label="Mute / Unmute">
+      <?php echo $muted ? '🔇' : '🔊'; ?>
+    </button>
+
+    <button type="button"
+            onclick="playAll()"
+            title="Play all"
+            aria-label="Play all">
+      ▶
+    </button>
+
+    <button type="button"
+            onclick="shufflePlay()"
+            title="Shuffle"
+            aria-label="Shuffle">
+      🔀
+    </button>
+
+    <button type="button"
+            id="refresh"
+            onclick="window.location.reload()"
+            title="Refresh"
+            aria-label="Refresh">
+      🔄
+    </button>
+
+    <button type="button"
+            id="clear"
+            onclick="window.location.href='index.php'"
+            title="Clear selection"
+            aria-label="Clear selection">
+      🧹
+    </button>
+
+    <button type="button"
+            id="audit"
+            onclick="runAudit(<?php echo count($allFiles); ?>)"
+            title="Audit folder"
+            aria-label="Audit folder">
+      📝
+    </button>
+
+    <button type="button"
+            id="previous"
+            onclick="prevGrid()"
+            title="Previous page"
+            aria-label="Previous page">
+      ◀
+    </button>
+
+    <button type="button"
+            id="next"
+            onclick="nextGrid()"
+            title="Next page"
+            aria-label="Next page">
+      ▶
+    </button>
 
     <span id="audit-text">[ <?php echo htmlspecialchars($auditedText); ?> ]</span>
   </form>
@@ -321,7 +412,7 @@ function renderGrid(){
     } else if(['jpg','jpeg','png','gif'].includes(ext)){
       const img = document.createElement('img');
       img.src = file;
-      img.onclick = () => startFullscreenFrom(allVideos.indexOf(file));
+      img.ondblclick = () => startFullscreenFrom(allVideos.indexOf(file));
       container.appendChild(img);
     } else {
       container.innerHTML = `<div style="color:red; padding:4px;">Unsupported: ${file}</div>`;
@@ -422,6 +513,25 @@ function startFullscreenPlayer(playlist, index=0){
     else play(i - 1); // scroll up → previous
   }, {passive:false});
 
+  // --- Touch swipe for fullscreen ---
+  let fsTouchStartY = 0;
+  container.addEventListener('touchstart', function(e){
+      if(e.touches.length === 1) fsTouchStartY = e.touches[0].clientY;
+  }, {passive:true});
+
+  container.addEventListener('touchend', function(e){
+      const fsTouchEndY = e.changedTouches[0].clientY;
+      const deltaY = fsTouchEndY - fsTouchStartY;
+
+      if(Math.abs(deltaY) > 50){ // minimum swipe distance
+          if(deltaY < 0){
+              play(i + 1); // swipe up → next video
+          } else {
+              play(i - 1); // swipe down → previous video
+          }
+      }
+  }, {passive:true});
+
   const keyHandler = e => {
     if(e.key === 'Escape') close();
     if(e.key === 'Delete') {
@@ -475,7 +585,7 @@ function submitForm(changedId=''){
   form.submit();
 }
 
-function audit(count){
+function runAudit(count){
   const url = new URL(window.location.href);
   url.searchParams.set('audited','true');
   url.searchParams.set('fileCount',count);
@@ -503,9 +613,48 @@ grid.addEventListener('wheel', (e) => {
 }, {passive:false});
 
 // --------------------
+// Touch swipe navigation (mobile) --------------------
+let touchStartY = 0;
+let touchEndY = 0;
+
+grid.addEventListener('touchstart', function(e){
+    if(e.touches.length === 1) {
+        touchStartY = e.touches[0].clientY;
+    }
+}, {passive: true});
+
+grid.addEventListener('touchend', function(e){
+    touchEndY = e.changedTouches[0].clientY;
+    const deltaY = touchEndY - touchStartY;
+
+    if(Math.abs(deltaY) > 50){ // minimum swipe distance
+        if(deltaY < 0){
+            nextGrid(); // swipe up → next page
+        } else {
+            prevGrid(); // swipe down → previous page
+        }
+    }
+}, {passive: true});
+
+// --------------------
 // Initial render
 // --------------------
 renderGrid();
+
+// --------------------
+// Fix 100vh for mobile browsers (account for address bar) --------------------
+function setVhUnit() {
+    let vh = window.innerHeight * 0.01;
+    document.documentElement.style.setProperty('--vh', `${vh}px`);
+}
+
+// Run on load
+setVhUnit();
+
+// Update on resize or orientation change
+window.addEventListener('resize', setVhUnit);
+window.addEventListener('orientationchange', setVhUnit);
+
 </script>
 
 </body>
