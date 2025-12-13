@@ -358,8 +358,17 @@ function deleteFile(file) {
 
 <script>
 let allVideos = <?php 
-  $allFilesForFolder = getFiles("$root_directory/$selected_category/$selected_board/$selected_folder"); 
-  echo json_encode($allFilesForFolder); 
+if ($selected_folder === '__all__') {
+    $allFilesForFolder = [];
+    foreach ($folders as $folder) {
+        $dir = "$root_directory/$selected_category/$selected_board/$folder";
+        $allFilesForFolder = array_merge($allFilesForFolder, getFiles($dir));
+    }
+    usort($allFilesForFolder, function($a, $b){ return filemtime($b) <=> filemtime($a); });
+} else {
+    $allFilesForFolder = getFiles("$root_directory/$selected_category/$selected_board/$selected_folder");
+}
+echo json_encode($allFilesForFolder); 
 ?>;
 let muted = <?php echo $muted ? 'true' : 'false'; ?>;
 
@@ -391,25 +400,43 @@ function startFullscreenPlayer(playlist, startIndex = 0) {
   container.appendChild(video);
 
   function closeFullscreen() {
-    document.body.removeChild(container);
+    if(container.parentNode) document.body.removeChild(container);
   }
 
-  video.ondblclick = closeFullscreen;
-  document.addEventListener('keydown', function escHandler(e){
+  function playVideo(index) {
+    startIndex = (index + playlist.length) % playlist.length; // wrap-around
+    video.src = playlist[startIndex];
+    video.play();
+  }
+
+  // --- Close fullscreen ---
+  video.ondblclick = closeFullscreen; // double-click
+  video.onauxclick = (e) => { // middle-click closes fullscreen
+    if(e.button === 1) closeFullscreen();
+  };
+
+  // --- Wheel scroll for prev/next ---
+  container.addEventListener('wheel', function(e){
+    e.preventDefault(); // prevent page scrolling
+    if(e.deltaY > 0) {
+      playVideo(startIndex + 1); // scroll down → next
+    } else {
+      playVideo(startIndex - 1); // scroll up → previous
+    }
+  }, {passive: false});
+
+  // Escape key
+  const escHandler = (e) => {
     if(e.key === 'Escape'){
       closeFullscreen();
       document.removeEventListener('keydown', escHandler);
     }
-  });
+  };
+  document.addEventListener('keydown', escHandler);
 
+  // Play next video when current ends
   video.onended = () => {
-    startIndex++;
-    if(startIndex < playlist.length){
-      video.src = playlist[startIndex];
-      video.play();
-    } else {
-      closeFullscreen();
-    }
+    playVideo(startIndex + 1);
   };
 }
 
