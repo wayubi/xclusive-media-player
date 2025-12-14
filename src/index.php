@@ -453,16 +453,16 @@ function renderGrid() {
             video.loop = true;
             video.muted = muted;
             video.playsInline = true;
-            video.preload = 'metadata';
+            video.preload = 'none'; // Don't preload until visible
+            video.style.width = '100%';
+            video.style.height = '100%';
+            video.style.objectFit = 'contain';
             video.onclick = () => startFullscreenFrom(allVideos.indexOf(file));
+
+            // Lazy load using IntersectionObserver
+            video.dataset.src = file;
             container.appendChild(video);
 
-            requestAnimationFrame(() => {
-                video.src = file;
-                video.play().catch(() => {
-                    console.log('Video autoplay blocked, user interaction needed');
-                });
-            });
         } else if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) {
             const img = document.createElement('img');
             img.loading = 'lazy';
@@ -470,6 +470,7 @@ function renderGrid() {
             img.src = file;
             img.ondblclick = () => startFullscreenFrom(allVideos.indexOf(file));
             container.appendChild(img);
+
         } else if (['mp3', 'wav', 'ogg'].includes(ext)) {
             container.style.display = 'flex';
             container.style.flexDirection = 'column';
@@ -477,17 +478,13 @@ function renderGrid() {
             container.style.alignItems = 'center';
             container.style.height = '100%';
 
-            // 1️⃣ Album cover image
             const img = document.createElement('img');
             img.style.width = '100%';
             img.style.height = '100%';
             img.style.objectFit = 'contain';
-
-            // Lazy load using data-src + IntersectionObserver
             img.dataset.src = audioThumbs[file] ?? 'fallback-audio.jpg';
             container.appendChild(img);
 
-            // 2️⃣ Audio element
             const audio = document.createElement('audio');
             audio.controls = true;
             audio.muted = muted;
@@ -496,12 +493,6 @@ function renderGrid() {
             audio.onclick = () => startFullscreenFrom(allVideos.indexOf(file));
             container.appendChild(audio);
 
-            requestAnimationFrame(() => {
-                audio.src = file;
-                audio.play().catch(() => {});
-            });
-
-            // 3️⃣ Exclusive unmute
             audio.addEventListener('volumechange', () => {
                 if (!audio.muted) {
                     const allMedia = document.querySelectorAll('#grid video, #grid audio');
@@ -512,6 +503,7 @@ function renderGrid() {
             container.innerHTML = `<div style="color:red; padding:4px;">Unsupported: ${file}</div>`;
         }
 
+        // Overlay
         const overlay = document.createElement('div');
         overlay.className = 'overlay';
         overlay.innerHTML = `<span>${file}</span> <button onclick="deleteGridFile('${file}')" onkeydown="if(event.key==='Enter'){ deleteGridFile('${file}'); }">Delete</button>`;
@@ -520,19 +512,29 @@ function renderGrid() {
         grid.appendChild(container);
     });
 
-    // Lazy-load audio images using IntersectionObserver
-    const lazyImages = grid.querySelectorAll('img[data-src]');
+    // IntersectionObserver for lazy-loading videos and audio covers
     const observer = new IntersectionObserver(entries => {
         entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                const img = entry.target;
-                img.src = img.dataset.src;
-                delete img.dataset.src;
-                observer.unobserve(img);
+            if(entry.isIntersecting){
+                const el = entry.target;
+
+                if(el.tagName.toLowerCase() === 'video' && el.dataset.src){
+                    el.src = el.dataset.src;
+                    el.play().catch(()=>{});
+                    delete el.dataset.src;
+                }
+
+                if(el.tagName.toLowerCase() === 'img' && el.dataset.src){
+                    el.src = el.dataset.src;
+                    delete el.dataset.src;
+                }
+
+                observer.unobserve(el);
             }
         });
     }, { root: grid, threshold: 0.1 });
-    lazyImages.forEach(img => observer.observe(img));
+
+    grid.querySelectorAll('video, img[data-src]').forEach(el => observer.observe(el));
 
     document.getElementById('file-count').innerText = `${startIndex + 1} / ${allVideos.length}`;
 }
