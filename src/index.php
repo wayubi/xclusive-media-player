@@ -8,7 +8,18 @@ $root_directory_absolute = getcwd() . '/volumes';
 $is_mobile = stripos($_SERVER['HTTP_USER_AGENT'], 'Mobile') !== false || stripos($_SERVER['HTTP_USER_AGENT'], 'Android') !== false;
 
 // GET parameters
-$selected_path = $_GET['selected-path'] ?? '';
+$selected_path_parts = $_GET['selected-path'] ?? [];
+
+if (!is_array($selected_path_parts)) {
+    $selected_path_parts = [];
+}
+
+// remove empty values (from "[Select]")
+$selected_path_parts = array_values(array_filter($selected_path_parts));
+
+// build string path
+$selected_path = implode('/', $selected_path_parts);
+
 $selected_columns = $is_mobile ? 1 : ($_GET['columns'] ?? 3);
 $selected_rows = $is_mobile ? 1 : ($_GET['rows'] ?? 2);
 $total_cells = $selected_columns * $selected_rows;
@@ -44,19 +55,6 @@ function getFiles($path) {
     return $files;
 }
 
-// Recursive file collection for __all__
-function getAllFilesRecursive($path) {
-    $all = [];
-    foreach (glob($path . '/*') as $entry) {
-        if (is_file($entry)) {
-            if (!str_ends_with($entry,'.backup') && !str_ends_with($entry,'.original')) $all[] = $entry;
-        } else if (is_dir($entry)) {
-            $all = array_merge($all, getAllFilesRecursive($entry));
-        }
-    }
-    return $all;
-}
-
 // =====================
 // DELETE ACTION
 // =====================
@@ -80,14 +78,11 @@ $auditedText = file_exists($auditFile) ? trim(file_get_contents($auditFile)) : '
 // =====================
 // FILE COLLECTION
 // =====================
-$allFilesRaw = ($_GET['folder'] ?? '') === '__all__'
-    ? getAllFilesRecursive($current_path)
-    : getFiles($current_path);
+$allFilesRaw = getFiles($current_path);
 
 // Convert filesystem paths to web URLs relative to site root
 $allFiles = array_map(function($file) use ($root_directory) {
-    // Remove the leading './' or root dir
-    $relative = str_replace('\\','/', $file); // normalize Windows paths
+    $relative = str_replace('\\','/', $file);
     if (str_starts_with($relative, $root_directory)) {
         $relative = substr($relative, strlen($root_directory));
     }
@@ -124,7 +119,7 @@ if ($audited) {
 // =====================
 // BREADCRUMB PATHS
 // =====================
-$path_parts = $selected_path ? explode('/', $selected_path) : [];
+$path_parts = $selected_path_parts;
 
 ?>
 <!DOCTYPE html>
@@ -134,26 +129,17 @@ $path_parts = $selected_path ? explode('/', $selected_path) : [];
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Media Grid</title>
 <style>
-/* ---------- General ---------- */
 html, body { margin:0; padding:0; height:100%; overflow:hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#121212; color:#f0f0f0; }
 a { text-decoration:none; color:#1e90ff; }
 
-/* ---------- Form / Options ---------- */
 #form { padding:12px 20px; background:#1f1f1f; display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:10px; border-bottom:1px solid #333; }
 #options-form select, #options-form button { padding:6px 10px; border-radius:6px; border:none; background:#2c2c2c; color:#f0f0f0; font-size:14px; cursor:pointer; transition:0.2s; }
 #options-form select:hover, #options-form button:hover { background:#3a3a3a; }
 #file-count, #audit-text { font-weight:bold; margin:0 10px; }
 
-#folder-select-container {
-    display: inline-flex;
-    gap: 6px;
-    align-items: center;
-}
-#folder-select-container select {
-    margin: 0;
-}
+#folder-select-container { display: inline-flex; gap: 6px; align-items: center; }
+#folder-select-container select { margin: 0; }
 
-/* ---------- Grid ---------- */
 #grid { display:grid; grid-template-columns: repeat(<?php echo $selected_columns; ?>,1fr); grid-template-rows: repeat(<?php echo $selected_rows; ?>,1fr); gap:8px; padding:10px; height:calc(100% - 72px); }
 .video-container { position:relative; width:100%; height:100%; overflow:hidden; border-radius:8px; background:black; }
 .video-container video, .video-container img { width:100%; height:100%; object-fit:contain; display:block; border-radius:8px; transition: transform 0.2s, box-shadow 0.2s; }
@@ -163,7 +149,6 @@ a { text-decoration:none; color:#1e90ff; }
 .overlay button { background:#ff4d4f; border:none; border-radius:4px; color:#fff; font-size:10px; padding:2px 6px; cursor:pointer; margin-left:6px; }
 .overlay button:hover { background:#d9363e; }
 
-/* ---------- Responsive ---------- */
 @media (max-width:768px){
   #form { flex-direction:row; justify-content:space-between; gap:6px; padding:6px 10px; }
   #form span[id="file-count"], #form select[name="columns"], #form select[name="rows"], #form button[id="refresh"], #form button[id="clear"], #form button[id="audit"], #form button[id="previous"], #form button[id="next"], #form span[id="audit-text"] { display:none; }
@@ -177,7 +162,36 @@ a { text-decoration:none; color:#1e90ff; }
 <form id="options-form" method="get" action="index.php">
   <span id="file-count"><?php echo 1; ?> / <?php echo count($allFiles); ?></span>
 
-  <div id="folder-select-container"></div>
+  <div id="folder-select-container">
+  <?php
+  // =====================
+  // PHP Folder Selects
+  // =====================
+  $parent = '';
+  foreach ($path_parts as $level => $part) {
+      $subfolders = getSubfolders($root_directory . ($parent ? '/' . $parent : ''));
+      echo '<select name="selected-path[]" onchange="this.form.submit()">';
+      echo '<option value="">[Select]</option>';
+      foreach ($subfolders as $f) {
+          $sel = ($f === $part) ? ' selected' : '';
+          echo "<option value=\"$f\"$sel>$f</option>";
+      }
+      echo '</select>';
+      $parent .= ($parent ? '/' : '') . $part;
+  }
+
+  // Add next level select if current folder has subfolders
+  $subfolders = getSubfolders($current_path);
+  if (!empty($subfolders)) {
+      echo '<select name="selected-path[]" onchange="this.form.submit()">';
+      echo '<option value="">[Select]</option>';
+      foreach ($subfolders as $f) {
+          echo "<option value=\"$f\">$f</option>";
+      }
+      echo '</select>';
+  }
+  ?>
+  </div>
 
   <input type="hidden" name="muted" value="<?php echo $muted ? 'true':'false'; ?>">
 
@@ -195,122 +209,6 @@ a { text-decoration:none; color:#1e90ff; }
 </div>
 
 <div id="grid"></div>
-
-<script>
-// ---------- Initial setup ----------
-const rootDir = '<?php echo addslashes($root_directory); ?>';
-let selectedPath = '<?php echo addslashes($selected_path); ?>'.split('/').filter(Boolean);
-
-// ---------- Helper to fetch subfolders ----------
-async function fetchSubfolders(path) {
-    const resp = await fetch('folderApi.php?path=' + encodeURIComponent(path));
-    if (!resp.ok) return [];
-    return resp.json();
-}
-
-// ---------- Render a single select ----------
-function renderSelect(level, options, selectedValue = '') {
-    const select = document.createElement('select');
-    select.dataset.level = level;
-    select.onchange = async () => onFolderChange(level, select.value);
-    
-    const emptyOpt = document.createElement('option');
-    emptyOpt.textContent = '[Select]';
-    emptyOpt.value = '';
-    select.appendChild(emptyOpt);
-
-    options.forEach(opt => {
-        const optionEl = document.createElement('option');
-        optionEl.value = opt;
-        optionEl.textContent = opt;
-        if (opt === selectedValue) optionEl.selected = true;
-        select.appendChild(optionEl);
-    });
-    return select;
-}
-
-// ---------- Handle folder change ----------
-async function onFolderChange(level, value) {
-    const container = document.getElementById('folder-select-container');
-
-    // Remove all selects after this level
-    [...container.querySelectorAll('select')].forEach(sel => {
-        if (parseInt(sel.dataset.level) > level) sel.remove();
-    });
-
-    // Update hidden input to current full path
-    const fullPath = [...container.querySelectorAll('select')]
-        .map(s => s.value)
-        .filter(Boolean)
-        .join('/');
-    document.querySelector('input[name="selected-path"]').value = fullPath;
-
-    if (!value) return;
-
-    // Fetch subfolders for this selection
-    const parentPath = [...container.querySelectorAll('select')]
-        .slice(0, level)
-        .map(s => s.value)
-        .filter(Boolean)
-        .join('/');
-    const subfolders = await fetchSubfolders(parentPath ? parentPath + '/' + value : value);
-
-    if (subfolders.length > 0) {
-        // If there are subfolders, render next select
-        const nextSelect = renderSelect(level + 1, subfolders);
-        container.appendChild(nextSelect);
-    } else {
-        // No subfolders -> final folder selected, submit form
-        document.getElementById('options-form').submit();
-    }
-}
-
-// ---------- Initialize ----------
-async function initFolderPicker() {
-    const container = document.getElementById('folder-select-container');
-
-    // Ensure hidden input exists
-    if (!document.querySelector('input[name="selected-path"]')) {
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'selected-path';
-        input.value = selectedPath.join('/');
-        container.parentElement.appendChild(input);
-    }
-
-    // Load top-level folders
-    const topFolders = await fetchSubfolders('');
-    const firstSelect = renderSelect(0, topFolders, selectedPath[0] || '');
-    container.appendChild(firstSelect);
-
-    // Auto-load subfolders for pre-selected path
-    let parent = '';
-    for (let i = 0; i < selectedPath.length; i++) {
-        const value = selectedPath[i];
-        const subfolders = await fetchSubfolders(parent ? parent + '/' + value : value);
-        if (subfolders.length === 0) break;
-        parent = parent ? parent + '/' + value : value;
-        const sel = renderSelect(i + 1, subfolders, selectedPath[i + 1] || '');
-        container.appendChild(sel);
-    }
-}
-
-// Initialize on page load
-initFolderPicker();
-
-select.onchange = async () => {
-    // Update hidden input to current full path
-    const container = document.getElementById('folder-select-container');
-    const fullPath = [...container.querySelectorAll('select')]
-        .map(s => s.value)
-        .filter(Boolean)
-        .join('/');
-    document.querySelector('input[name="selected-path"]').value = fullPath;
-
-    // Submit form to reload PHP with new folder
-    document.getElementById('options-form').submit();
-};
-</script>
 
 <script>
 let allVideos = <?php echo json_encode($allFiles, JSON_UNESCAPED_SLASHES); ?>;
@@ -481,10 +379,6 @@ function shufflePlay(){
 // --------------------
 // Form helpers
 // --------------------
-function submitForm(selectElem){
-  if(selectElem){ window.location.href='index.php?selected-path='+encodeURIComponent(selectElem.value); return; }
-  document.getElementById('options-form').submit();
-}
 function runAudit(count){
   const url = new URL(window.location.href);
   url.searchParams.set('audited','true');
