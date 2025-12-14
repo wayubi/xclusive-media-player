@@ -255,14 +255,14 @@ async function onFolderChange(level, value) {
         .join('/');
     const subfolders = await fetchSubfolders(parentPath ? parentPath + '/' + value : value);
 
+    // If there are subfolders, render next select
     if (subfolders.length > 0) {
-        // If there are subfolders, render next select
         const nextSelect = renderSelect(level + 1, subfolders);
         container.appendChild(nextSelect);
-    } else {
-        // No subfolders -> final folder selected, submit form
-        document.getElementById('options-form').submit();
     }
+
+    // Always submit form to load media at this level
+    document.getElementById('options-form').submit();
 }
 
 // ---------- Initialize ----------
