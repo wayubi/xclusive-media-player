@@ -96,15 +96,23 @@ $allFiles = array_map(function($file) use ($root_directory) {
 require_once __DIR__ . '/lib/audioCovers.php';
 $audioThumbsRaw = generateAudioCovers($allFilesRaw);
 
-// Convert audio cover paths to web URLs
 $audioThumbs = [];
-foreach($audioThumbsRaw as $file => $thumbPath){
-    $relative = str_replace('\\','/', $thumbPath);
-    if (str_starts_with($relative, $root_directory)) {
-        $relative = substr($relative, strlen($root_directory));
-    }
-    $relative = ltrim($relative,'/');
-    $audioThumbs[$file] = '/'.$root_directory.'/'.$relative;
+
+$docRoot = realpath($_SERVER['DOCUMENT_ROOT']);
+
+foreach ($audioThumbsRaw as $audioFsPath => $thumbFsPath) {
+
+    // ---- audio file: always under /volumes ----
+    $audioWeb = str_replace('\\', '/', $audioFsPath);
+    $audioWeb = str_replace(realpath(getcwd()), '', $audioWeb);
+    $audioWeb = '/' . ltrim($audioWeb, '/');
+
+    // ---- thumb file: may live OUTSIDE /volumes ----
+    $thumbWeb = str_replace('\\', '/', $thumbFsPath);
+    $thumbWeb = str_replace($docRoot, '', $thumbWeb);
+    $thumbWeb = '/' . ltrim($thumbWeb, '/');
+
+    $audioThumbs[$audioWeb] = $thumbWeb;
 }
 
 // =====================
@@ -276,7 +284,7 @@ function renderGrid() {
             img.style.width = '100%';
             img.style.height = '100%';
             img.style.objectFit = 'contain';
-            img.dataset.src = audioThumbs[file] ?? 'fallback-audio.jpg';
+            img.dataset.src = audioThumbs[file] ?? 'cache/no-cover.jpg';
             container.appendChild(img);
 
             const audio = document.createElement('audio');
