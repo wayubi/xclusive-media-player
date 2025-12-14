@@ -1,9 +1,42 @@
+#version: "3.9"
+
 services:
-  4cg:
-    build: .
+
+  nginx:
+    image: nginx
+    depends_on:
+      - php-fpm
     ports:
-      - 8050:8080
+      - "8050:80"
     volumes:
-      - ./data/apache/4cg:/opt/4cg
-      - /mnt/md2/incoming/pocket:/opt/4cg/volumes
-    restart: unless-stopped
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+      - ./src:/var/www/html
+      - /mnt/md2/incoming/pocket:/var/www/html/volumes
+    networks:
+      - app_network
+
+  php-fpm:
+    image: php:8.4-fpm
+    volumes:
+      # - ./data/www.conf:/usr/local/etc/php-fpm.d/www.conf
+      - ./src:/var/www/html
+      - /mnt/md2/incoming/pocket:/var/www/html/volumes
+    networks:
+      - app_network
+
+  # php-cli:
+  #   # image: php:8.4-cli
+  #   # working_dir: /var/www/html
+  #   build: .
+  #   volumes:
+  #     - ./src:/var/www/html
+  #     - /mnt/md2/incoming/pocket:/var/www/html/volumes
+  #   ports:
+  #     - "8050:8080"
+  #   # command: ["php", "-S", "0.0.0.0:8080", "./"]
+  #   # networks:
+  #   #   - app_network
+
+networks:
+  app_network:

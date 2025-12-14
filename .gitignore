@@ -1,4 +1,2 @@
-data/apache/4cg/lib/v1.9.24.tar
-data/apache/4cg/lib/getID3-1.9.24/
-data/apache/4cg/lib/getid3/
-data/apache/4cg/tmp/
+src/cache/
+src/vendor/
