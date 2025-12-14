@@ -255,14 +255,14 @@ async function onFolderChange(level, value) {
         .join('/');
     const subfolders = await fetchSubfolders(parentPath ? parentPath + '/' + value : value);
 
-    // If there are subfolders, render next select
     if (subfolders.length > 0) {
+        // If there are subfolders, render next select
         const nextSelect = renderSelect(level + 1, subfolders);
         container.appendChild(nextSelect);
+    } else {
+        // No subfolders -> final folder selected, submit form
+        document.getElementById('options-form').submit();
     }
-
-    // Always submit form to load media at this level
-    document.getElementById('options-form').submit();
 }
 
 // ---------- Initialize ----------
@@ -324,50 +324,115 @@ let startIndex = 0;
 // --------------------
 function renderGrid() {
     const grid = document.getElementById('grid');
+
+    // Pause old videos & audios to free resources
+    const oldMedia = grid.querySelectorAll('video, audio');
+    oldMedia.forEach(m => {
+        m.pause();
+        m.src = '';
+        m.load();
+    });
+
     grid.innerHTML = '';
+
     const endIndex = Math.min(startIndex + totalCells, allVideos.length);
     const visible = allVideos.slice(startIndex, endIndex);
 
-    visible.forEach(file => {
+    visible.forEach((file, i) => {
         const container = document.createElement('div');
         container.className = 'video-container';
+
         const ext = file.split('.').pop().toLowerCase();
 
-        if (['mp4','webm','mkv'].includes(ext)) {
+        if (['mp4', 'webm', 'mkv'].includes(ext)) {
             const video = document.createElement('video');
-            video.loop = true; video.muted = muted; video.playsInline = true; video.dataset.src = file;
+            video.loop = true;
+            video.muted = muted;
+            video.playsInline = true;
+            video.preload = 'none'; // Don't preload until visible
+            video.style.width = '100%';
+            video.style.height = '100%';
+            video.style.objectFit = 'contain';
+            video.onclick = () => startFullscreenFrom(allVideos.indexOf(file));
+
+            // Lazy load using IntersectionObserver
+            video.dataset.src = file;
             container.appendChild(video);
-        } else if (['jpg','jpeg','png','gif'].includes(ext)) {
-            const img = document.createElement('img'); img.dataset.src = file;
+
+        } else if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) {
+            const img = document.createElement('img');
+            img.loading = 'lazy';
+            img.decoding = 'async';
+            img.src = file;
+            img.ondblclick = () => startFullscreenFrom(allVideos.indexOf(file));
             container.appendChild(img);
-        } else if (['mp3','wav','ogg'].includes(ext)) {
-            const img = document.createElement('img'); img.dataset.src = audioThumbs[file] ?? 'fallback-audio.jpg';
-            const audio = document.createElement('audio'); audio.controls = true; audio.muted = muted; audio.src = file;
-            container.appendChild(img); container.appendChild(audio);
+
+        } else if (['mp3', 'wav', 'ogg'].includes(ext)) {
+            container.style.display = 'flex';
+            container.style.flexDirection = 'column';
+            container.style.justifyContent = 'center';
+            container.style.alignItems = 'center';
+            container.style.height = '100%';
+
+            const img = document.createElement('img');
+            img.style.width = '100%';
+            img.style.height = '100%';
+            img.style.objectFit = 'contain';
+            img.dataset.src = audioThumbs[file] ?? 'fallback-audio.jpg';
+            container.appendChild(img);
+
+            const audio = document.createElement('audio');
+            audio.controls = true;
+            audio.muted = muted;
+            audio.preload = 'metadata';
+            audio.style.width = '100%';
+            audio.onclick = () => startFullscreenFrom(allVideos.indexOf(file));
+            container.appendChild(audio);
+
+            audio.addEventListener('volumechange', () => {
+                if (!audio.muted) {
+                    const allMedia = document.querySelectorAll('#grid video, #grid audio');
+                    allMedia.forEach(m => { if (m !== audio) m.muted = true; });
+                }
+            });
         } else {
-            container.innerHTML = `<div style="color:red;padding:4px;">Unsupported: ${file}</div>`;
+            container.innerHTML = `<div style="color:red; padding:4px;">Unsupported: ${file}</div>`;
         }
 
+        // Overlay
         const overlay = document.createElement('div');
         overlay.className = 'overlay';
-        overlay.innerHTML = `<span>${file}</span> <button onclick="deleteGridFile('${file}')">Delete</button>`;
+        overlay.innerHTML = `<span>${file}</span> <button onclick="deleteGridFile('${file}')" onkeydown="if(event.key==='Enter'){ deleteGridFile('${file}'); }">Delete</button>`;
         container.appendChild(overlay);
+
         grid.appendChild(container);
     });
 
+    // IntersectionObserver for lazy-loading videos and audio covers
     const observer = new IntersectionObserver(entries => {
         entries.forEach(entry => {
             if(entry.isIntersecting){
                 const el = entry.target;
-                if(el.tagName.toLowerCase()==='video' && el.dataset.src){ el.src = el.dataset.src; el.play().catch(()=>{}); delete el.dataset.src; }
-                if(el.tagName.toLowerCase()==='img' && el.dataset.src){ el.src = el.dataset.src; delete el.dataset.src; }
+
+                if(el.tagName.toLowerCase() === 'video' && el.dataset.src){
+                    el.src = el.dataset.src;
+                    el.play().catch(()=>{});
+                    delete el.dataset.src;
+                }
+
+                if(el.tagName.toLowerCase() === 'img' && el.dataset.src){
+                    el.src = el.dataset.src;
+                    delete el.dataset.src;
+                }
+
                 observer.unobserve(el);
             }
         });
-    }, { root:grid, threshold:0.1 });
+    }, { root: grid, threshold: 0.1 });
 
-    grid.querySelectorAll('video,img[data-src]').forEach(el => observer.observe(el));
-    document.getElementById('file-count').innerText = `${startIndex+1} / ${allVideos.length}`;
+    grid.querySelectorAll('video, img[data-src]').forEach(el => observer.observe(el));
+
+    document.getElementById('file-count').innerText = `${startIndex + 1} / ${allVideos.length}`;
 }
 
 // --------------------
