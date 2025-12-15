@@ -381,13 +381,11 @@ function renderGrid() {
                 }
             });
 
-            // Always restore time if returning from fullscreen
-            // Always autoplay (even muted)
             const setupAfterLoad = () => {
                 if (isLastFullscreen && lastFullscreenTime > 0) {
                     audio.currentTime = lastFullscreenTime;
                 }
-                audio.play().catch(() => {});  // ALWAYS play (silent if muted)
+                audio.play().catch(() => {});
             };
 
             audio.dataset.setupPending = isLastFullscreen ? 'true' : 'false';
@@ -416,17 +414,19 @@ function renderGrid() {
                     el.src = el.dataset.src;
                     delete el.dataset.src;
 
-                    // Special handling only needed for time restore on returning fullscreen audio
+                    if (tag === 'video') {
+                        // Videos: play immediately
+                        el.play().catch(() => {});
+                    }
+                    // Audios: play is handled in loadedmetadata listener (setupAfterLoad)
+
+                    // Only restore time for returning fullscreen audio
                     if (tag === 'audio' && el.dataset.setupPending === 'true') {
                         el.addEventListener('canplay', () => {
                             if (lastFullscreenAudio === el.src && lastFullscreenTime > 0) {
                                 el.currentTime = lastFullscreenTime;
                             }
-                            el.play().catch(() => {});
                         }, { once: true });
-                    } else {
-                        // All videos and non-returning audios: just play
-                        el.play().catch(() => {});
                     }
                 }
 
@@ -438,7 +438,7 @@ function renderGrid() {
                 observer.unobserve(el);
             }
         });
-    }, { root: grid, threshold: 0.1 });
+    }, { root: grid, threshold: 0.01 });
 
     grid.querySelectorAll('video, audio, img[data-src]').forEach(el => observer.observe(el));
 
