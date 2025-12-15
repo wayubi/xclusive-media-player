@@ -9,7 +9,6 @@ if (!$root_directory_absolute) die('Root directory not found');
 $is_mobile = stripos($_SERVER['HTTP_USER_AGENT'] ?? '', 'Mobile') !== false
           || stripos($_SERVER['HTTP_USER_AGENT'] ?? '', 'Android') !== false;
 
-// GET parameters
 $selected_path_parts = array_values(array_filter($_GET['selected-path'] ?? [], 'strlen'));
 $selected_path = implode('/', $selected_path_parts);
 $selected_columns = $is_mobile ? 1 : max(1, min(6, (int)($_GET['columns'] ?? 3)));
@@ -152,26 +151,11 @@ html, body { margin:0; padding:0; height:100%; overflow:hidden; font-family: 'Se
 <div id="form">
 <form id="options-form" method="get" action="index.php">
   <span id="file-count">1 / <?php echo count($allFiles); ?></span>
-
-  <div id="folder-select-container">
-    <?php renderFolderSelects($selected_path_parts, $root_directory_absolute); ?>
-  </div>
-
-  <select name="columns" onchange="this.form.submit()">
-    <?php for ($c = 1; $c <= 6; $c++): ?>
-      <option value="<?= $c ?>" <?= $c == $selected_columns ? 'selected' : '' ?>><?= $c ?></option>
-    <?php endfor; ?>
-  </select>
-
-  <select name="rows" onchange="this.form.submit()">
-    <?php for ($r = 1; $r <= 6; $r++): ?>
-      <option value="<?= $r ?>" <?= $r == $selected_rows ? 'selected' : '' ?>><?= $r ?></option>
-    <?php endfor; ?>
-  </select>
-
-  <input type="hidden" name="muted" value="<?= $muted ? 'true' : 'false' ?>">
-
-  <button type="button" id="mute-button" onclick="toggleMute()"><?= $muted ? '🔇' : '🔊' ?></button>
+  <div id="folder-select-container"><?php renderFolderSelects($selected_path_parts, $root_directory_absolute); ?></div>
+  <select name="columns" onchange="this.form.submit()"><?php for ($c=1;$c<=6;$c++): ?><option value="<?= $c ?>" <?= $c==$selected_columns?'selected':'' ?>><?= $c ?></option><?php endfor; ?></select>
+  <select name="rows" onchange="this.form.submit()"><?php for ($r=1;$r<=6;$r++): ?><option value="<?= $r ?>" <?= $r==$selected_rows?'selected':'' ?>><?= $r ?></option><?php endfor; ?></select>
+  <input type="hidden" name="muted" value="<?= $muted?'true':'false' ?>">
+  <button type="button" id="mute-button" onclick="toggleMute()"><?= $muted?'🔇':'🔊' ?></button>
   <button type="button" onclick="playAll()">▶</button>
   <button type="button" onclick="shufflePlay()">🔀</button>
   <button type="button" id="refresh" onclick="window.location.reload()">🔄</button>
@@ -179,7 +163,6 @@ html, body { margin:0; padding:0; height:100%; overflow:hidden; font-family: 'Se
   <button type="button" id="audit" onclick="runAudit(<?= count($allFiles) ?>)">📝</button>
   <button type="button" id="previous" onclick="prevGrid()">◀</button>
   <button type="button" id="next" onclick="nextGrid()">▶</button>
-
   <span id="audit-text">[ <?= htmlspecialchars($auditedText) ?> ]</span>
 </form>
 </div>
@@ -187,6 +170,7 @@ html, body { margin:0; padding:0; height:100%; overflow:hidden; font-family: 'Se
 <div id="grid"></div>
 
 <script>
+// ===== Optimized Grid JS =====
 const allVideos = <?= json_encode($allFiles, JSON_UNESCAPED_SLASHES) ?>;
 const audioThumbs = <?= json_encode($audioThumbs, JSON_UNESCAPED_SLASHES) ?>;
 let muted = <?= $muted ? 'true' : 'false' ?>;
@@ -333,7 +317,10 @@ function renderGrid() {
 
     const visible = allVideos.slice(startIndex, Math.min(startIndex + totalCells, allVideos.length));
     if (lastFullscreen.file && !isFileVisible(lastFullscreen.file)) lastFullscreen = { file:null, time:0 };
-    visible.forEach(file => grid.appendChild(createMediaContainer(file)));
+    
+    const fragment = document.createDocumentFragment();
+    visible.forEach(file => fragment.appendChild(createMediaContainer(file)));
+    grid.appendChild(fragment);
 
     processAudioQueue();
 
@@ -347,7 +334,6 @@ function renderGrid() {
             }
         });
     }, { threshold: 0.01 });
-
     grid.querySelectorAll('video, img[data-src]').forEach(el => observer.observe(el));
 
     setTimeout(() => {
