@@ -312,6 +312,7 @@ function renderGrid() {
             img.style.height = '100%';
             img.style.objectFit = 'contain';
             img.dataset.src = audioThumbs[file] ?? 'cache/no-cover.jpg';
+            img.ondblclick = () => startFullscreenFrom(allVideos.indexOf(file));
             container.appendChild(img);
 
             const audio = document.createElement('audio');
