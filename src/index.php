@@ -154,7 +154,7 @@ $subfolders = getSubfolders($current_path);
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Media Grid</title>
+<title>Xclusive Media Player</title>
 <style>
 html, body { margin:0; padding:0; height:100%; overflow:hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#121212; color:#f0f0f0; }
 a { text-decoration:none; color:#1e90ff; }
