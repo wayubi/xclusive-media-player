@@ -1,6 +1,3 @@
-Absolutely! Here’s a copy-paste-ready version of your README.md:
-
-````markdown
 # Xclusive Media Player
 
 **Xclusive Media Player** is a sleek, browser-based media grid for managing and playing audio and video files. It supports nested folder navigation, automatic audio cover generation, and a responsive, mobile-friendly interface. Perfect for personal media collections or local media servers.
@@ -89,9 +86,4 @@ Contributions are welcome! Please open an issue or submit a pull request for bug
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
-```
-
-You can create a **README.md** file in your repo and paste this directly.  
-
-If you want, I can also **make a shorter, “catchy” version for the GitHub front page** that’s only 3–4 lines for people to immediately understand what it does. Do you want me to do that?
 ```
