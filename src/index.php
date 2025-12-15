@@ -433,6 +433,13 @@ function startFullscreenPlayer(playlist, index=0){
   if(!playlist.length) return;
   let i = index;
 
+  // --------------------
+  // Pause all grid media
+  // --------------------
+  document.querySelectorAll('#grid video, #grid audio').forEach(m => {
+    m.pause();
+  });
+
   const container = document.createElement('div');
   container.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:black;display:flex;align-items:center;justify-content:center;flex-direction:column;z-index:9999;';
   document.body.appendChild(container);
