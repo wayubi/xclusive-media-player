@@ -66,19 +66,22 @@ function getCurrentPath(string $root, string $selected_path): string {
 function renderFolderSelects(array $selected_parts, string $root_abs): void {
     $parent = '';
     foreach ($selected_parts as $part) {
-        $folderPath = $root_abs.($parent ? '/'.$parent : '');
+        $folderPath = $root_abs . ($parent ? '/' . $parent : '');
         $subs = getSubfolders($folderPath);
         echo '<select name="selected-path[]" onchange="this.form.submit()">';
         echo '<option value="">[Select]</option>';
-        foreach ($subs as $f) echo "<option value=\"$f\"".($f==$part?' selected':'').">$f</option>";
+        foreach ($subs as $f) echo "<option value=\"$f\"" . ($f === $part ? ' selected' : '') . ">$f</option>";
         echo '</select>';
-        $parent .= ($parent ? '/' : '').$part;
+        $parent .= ($parent ? '/' : '') . $part;
     }
-    $subs = getSubfolders($root_abs.($parent ? '/'.$parent : ''));
-    if (!$subs) return;
-    echo '<select name="selected-path[]" onchange="this.form.submit()"><option value="">[Select]</option>';
-    foreach ($subs as $f) echo "<option value=\"$f\">$f</option>";
-    echo '</select>';
+    $folderPath = $root_abs . ($parent ? '/' . $parent : '');
+    $subs = getSubfolders($folderPath);
+    if ($subs) {
+        echo '<select name="selected-path[]" onchange="this.form.submit()">';
+        echo '<option value="" selected>[Select]</option>';
+        foreach ($subs as $f) echo "<option value=\"$f\">$f</option>";
+        echo '</select>';
+    }
 }
 
 // =====================
