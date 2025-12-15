@@ -253,10 +253,10 @@ let totalCells = <?php echo $total_cells; ?>;
 let startIndex = 0;
 
 // Track fullscreen state
-let lastFullscreenAudio = null;       // file URL of last played fullscreen audio
-let lastFullscreenTime = 0;           // playback time when exiting fullscreen
+let lastFullscreenAudio = null;
+let lastFullscreenTime = 0;
 
-// Helper: check if a file is currently visible in the grid
+// Helper
 function isFileVisible(file) {
     const endIndex = Math.min(startIndex + totalCells, allVideos.length);
     const visibleFiles = allVideos.slice(startIndex, endIndex);
@@ -269,7 +269,6 @@ function isFileVisible(file) {
 function renderGrid() {
     const grid = document.getElementById('grid');
 
-    // Clear and pause old media
     const oldMedia = grid.querySelectorAll('video, audio');
     oldMedia.forEach(m => { m.pause(); m.src = ''; m.load(); });
 
@@ -278,13 +277,11 @@ function renderGrid() {
     const endIndex = Math.min(startIndex + totalCells, allVideos.length);
     const visible = allVideos.slice(startIndex, endIndex);
 
-    // NEW: If lastFullscreenAudio is no longer visible, clear it so normal behavior resumes
+    // Clear lastFullscreen if no longer visible
     if (lastFullscreenAudio && !isFileVisible(lastFullscreenAudio)) {
         lastFullscreenAudio = null;
         lastFullscreenTime = 0;
     }
-
-    let firstAudioFound = false;
 
     visible.forEach((file) => {
         const container = document.createElement('div');
@@ -324,11 +321,10 @@ function renderGrid() {
 
             const isLastFullscreen = (lastFullscreenAudio === file);
 
-            // CRITICAL FIX: Only unmute first audio if NO fullscreen audio is present on this page
+            // Decide sound: only one audio unmuted
             if (isLastFullscreen) {
                 audio.muted = false;
             } else if (lastFullscreenAudio === null && !muted) {
-                // Only unmute first audio when no fullscreen history exists
                 const visibleAudios = visible.filter(f => ['mp3','wav','ogg'].includes(f.split('.').pop().toLowerCase()));
                 const isFirstAudio = visibleAudios[0] === file;
                 audio.muted = !isFirstAudio;
@@ -345,7 +341,7 @@ function renderGrid() {
             container.appendChild(img);
             container.appendChild(audio);
 
-            // When user unmutes manually, clear fullscreen memory
+            // Manual unmute → take control
             audio.addEventListener('volumechange', () => {
                 if (!audio.muted) {
                     document.querySelectorAll('#grid audio, #grid video').forEach(m => {
@@ -356,17 +352,15 @@ function renderGrid() {
                 }
             });
 
-            // After load: restore time and play if needed
+            // Always restore time if returning from fullscreen
+            // Always autoplay (even muted)
             const setupAfterLoad = () => {
                 if (isLastFullscreen && lastFullscreenTime > 0) {
                     audio.currentTime = lastFullscreenTime;
                 }
-                if (!audio.muted) {
-                    audio.play().catch(() => {});
-                }
+                audio.play().catch(() => {});  // ALWAYS play (silent if muted)
             };
 
-            // Mark for special handling if it's the returning fullscreen audio
             audio.dataset.setupPending = isLastFullscreen ? 'true' : 'false';
             audio.addEventListener('loadedmetadata', setupAfterLoad, { once: true });
 
@@ -374,7 +368,6 @@ function renderGrid() {
             container.innerHTML = `<div style="color:red; padding:4px;">Unsupported: ${file}</div>`;
         }
 
-        // Overlay
         const overlay = document.createElement('div');
         overlay.className = 'overlay';
         overlay.innerHTML = `<span>${file}</span> <button onclick="deleteGridFile('${file}')">Delete</button>`;
@@ -383,7 +376,7 @@ function renderGrid() {
         grid.appendChild(container);
     });
 
-    // Lazy loading observer (simplified: play logic now in setupAfterLoad)
+    // Lazy loading + autoplay
     const observer = new IntersectionObserver(entries => {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
@@ -394,17 +387,17 @@ function renderGrid() {
                     el.src = el.dataset.src;
                     delete el.dataset.src;
 
+                    // Special handling only needed for time restore on returning fullscreen audio
                     if (tag === 'audio' && el.dataset.setupPending === 'true') {
                         el.addEventListener('canplay', () => {
                             if (lastFullscreenAudio === el.src && lastFullscreenTime > 0) {
                                 el.currentTime = lastFullscreenTime;
                             }
-                            if (!el.muted) {
-                                el.play().catch(() => {});
-                            }
+                            el.play().catch(() => {});
                         }, { once: true });
-                    } else if (!el.muted) {
-                        el.play?.().catch(() => {});
+                    } else {
+                        // All videos and non-returning audios: just play
+                        el.play().catch(() => {});
                     }
                 }
 
@@ -423,17 +416,11 @@ function renderGrid() {
     document.getElementById('file-count').innerText = `${startIndex + 1} / ${allVideos.length}`;
 }
 
-// Navigation — now automatically clears old fullscreen state if needed
-function nextGrid() { 
-    startIndex = (startIndex + totalCells) % allVideos.length; 
-    renderGrid(); 
-}
-function prevGrid() { 
-    startIndex = (startIndex - totalCells + allVideos.length) % allVideos.length; 
-    renderGrid(); 
-}
+// Navigation
+function nextGrid() { startIndex = (startIndex + totalCells) % allVideos.length; renderGrid(); }
+function prevGrid() { startIndex = (startIndex - totalCells + allVideos.length) % allVideos.length; renderGrid(); }
 
-// Delete unchanged
+// Delete
 function deleteGridFile(file) {
     if (!confirm('Delete this file?')) return;
     const idx = allVideos.indexOf(file);
@@ -443,11 +430,11 @@ function deleteGridFile(file) {
     renderGrid();
 }
 
-// Mute toggle — simplified since renderGrid now handles logic correctly
+// Mute toggle
 function toggleMute() {
     muted = !muted;
     document.getElementById('mute-button').innerHTML = muted ? '🔇' : '🔊';
-    renderGrid();  // Re-render to apply new mute state correctly
+    renderGrid();  // Re-renders and applies new mute state (sound on/off, but playback continues)
 }
 
 // --------------------
@@ -534,7 +521,6 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
         if (media.tagName.toLowerCase() === 'audio') {
             lastFullscreenTime = media.currentTime;
         }
-
         startIndex = Math.floor(allVideos.indexOf(playlist[i]) / totalCells) * totalCells;
         renderGrid();
         container.remove();
