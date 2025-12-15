@@ -256,6 +256,13 @@ let startIndex = 0;
 let lastFullscreenAudio = null;       // file URL of last played fullscreen audio
 let lastFullscreenTime = 0;           // playback time when exiting fullscreen
 
+// Helper: check if a file is currently visible in the grid
+function isFileVisible(file) {
+    const endIndex = Math.min(startIndex + totalCells, allVideos.length);
+    const visibleFiles = allVideos.slice(startIndex, endIndex);
+    return visibleFiles.includes(file);
+}
+
 // --------------------
 // Render grid
 // --------------------
@@ -270,6 +277,12 @@ function renderGrid() {
 
     const endIndex = Math.min(startIndex + totalCells, allVideos.length);
     const visible = allVideos.slice(startIndex, endIndex);
+
+    // NEW: If lastFullscreenAudio is no longer visible, clear it so normal behavior resumes
+    if (lastFullscreenAudio && !isFileVisible(lastFullscreenAudio)) {
+        lastFullscreenAudio = null;
+        lastFullscreenTime = 0;
+    }
 
     let firstAudioFound = false;
 
@@ -309,13 +322,16 @@ function renderGrid() {
             audio.style.width = '100%';
             audio.dataset.src = file;
 
-            // Decide muted state
             const isLastFullscreen = (lastFullscreenAudio === file);
+
+            // CRITICAL FIX: Only unmute first audio if NO fullscreen audio is present on this page
             if (isLastFullscreen) {
-                audio.muted = false;           // priority: continue playing the one from fullscreen
-            } else if (!firstAudioFound && !muted && lastFullscreenAudio === null) {
-                audio.muted = false;           // normal case: unmute first visible audio
-                firstAudioFound = true;
+                audio.muted = false;
+            } else if (lastFullscreenAudio === null && !muted) {
+                // Only unmute first audio when no fullscreen history exists
+                const visibleAudios = visible.filter(f => ['mp3','wav','ogg'].includes(f.split('.').pop().toLowerCase()));
+                const isFirstAudio = visibleAudios[0] === file;
+                audio.muted = !isFirstAudio;
             } else {
                 audio.muted = true;
             }
@@ -329,26 +345,28 @@ function renderGrid() {
             container.appendChild(img);
             container.appendChild(audio);
 
-            // When user unmutes this audio manually, mute others
+            // When user unmutes manually, clear fullscreen memory
             audio.addEventListener('volumechange', () => {
                 if (!audio.muted) {
                     document.querySelectorAll('#grid audio, #grid video').forEach(m => {
                         if (m !== audio) m.muted = true;
                     });
-                    lastFullscreenAudio = null;  // user took manual control
+                    lastFullscreenAudio = null;
+                    lastFullscreenTime = 0;
                 }
             });
 
-            // After load: restore time and play if it's the one we want playing
+            // After load: restore time and play if needed
             const setupAfterLoad = () => {
                 if (isLastFullscreen && lastFullscreenTime > 0) {
                     audio.currentTime = lastFullscreenTime;
                 }
-                if ((isLastFullscreen || (!firstAudioFound && !muted && lastFullscreenAudio === null)) && !audio.muted) {
+                if (!audio.muted) {
                     audio.play().catch(() => {});
                 }
             };
 
+            // Mark for special handling if it's the returning fullscreen audio
             audio.dataset.setupPending = isLastFullscreen ? 'true' : 'false';
             audio.addEventListener('loadedmetadata', setupAfterLoad, { once: true });
 
@@ -365,7 +383,7 @@ function renderGrid() {
         grid.appendChild(container);
     });
 
-    // Lazy loading observer
+    // Lazy loading observer (simplified: play logic now in setupAfterLoad)
     const observer = new IntersectionObserver(entries => {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
@@ -381,11 +399,11 @@ function renderGrid() {
                             if (lastFullscreenAudio === el.src && lastFullscreenTime > 0) {
                                 el.currentTime = lastFullscreenTime;
                             }
-                            if (lastFullscreenAudio === el.src && !muted) {
+                            if (!el.muted) {
                                 el.play().catch(() => {});
                             }
                         }, { once: true });
-                    } else {
+                    } else if (!el.muted) {
                         el.play?.().catch(() => {});
                     }
                 }
@@ -405,9 +423,15 @@ function renderGrid() {
     document.getElementById('file-count').innerText = `${startIndex + 1} / ${allVideos.length}`;
 }
 
-// Navigation unchanged
-function nextGrid() { startIndex = (startIndex + totalCells) % allVideos.length; renderGrid(); }
-function prevGrid() { startIndex = (startIndex - totalCells + allVideos.length) % allVideos.length; renderGrid(); }
+// Navigation — now automatically clears old fullscreen state if needed
+function nextGrid() { 
+    startIndex = (startIndex + totalCells) % allVideos.length; 
+    renderGrid(); 
+}
+function prevGrid() { 
+    startIndex = (startIndex - totalCells + allVideos.length) % allVideos.length; 
+    renderGrid(); 
+}
 
 // Delete unchanged
 function deleteGridFile(file) {
@@ -419,35 +443,11 @@ function deleteGridFile(file) {
     renderGrid();
 }
 
-// --------------------
-// Mute toggle - FIXED
-// --------------------
+// Mute toggle — simplified since renderGrid now handles logic correctly
 function toggleMute() {
     muted = !muted;
     document.getElementById('mute-button').innerHTML = muted ? '🔇' : '🔊';
-
-    if (muted) {
-        // Mute everything
-        document.querySelectorAll('#grid video, #grid audio').forEach(m => m.muted = true);
-    } else {
-        // Unmute: prefer lastFullscreenAudio, otherwise first visible audio
-        const audios = document.querySelectorAll('#grid audio');
-        let unmutedOne = false;
-
-        audios.forEach(a => {
-            if (!unmutedOne && lastFullscreenAudio === a.src) {
-                a.muted = false;
-                unmutedOne = true;
-            } else if (!unmutedOne && lastFullscreenAudio === null) {
-                a.muted = false;
-                unmutedOne = true;
-            } else {
-                a.muted = true;
-            }
-        });
-
-        // If no audio was found (e.g. no audio files visible), do nothing extra
-    }
+    renderGrid();  // Re-render to apply new mute state correctly
 }
 
 // --------------------
