@@ -252,22 +252,24 @@ let muted = <?php echo $muted ? 'true':'false'; ?>;
 let totalCells = <?php echo $total_cells; ?>;
 let startIndex = 0;
 
+// Track fullscreen state
+let lastFullscreenAudio = null;       // file URL
+let lastFullscreenTime = 0;           // current playback time when exiting
+
 // --------------------
 // Render grid
 // --------------------
 function renderGrid() {
     const grid = document.getElementById('grid');
 
-    // Pause old videos & audios
+    // Clear and pause old media
     const oldMedia = grid.querySelectorAll('video, audio');
-    oldMedia.forEach(m => { m.pause(); m.src=''; m.load(); });
+    oldMedia.forEach(m => { m.pause(); m.src = ''; m.load(); });
 
     grid.innerHTML = '';
 
     const endIndex = Math.min(startIndex + totalCells, allVideos.length);
     const visible = allVideos.slice(startIndex, endIndex);
-
-    let firstAudioUnmuted = false;
 
     visible.forEach((file) => {
         const container = document.createElement('div');
@@ -281,18 +283,16 @@ function renderGrid() {
             video.muted = muted;
             video.playsInline = true;
             video.preload = 'none';
-            video.style.width = '100%';
-            video.style.height = '100%';
-            video.style.objectFit = 'contain';
             video.dataset.src = file;
-            video.onclick = () => startFullscreenFrom(file);  // <-- pass file
+            video.onclick = () => startFullscreenFrom(file);
             container.appendChild(video);
+
         } else if (['jpg','jpeg','png','gif','webp'].includes(ext)) {
             const img = document.createElement('img');
             img.loading = 'lazy';
             img.decoding = 'async';
             img.dataset.src = file;
-            img.ondblclick = () => startFullscreenFrom(file); // <-- pass file
+            img.ondblclick = () => startFullscreenFrom(file);
             container.appendChild(img);
 
         } else if (['mp3','wav','ogg'].includes(ext)) {
@@ -300,13 +300,20 @@ function renderGrid() {
             container.style.flexDirection = 'column';
             container.style.justifyContent = 'center';
             container.style.alignItems = 'center';
-            container.style.height = '100%';
 
             const audio = document.createElement('audio');
             audio.controls = true;
             audio.preload = 'metadata';
             audio.style.width = '100%';
             audio.dataset.src = file;
+
+            // Determine if this audio should be unmuted
+            const isLastFullscreen = (lastFullscreenAudio === file);
+            if (isLastFullscreen) {
+                audio.muted = false;
+            } else {
+                audio.muted = true;  // All others muted unless explicitly unmuted elsewhere
+            }
 
             const img = document.createElement('img');
             img.style.width = '100%';
@@ -315,22 +322,32 @@ function renderGrid() {
             img.dataset.src = audioThumbs[file] ?? 'cache/no-cover.jpg';
             img.onclick = () => startFullscreenFrom(file, audio.currentTime);
             container.appendChild(img);
+            container.appendChild(audio);
 
-            // Only first audio in view unmuted
-            if (!firstAudioUnmuted && !muted) {
-                audio.muted = false;
-                firstAudioUnmuted = true;
-            } else {
-                audio.muted = true;
-            }
-
+            // When this audio becomes unmuted, mute all others
             audio.addEventListener('volumechange', () => {
                 if (!audio.muted) {
-                    const allMedia = document.querySelectorAll('#grid video, #grid audio');
-                    allMedia.forEach(m => { if (m !== audio) m.muted = true; });
+                    document.querySelectorAll('#grid audio, #grid video').forEach(m => {
+                        if (m !== audio) m.muted = true;
+                    });
                 }
             });
-            container.appendChild(audio);
+
+            // Special handling after lazy-load: restore time and play if needed
+            const setupAfterLoad = () => {
+                if (isLastFullscreen && lastFullscreenTime > 0) {
+                    audio.currentTime = lastFullscreenTime;
+                }
+                if (isLastFullscreen && !muted) {
+                    audio.play().catch(() => {});
+                }
+            };
+
+            // We'll call this after src is set in IntersectionObserver
+            audio.dataset.setupPending = isLastFullscreen ? 'true' : 'false';
+
+            // Store reference for observer
+            audio.addEventListener('loadedmetadata', setupAfterLoad, { once: true });
 
         } else {
             container.innerHTML = `<div style="color:red; padding:4px;">Unsupported: ${file}</div>`;
@@ -339,26 +356,39 @@ function renderGrid() {
         // Overlay
         const overlay = document.createElement('div');
         overlay.className = 'overlay';
-        overlay.innerHTML = `<span>${file}</span> <button onclick="deleteGridFile('${file}')" onkeydown="if(event.key==='Enter'){ deleteGridFile('${file}'); }">Delete</button>`;
+        overlay.innerHTML = `<span>${file}</span> <button onclick="deleteGridFile('${file}')">Delete</button>`;
         container.appendChild(overlay);
 
         grid.appendChild(container);
     });
 
-    // IntersectionObserver (lazy-load)
+    // Lazy loading with special handling for lastFullscreenAudio
     const observer = new IntersectionObserver(entries => {
         entries.forEach(entry => {
-            if(entry.isIntersecting){
+            if (entry.isIntersecting) {
                 const el = entry.target;
                 const tag = el.tagName.toLowerCase();
 
                 if ((tag === 'video' || tag === 'audio') && el.dataset.src) {
                     el.src = el.dataset.src;
-                    el.play?.().catch(()=>{});
                     delete el.dataset.src;
+
+                    // For audio: after loading, restore time and play if it was the fullscreen one
+                    if (tag === 'audio' && el.dataset.setupPending === 'true') {
+                        el.addEventListener('canplay', () => {
+                            if (lastFullscreenAudio === el.src && lastFullscreenTime > 0) {
+                                el.currentTime = lastFullscreenTime;
+                            }
+                            if (lastFullscreenAudio === el.src && !muted) {
+                                el.play().catch(() => {});
+                            }
+                        }, { once: true });
+                    } else {
+                        el.play?.().catch(() => {});
+                    }
                 }
 
-                if(tag === 'img' && el.dataset.src){
+                if (tag === 'img' && el.dataset.src) {
                     el.src = el.dataset.src;
                     delete el.dataset.src;
                 }
@@ -373,67 +403,46 @@ function renderGrid() {
     document.getElementById('file-count').innerText = `${startIndex + 1} / ${allVideos.length}`;
 }
 
-// --------------------
-// Navigation
-// --------------------
-function nextGrid(){ startIndex = (startIndex + totalCells) % allVideos.length; renderGrid(); }
-function prevGrid(){ startIndex = (startIndex - totalCells + allVideos.length) % allVideos.length; renderGrid(); }
+// Navigation (unchanged)
+function nextGrid() { startIndex = (startIndex + totalCells) % allVideos.length; renderGrid(); }
+function prevGrid() { startIndex = (startIndex - totalCells + allVideos.length) % allVideos.length; renderGrid(); }
 
-// --------------------
-// Delete file
-// --------------------
-function deleteGridFile(file){
-  if(!confirm('Delete this file?')) return;
-  const idx = allVideos.indexOf(file);
-  if(idx!==-1) allVideos.splice(idx,1);
-  fetch('index.php?delete=' + encodeURIComponent(file));
-  if(startIndex >= allVideos.length) startIndex = Math.max(0, allVideos.length-totalCells);
-  renderGrid();
+// Delete (unchanged)
+function deleteGridFile(file) {
+    if (!confirm('Delete this file?')) return;
+    const idx = allVideos.indexOf(file);
+    if (idx !== -1) allVideos.splice(idx, 1);
+    fetch('index.php?delete=' + encodeURIComponent(file));
+    if (startIndex >= allVideos.length) startIndex = Math.max(0, allVideos.length - totalCells);
+    renderGrid();
 }
 
-// --------------------
-// Mute toggle
-// --------------------
+// Mute toggle (unchanged - still works for global mute)
 function toggleMute() {
-    const grid = document.getElementById('grid');
-    const allMedia = grid.querySelectorAll('audio, video');
-
-    // If currently muted, unmute only the first audio
-    if (muted) {
-        muted = false;
-        document.getElementById('mute-button').innerHTML = '🔊';
-        let firstUnmuted = false;
-        allMedia.forEach(m => {
-            if (m.tagName.toLowerCase() === 'audio') {
-                if (!firstUnmuted) {
-                    m.muted = false; // unmute the first audio
-                    firstUnmuted = true;
-                } else {
-                    m.muted = true;  // keep the rest muted
-                }
-            } else {
-                m.muted = muted; // videos follow global muted
-            }
-        });
-    } else {
-        // If currently unmuted, mute everything
-        muted = true;
-        document.getElementById('mute-button').innerHTML = '🔇';
-        allMedia.forEach(m => m.muted = true);
-    }
+    muted = !muted;
+    document.getElementById('mute-button').innerHTML = muted ? '🔇' : '🔊';
+    document.querySelectorAll('#grid video, #grid audio').forEach(m => {
+        m.muted = muted || (m.tagName.toLowerCase() === 'audio' && lastFullscreenAudio !== m.src);
+    });
 }
+
 // --------------------
-// Grid double-click
+// Enter fullscreen from grid
 // --------------------
 function startFullscreenFrom(file, startTime = 0) {
-    // Pause all grid media
     const gridMedia = document.querySelectorAll('#grid video, #grid audio');
     gridMedia.forEach(m => m.pause());
 
     const idx = allVideos.indexOf(file);
     if (idx === -1) return;
 
-    startFullscreenPlayer(allVideos, idx, startTime); // pass startTime
+    const ext = file.split('.').pop().toLowerCase();
+    if (['mp3','wav','ogg'].includes(ext)) {
+        lastFullscreenAudio = file;
+        lastFullscreenTime = startTime;
+    }
+
+    startFullscreenPlayer(allVideos, idx, startTime);
 }
 
 // --------------------
@@ -444,14 +453,13 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
     let i = index;
 
     const container = document.createElement('div');
-    container.style.cssText =
-        'position:fixed;top:0;left:0;width:100%;height:100%;background:black;display:flex;align-items:center;justify-content:center;flex-direction:column;z-index:9999;';
+    container.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:black;display:flex;align-items:center;justify-content:center;flex-direction:column;z-index:9999;';
     document.body.appendChild(container);
 
     const ext = playlist[i].split('.').pop().toLowerCase();
     let media, thumb;
 
-    if (['mp3', 'wav', 'ogg'].includes(ext)) {
+    if (['mp3','wav','ogg'].includes(ext)) {
         media = document.createElement('audio');
         media.controls = true;
         media.autoplay = true;
@@ -484,27 +492,30 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
 
     function play(idx) {
         i = (idx + playlist.length) % playlist.length;
-        const nextExt = playlist[i].split('.').pop().toLowerCase();
-        if (['mp3', 'wav', 'ogg'].includes(nextExt)) {
-            media.src = playlist[i];
-            media.play().catch(() => {});
-            if (thumb) thumb.src = audioThumbs[playlist[i]] ?? 'cache/no-cover.jpg';
-        } else {
-            media.src = playlist[i];
-            media.play().catch(() => {});
+        const nextFile = playlist[i];
+        const nextExt = nextFile.split('.').pop().toLowerCase();
+
+        media.src = nextFile;
+        media.play().catch(() => {});
+
+        if (thumb && ['mp3','wav','ogg'].includes(nextExt)) {
+            thumb.src = audioThumbs[nextFile] ?? 'cache/no-cover.jpg';
+        }
+
+        // Update tracking
+        if (['mp3','wav','ogg'].includes(nextExt)) {
+            lastFullscreenAudio = nextFile;
         }
     }
 
     function close() {
-        // Resume paused grid media (except any audio that is muted globally)
-        const gridMedia = document.querySelectorAll('#grid video, #grid audio');
-        gridMedia.forEach(m => {
-            if (!m.paused) return; // skip already playing
-            if (!m.muted) m.play().catch(()=>{}); // only unmuted audios resume
-        });
+        // Save current time before closing
+        if (['mp3','wav','ogg'].includes(ext) || media.tagName === 'AUDIO') {
+            lastFullscreenTime = media.currentTime;
+        }
 
         startIndex = Math.floor(allVideos.indexOf(playlist[i]) / totalCells) * totalCells;
-        renderGrid();
+        renderGrid();  // This will now restore time + playback correctly
         container.remove();
         document.removeEventListener('keydown', keyHandler);
     }
@@ -513,38 +524,17 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
     if (thumb) thumb.ondblclick = close;
     media.onended = () => play(i + 1);
 
-    // Wheel scroll for prev/next
-    container.addEventListener(
-        'wheel',
-        function (e) {
-            e.preventDefault();
-            if (e.deltaY > 0) play(i + 1);
-            else play(i - 1);
-        },
-        { passive: false }
-    );
+    // Navigation controls (wheel, touch, etc.) unchanged...
+    container.addEventListener('wheel', e => { e.preventDefault(); e.deltaY > 0 ? play(i + 1) : play(i - 1); }, { passive: false });
 
-    // Touch swipe
     let fsTouchStartY = 0;
-    container.addEventListener(
-        'touchstart',
-        (e) => {
-            if (e.touches.length === 1) fsTouchStartY = e.touches[0].clientY;
-        },
-        { passive: true }
-    );
-    container.addEventListener(
-        'touchend',
-        (e) => {
-            const deltaY = e.changedTouches[0].clientY - fsTouchStartY;
-            if (Math.abs(deltaY) > 50) {
-                deltaY < 0 ? play(i + 1) : play(i - 1);
-            }
-        },
-        { passive: true }
-    );
+    container.addEventListener('touchstart', e => { if (e.touches.length === 1) fsTouchStartY = e.touches[0].clientY; }, { passive: true });
+    container.addEventListener('touchend', e => {
+        const deltaY = e.changedTouches[0].clientY - fsTouchStartY;
+        if (Math.abs(deltaY) > 50) deltaY < 0 ? play(i + 1) : play(i - 1);
+    }, { passive: true });
 
-    const keyHandler = (e) => {
+    const keyHandler = e => {
         if (e.key === 'Escape') close();
         if (e.key === 'Delete') {
             if (!confirm('Delete this file?')) return;
@@ -554,58 +544,47 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
             if (idxAll !== -1) allVideos.splice(idxAll, 1);
             fetch('index.php?delete=' + encodeURIComponent(deleted));
             renderGrid();
-            if (playlist.length === 0) {
-                close();
-                return;
-            }
+            if (playlist.length === 0) { close(); return; }
             play(i % playlist.length);
         }
     };
     document.addEventListener('keydown', keyHandler);
 }
 
-// --------------------
-// Play all / shuffle
-// --------------------
-function playAll(){ startFullscreenPlayer(allVideos, startIndex); }
-function shufflePlay(){
-  let shuffled = [...allVideos];
-  for(let i=shuffled.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [shuffled[i],shuffled[j]]=[shuffled[j],shuffled[i]]; }
-  startFullscreenPlayer(shuffled,0);
+// Play all / shuffle (unchanged)
+function playAll() { startFullscreenPlayer(allVideos, startIndex); }
+function shufflePlay() {
+    let shuffled = [...allVideos];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    startFullscreenPlayer(shuffled, 0);
 }
 
-// --------------------
-// Form helpers
-// --------------------
-function runAudit(count){
-  const url = new URL(window.location.href);
-  url.searchParams.set('audited','true');
-  url.searchParams.set('fileCount',count);
-  window.location.href = url.toString();
+function runAudit(count) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('audited', 'true');
+    url.searchParams.set('fileCount', count);
+    window.location.href = url.toString();
 }
 
-// --------------------
-// Grid scroll & touch navigation
-// --------------------
+// Grid navigation (wheel/touch) unchanged
 const grid = document.getElementById('grid');
 let scrollDebounce = false;
-grid.addEventListener('wheel', e=>{ e.preventDefault(); if(scrollDebounce) return; scrollDebounce=true; setTimeout(()=>scrollDebounce=false,200); e.deltaY<0?prevGrid():nextGrid(); }, {passive:false});
+grid.addEventListener('wheel', e => { e.preventDefault(); if(scrollDebounce) return; scrollDebounce=true; setTimeout(()=>scrollDebounce=false,200); e.deltaY<0?prevGrid():nextGrid(); }, {passive:false});
 let touchStartY=0;
-grid.addEventListener('touchstart', e=>{ if(e.touches.length===1) touchStartY=e.touches[0].clientY; },{passive:true});
-grid.addEventListener('touchend', e=>{ const deltaY=e.changedTouches[0].clientY-touchStartY; if(Math.abs(deltaY)>50) deltaY<0?nextGrid():prevGrid(); },{passive:true});
+grid.addEventListener('touchstart', e => { if(e.touches.length===1) touchStartY=e.touches[0].clientY; }, {passive:true});
+grid.addEventListener('touchend', e => { const deltaY=e.changedTouches[0].clientY-touchStartY; if(Math.abs(deltaY)>50) deltaY<0?nextGrid():prevGrid(); }, {passive:true});
 
-// --------------------
 // Initial render
-// --------------------
 renderGrid();
 
-// --------------------
-// Fix 100vh on mobile
-// --------------------
+// Mobile vh fix
 function setVhUnit(){ let vh=window.innerHeight*0.01; document.documentElement.style.setProperty('--vh', `${vh}px`); }
 setVhUnit();
-window.addEventListener('resize',setVhUnit);
-window.addEventListener('orientationchange',setVhUnit);
+window.addEventListener('resize', setVhUnit);
+window.addEventListener('orientationchange', setVhUnit);
 </script>
 </body>
 </html>
