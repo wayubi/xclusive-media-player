@@ -17,7 +17,7 @@ $selected_path_parts = $_GET['selected-path'] ?? [];
 if (!is_array($selected_path_parts)) {
     $selected_path_parts = [];
 }
-$selected_path_parts = array_values(array_filter($selected_path_parts, 'strlen')); // remove empty
+$selected_path_parts = array_values(array_filter($selected_path_parts, 'strlen'));
 
 $selected_path = implode('/', $selected_path_parts);
 
@@ -51,16 +51,11 @@ function getFiles(string $path): array {
 
     foreach ($iterator as $fileInfo) {
         if (!$fileInfo->isFile()) continue;
-
-        $file = $fileInfo->getPathname();
         $ext = strtolower($fileInfo->getExtension());
-
         if (in_array($ext, ['backup', 'original'])) continue;
-
-        $files[] = $file;
+        $files[] = $fileInfo->getPathname();
     }
 
-    // Sort newest first
     usort($files, fn($a, $b) => filemtime($b) <=> filemtime($a));
     return $files;
 }
@@ -68,13 +63,7 @@ function getFiles(string $path): array {
 function filesystemToWebPath(string $fsPath, string $rootFs, string $rootWeb): string {
     $fsPath = str_replace('\\', '/', realpath($fsPath));
     $rootFs = str_replace('\\', '/', $rootFs);
-
-    if (str_starts_with($fsPath, $rootFs)) {
-        $relative = substr($fsPath, strlen($rootFs));
-    } else {
-        $relative = $fsPath;
-    }
-
+    $relative = str_starts_with($fsPath, $rootFs) ? substr($fsPath, strlen($rootFs)) : $fsPath;
     return $rootWeb . '/' . ltrim($relative, '/');
 }
 
@@ -83,11 +72,8 @@ function filesystemToWebPath(string $fsPath, string $rootFs, string $rootWeb): s
 // =====================
 if ($delete_file && file_exists($delete_file)) {
     $trashDirectory = '/tmp/4cg-trash';
-    if (!is_dir($trashDirectory)) {
-        mkdir($trashDirectory, 0777, true);
-    }
-    $safeName = uniqid() . '_' . basename($delete_file);
-    rename($delete_file, $trashDirectory . '/' . $safeName);
+    if (!is_dir($trashDirectory)) mkdir($trashDirectory, 0777, true);
+    rename($delete_file, $trashDirectory . '/' . uniqid() . '_' . basename($delete_file));
     exit;
 }
 
@@ -98,13 +84,11 @@ $current_path = $root_directory_absolute . ($selected_path ? '/' . $selected_pat
 $current_path = realpath($current_path) ?: $root_directory_absolute;
 
 if (!str_starts_with($current_path, $root_directory_absolute)) {
-    // Security: prevent traversal outside root
     $current_path = $root_directory_absolute;
     $selected_path_parts = [];
     $selected_path = '';
 }
 
-// Audit file
 $auditFile = $current_path . '/.audited';
 $auditedText = is_file($auditFile) ? trim(file_get_contents($auditFile)) : '';
 
@@ -112,9 +96,8 @@ $auditedText = is_file($auditFile) ? trim(file_get_contents($auditFile)) : '';
 // FILE COLLECTION & WEB PATHS
 // =====================
 $allFilesRaw = getFiles($current_path);
-
 $webRoot = '/' . trim($root_directory, './');
-$allFiles = array_map(fn($file) => filesystemToWebPath($file, $root_directory_absolute, $webRoot), $allFilesRaw);
+$allFiles = array_map(fn($f) => filesystemToWebPath($f, $root_directory_absolute, $webRoot), $allFilesRaw);
 
 // =====================
 // AUDIO COVER GENERATION
@@ -124,7 +107,6 @@ $audioThumbsRaw = generateAudioCovers($allFilesRaw);
 
 $audioThumbs = [];
 $docRoot = realpath($_SERVER['DOCUMENT_ROOT'] ?? '');
-
 foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
     $audioWeb = filesystemToWebPath($audioFs, $root_directory_absolute, $webRoot);
     $thumbWeb = $docRoot ? '/' . ltrim(str_replace('\\', '/', str_replace($docRoot, '', realpath($thumbFs))), '/') : '';
@@ -142,10 +124,6 @@ if ($audited) {
     exit;
 }
 
-// =====================
-// BREADCRUMB PATHS
-// =====================
-$path_parts = $selected_path_parts;
 $subfolders = getSubfolders($current_path);
 
 ?>
@@ -157,18 +135,12 @@ $subfolders = getSubfolders($current_path);
 <title>Xclusive Media Player</title>
 <style>
 html, body { margin:0; padding:0; height:100%; overflow:hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#121212; color:#f0f0f0; }
-a { text-decoration:none; color:#1e90ff; }
-
 #form { padding:12px 20px; background:#1f1f1f; display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:10px; border-bottom:1px solid #333; }
 #options-form select, #options-form button { padding:6px 10px; border-radius:6px; border:none; background:#2c2c2c; color:#f0f0f0; font-size:14px; cursor:pointer; transition:0.2s; }
 #options-form select:hover, #options-form button:hover { background:#3a3a3a; }
 #file-count, #audit-text { font-weight:bold; margin:0 10px; }
-
 #folder-select-container { display: inline-flex; gap: 6px; align-items: center; }
-#folder-select-container select {
-    max-width: 180px; min-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-
+#folder-select-container select { max-width: 180px; min-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #grid { display:grid; grid-template-columns: repeat(<?php echo $selected_columns; ?>,1fr); grid-template-rows: repeat(<?php echo $selected_rows; ?>,1fr); gap:8px; padding:10px; height:calc(100% - 72px); }
 .video-container { position:relative; width:100%; height:100%; overflow:hidden; border-radius:8px; background:black; }
 .video-container video, .video-container img { width:100%; height:100%; object-fit:contain; display:block; border-radius:8px; transition: transform 0.2s, box-shadow 0.2s; }
@@ -177,7 +149,6 @@ a { text-decoration:none; color:#1e90ff; }
 .video-container:hover .overlay { opacity:1; pointer-events:auto; }
 .overlay button { background:#ff4d4f; border:none; border-radius:4px; color:#fff; font-size:10px; padding:2px 6px; cursor:pointer; margin-left:6px; }
 .overlay button:hover { background:#d9363e; }
-
 @media (max-width:768px){
   #form { flex-direction:row; justify-content:space-between; gap:6px; padding:6px 10px; }
   #form span[id="file-count"], #form select[name="columns"], #form select[name="rows"], #form button[id="refresh"], #form button[id="clear"], #form button[id="audit"], #form button[id="previous"], #form button[id="next"], #form span[id="audit-text"] { display:none; }
@@ -193,7 +164,7 @@ a { text-decoration:none; color:#1e90ff; }
   <div id="folder-select-container">
   <?php
   $parent = '';
-  foreach ($path_parts as $level => $part) {
+  foreach ($selected_path_parts as $part) {
       $folderPath = $root_directory_absolute . ($parent ? '/' . $parent : '');
       $subs = getSubfolders($folderPath);
       echo '<select name="selected-path[]" onchange="this.form.submit()">';
@@ -205,27 +176,24 @@ a { text-decoration:none; color:#1e90ff; }
       echo '</select>';
       $parent .= ($parent ? '/' : '') . $part;
   }
-
   if (!empty($subfolders)) {
       echo '<select name="selected-path[]" onchange="this.form.submit()">';
       echo '<option value="">[Select]</option>';
-      foreach ($subfolders as $f) {
-          echo "<option value=\"$f\">$f</option>";
-      }
+      foreach ($subfolders as $f) echo "<option value=\"$f\">$f</option>";
       echo '</select>';
   }
   ?>
   </div>
 
   <select name="columns" onchange="this.form.submit()">
-    <?php for ($c = 1; $c <= 6; $c++): $sel = ($c == $selected_columns) ? ' selected' : ''; ?>
-      <option value="<?= $c ?>"<?= $sel ?>><?= $c ?></option>
+    <?php for ($c = 1; $c <= 6; $c++): ?>
+      <option value="<?= $c ?>" <?= $c == $selected_columns ? 'selected' : '' ?>><?= $c ?></option>
     <?php endfor; ?>
   </select>
 
   <select name="rows" onchange="this.form.submit()">
-    <?php for ($r = 1; $r <= 6; $r++): $sel = ($r == $selected_rows) ? ' selected' : ''; ?>
-      <option value="<?= $r ?>"<?= $sel ?>><?= $r ?></option>
+    <?php for ($r = 1; $r <= 6; $r++): ?>
+      <option value="<?= $r ?>" <?= $r == $selected_rows ? 'selected' : '' ?>><?= $r ?></option>
     <?php endfor; ?>
   </select>
 
@@ -253,25 +221,24 @@ let muted = <?= $muted ? 'true' : 'false' ?>;
 const totalCells = <?= $total_cells ?>;
 let startIndex = 0;
 
-let lastFullscreenAudio = null, lastFullscreenTime = 0;
-let lastFullscreenVideo = null, lastFullscreenVideoTime = 0;
+let lastFullscreen = { file: null, time: 0 };
 let fullscreenMode = 'tile';
 
 const audioQueue = [];
 let activeAudioLoads = 0;
 const MAX_CONCURRENT_AUDIO = 36;
 
+const buttonStyle = 'font-size:20px;padding:6px 10px;border:none;border-radius:6px;background:rgba(0,0,0,0.6);color:white;cursor:pointer;pointer-events:auto;';
+const overlayStyle = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;gap:10px;z-index:10;opacity:0;transition:opacity 0.2s;pointer-events:none;';
+
 function processAudioQueue() {
     while (activeAudioLoads < MAX_CONCURRENT_AUDIO && audioQueue.length > 0) {
         const audio = audioQueue.shift();
         if (!audio?.dataset?.src) continue;
-
         activeAudioLoads++;
-        const src = audio.dataset.src;
+        audio.src = audio.dataset.src;
         delete audio.dataset.src;
-        audio.src = src;
         audio.load();
-
         const done = () => {
             activeAudioLoads = Math.max(0, activeAudioLoads - 1);
             processAudioQueue();
@@ -291,12 +258,10 @@ function renderGrid() {
     grid.querySelectorAll('video, audio').forEach(m => { m.pause(); m.src = ''; m.load(); });
     grid.innerHTML = '';
 
-    const endIndex = Math.min(startIndex + totalCells, allVideos.length);
-    const visible = allVideos.slice(startIndex, endIndex);
+    const visible = allVideos.slice(startIndex, Math.min(startIndex + totalCells, allVideos.length));
 
-    if (lastFullscreenAudio && !isFileVisible(lastFullscreenAudio)) {
-        lastFullscreenAudio = null;
-        lastFullscreenTime = 0;
+    if (lastFullscreen.file && !isFileVisible(lastFullscreen.file)) {
+        lastFullscreen = { file: null, time: 0 };
     }
 
     visible.forEach(file => {
@@ -304,52 +269,44 @@ function renderGrid() {
         container.className = 'video-container';
 
         const ext = file.split('.').pop().toLowerCase();
+        const isAudio = ['mp3','wav','ogg'].includes(ext);
+        const isVideo = ['mp4','webm','mkv'].includes(ext);
+        const isLastFs = lastFullscreen.file === file;
 
-        if (['mp4','webm','mkv'].includes(ext)) {
-            const video = document.createElement('video');
-            video.loop = true;
-            video.playsInline = true;
-            video.preload = 'none';
-            video.dataset.src = file;
+        let mediaEl;
 
-            const isLastFs = lastFullscreenVideo === file;
-            if (isLastFs) {
-                video.currentTime = lastFullscreenVideoTime;
-                video.muted = false;
-            } else {
-                const visibleVideos = visible.filter(f => ['mp4','webm','mkv'].includes(f.split('.').pop().toLowerCase()));
-                video.muted = muted || visibleVideos[0] !== file;
-            }
+        if (isVideo) {
+            mediaEl = document.createElement('video');
+            mediaEl.loop = true;
+            mediaEl.playsInline = true;
+            mediaEl.preload = 'none';
+            mediaEl.dataset.src = file;
 
-            const overlay = document.createElement('div');
-            overlay.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;gap:10px;z-index:10;opacity:0;transition:opacity 0.2s;pointer-events:none;';
+            const visibleVideos = visible.filter(f => ['mp4','webm','mkv'].includes(f.split('.').pop().toLowerCase()));
+            mediaEl.muted = muted || (!isLastFs && visibleVideos[0] !== file);
+            if (isLastFs) mediaEl.muted = false;
+        }
 
-            const fsBtn = document.createElement('button');
-            fsBtn.innerHTML = '⛶';
-            fsBtn.style.cssText = 'font-size:20px;padding:6px 10px;border:none;border-radius:6px;background:rgba(0,0,0,0.6);color:white;cursor:pointer;pointer-events:auto;';
-            fsBtn.onclick = e => { e.stopPropagation(); startFullscreenFrom(file, video.currentTime); };
-            overlay.appendChild(fsBtn);
+        else if (isAudio) {
+            container.style.cssText = 'position:relative;display:flex;flex-direction:column;justify-content:center;align-items:center;';
 
-            const unmuteBtn = document.createElement('button');
-            unmuteBtn.innerHTML = video.muted ? '🔇' : '🔊';
-            unmuteBtn.style.cssText = fsBtn.style.cssText;
-            unmuteBtn.onclick = e => {
-                e.stopPropagation();
-                document.querySelectorAll('#grid audio, #grid video').forEach(m => m !== video && (m.muted = true));
-                document.querySelectorAll('#grid .video-container button:nth-child(2)').forEach(b => b.innerHTML = '🔇');
-                video.muted = false;
-                video.play().catch(() => {});
-                lastFullscreenAudio = null;
-                lastFullscreenTime = 0;
-                unmuteBtn.innerHTML = '🔊';
-            };
-            overlay.appendChild(unmuteBtn);
+            mediaEl = document.createElement('audio');
+            mediaEl.controls = false;
+            mediaEl.preload = 'metadata';
+            mediaEl.loop = true;
+            mediaEl.style.width = '100%';
+            mediaEl.dataset.src = file;
 
-            container.appendChild(video);
-            container.appendChild(overlay);
+            const visibleAudios = visible.filter(f => ['mp3','wav','ogg'].includes(f.split('.').pop().toLowerCase()));
+            const shouldUnmute = isLastFs || (!lastFullscreen.file && !muted && visibleAudios[0] === file);
+            mediaEl.muted = !shouldUnmute;
 
-            container.addEventListener('mouseenter', () => overlay.style.opacity = '1');
-            container.addEventListener('mouseleave', () => overlay.style.opacity = '0');
+            const img = document.createElement('img');
+            img.style.cssText = 'width:100%;height:100%;object-fit:cover;cursor:pointer;border-radius:8px;';
+            img.dataset.src = audioThumbs[file] || 'cache/no-cover.jpg';
+            img.onclick = () => startFullscreenFrom(file, mediaEl.currentTime);
+            container.appendChild(img);
+            audioQueue.push(mediaEl);
         }
 
         else if (['jpg','jpeg','png','gif','webp'].includes(ext)) {
@@ -361,76 +318,51 @@ function renderGrid() {
             container.appendChild(img);
         }
 
-        else if (['mp3','wav','ogg'].includes(ext)) {
-            container.style.cssText = 'position:relative;display:flex;flex-direction:column;justify-content:center;align-items:center;';
+        else {
+            container.innerHTML = `<div style="color:red;padding:4px;">Unsupported: ${file}</div>`;
+            grid.appendChild(container);
+            const fileOverlay = document.createElement('div');
+            fileOverlay.className = 'overlay';
+            fileOverlay.innerHTML = `<span>${file}</span><button onclick="deleteGridFile('${file}')">Delete</button>`;
+            container.appendChild(fileOverlay);
+            return;
+        }
 
-            const audio = document.createElement('audio');
-            audio.controls = false; // disable native controls
-            audio.preload = 'metadata';
-            audio.loop = true;
-            audio.style.width = '100%';
-            audio.dataset.src = file;
+        if (isVideo || isAudio) {
+            container.appendChild(mediaEl);
 
-            const isLastFs = lastFullscreenAudio === file;
-            if (isLastFs) {
-                audio.muted = false;
-            } else if (!lastFullscreenAudio && !muted) {
-                const visibleAudios = visible.filter(f => ['mp3','wav','ogg'].includes(f.split('.').pop().toLowerCase()));
-                audio.muted = visibleAudios[0] !== file;
-            } else {
-                audio.muted = true;
-            }
-
-            // Thumbnail image
-            const img = document.createElement('img');
-            img.style.cssText = 'width:100%;height:100%;object-fit:cover;cursor:pointer;border-radius:8px;';
-            img.dataset.src = audioThumbs[file] || 'cache/no-cover.jpg';
-            img.onclick = () => startFullscreenFrom(file, audio.currentTime);
-            container.appendChild(img);
-            container.appendChild(audio);
-
-            // Overlay buttons
             const overlay = document.createElement('div');
-            overlay.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;gap:10px;opacity:0;pointer-events:none;transition:opacity 0.2s;z-index:10;';
+            overlay.style.cssText = overlayStyle;
 
             const fsBtn = document.createElement('button');
             fsBtn.innerHTML = '⛶';
-            fsBtn.style.cssText = 'font-size:20px;padding:6px 10px;border:none;border-radius:6px;background:rgba(0,0,0,0.6);color:white;cursor:pointer;pointer-events:auto;';
-            fsBtn.onclick = e => { e.stopPropagation(); startFullscreenFrom(file, audio.currentTime); };
+            fsBtn.style.cssText = buttonStyle;
+            fsBtn.onclick = e => { e.stopPropagation(); startFullscreenFrom(file, mediaEl.currentTime); };
             overlay.appendChild(fsBtn);
 
             const muteBtn = document.createElement('button');
-            muteBtn.innerHTML = audio.muted ? '🔇' : '🔊';
-            muteBtn.style.cssText = fsBtn.style.cssText;
+            muteBtn.innerHTML = mediaEl.muted ? '🔇' : '🔊';
+            muteBtn.style.cssText = buttonStyle;
             muteBtn.onclick = e => {
                 e.stopPropagation();
-                audio.muted = !audio.muted;
-                muteBtn.innerHTML = audio.muted ? '🔇' : '🔊';
-                if (!audio.muted) {
-                    document.querySelectorAll('#grid audio, #grid video').forEach(m => m !== audio && (m.muted = true));
-                    lastFullscreenAudio = null;
-                    lastFullscreenTime = 0;
-                    audio.play().catch(() => {});
-                }
+                document.querySelectorAll('#grid audio, #grid video').forEach(m => m !== mediaEl && (m.muted = true));
+                document.querySelectorAll('#grid .video-container button:nth-child(2)').forEach(b => b.innerHTML = '🔇');
+                mediaEl.muted = false;
+                muteBtn.innerHTML = '🔊';
+                lastFullscreen = { file: null, time: 0 };
+                mediaEl.play().catch(() => {});
             };
             overlay.appendChild(muteBtn);
-            container.appendChild(overlay);
 
+            container.appendChild(overlay);
             container.addEventListener('mouseenter', () => overlay.style.opacity = '1');
             container.addEventListener('mouseleave', () => overlay.style.opacity = '0');
 
-            if (isLastFs && lastFullscreenTime > 0) {
-                audio.addEventListener('loadedmetadata', () => {
-                    audio.currentTime = lastFullscreenTime;
+            if (isLastFs && lastFullscreen.time > 0) {
+                mediaEl.addEventListener('loadedmetadata', () => {
+                    mediaEl.currentTime = lastFullscreen.time;
                 }, { once: true });
             }
-
-            audioQueue.push(audio);
-            processAudioQueue();
-        }
-
-        else {
-            container.innerHTML = `<div style="color:red;padding:4px;">Unsupported: ${file}</div>`;
         }
 
         const fileOverlay = document.createElement('div');
@@ -441,40 +373,35 @@ function renderGrid() {
         grid.appendChild(container);
     });
 
+    processAudioQueue();
+
     const observer = new IntersectionObserver(entries => {
         entries.forEach(entry => {
             if (!entry.isIntersecting) return;
             const el = entry.target;
             if (el.dataset.src) {
-                if (el.tagName === 'AUDIO') {
-                    audioQueue.push(el);
-                    processAudioQueue();
-                } else {
-                    el.src = el.dataset.src;
-                    if (el.tagName === 'VIDEO') el.play().catch(() => {});
-                }
+                el.src = el.dataset.src;
                 delete el.dataset.src;
+                if (el.tagName === 'VIDEO') el.play().catch(() => {});
             }
             observer.unobserve(el);
         });
     }, { threshold: 0.01 });
 
     setTimeout(() => {
-        const audios = grid.querySelectorAll('audio');
-        if (lastFullscreenAudio) {
-            const audio = [...audios].find(a => a.src.endsWith(lastFullscreenAudio));
-            if (audio) {
-                audio.currentTime = lastFullscreenTime || 0;
-                audio.muted = false;
-                audio.play().catch(() => {});
+        if (lastFullscreen.file) {
+            const media = [...grid.querySelectorAll('audio, video')].find(m => m.src?.endsWith(lastFullscreen.file));
+            if (media) {
+                media.currentTime = lastFullscreen.time || 0;
+                media.muted = false;
+                media.play().catch(() => {});
                 return;
             }
         }
-        const toPlay = [...audios].find(a => !a.muted);
-        if (toPlay) toPlay.play().catch(() => {});
+        grid.querySelectorAll('audio, video').forEach(m => !m.muted && m.play().catch(() => {}));
     }, 100);
 
-    grid.querySelectorAll('video, audio, img[data-src]').forEach(el => observer.observe(el));
+    grid.querySelectorAll('video, img[data-src]').forEach(el => observer.observe(el));
     document.getElementById('file-count').innerText = `${startIndex + 1} / ${allVideos.length}`;
 }
 
@@ -499,16 +426,7 @@ function toggleMute() {
 function startFullscreenFrom(file, startTime = 0) {
     fullscreenMode = 'tile';
     document.querySelectorAll('#grid video, #grid audio').forEach(m => m.pause());
-
-    const ext = file.split('.').pop().toLowerCase();
-    if (['mp3','wav','ogg'].includes(ext)) {
-        lastFullscreenAudio = file;
-        lastFullscreenTime = startTime;
-    } else if (['mp4','webm','mkv'].includes(ext)) {
-        lastFullscreenVideo = file;
-        lastFullscreenVideoTime = startTime;
-    }
-
+    lastFullscreen = { file, time: startTime };
     startFullscreenPlayer(allVideos, allVideos.indexOf(file), startTime);
 }
 
@@ -521,34 +439,33 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
     document.body.appendChild(container);
 
     const ext = playlist[i].split('.').pop().toLowerCase();
+    const isAudio = ['mp3','wav','ogg'].includes(ext);
     let media, thumb;
 
-    if (['mp4','webm','mkv'].includes(ext)) {
+    if (!isAudio) {
         media = document.createElement('video');
         media.controls = true;
         media.loop = true;
         media.playsInline = true;
         media.muted = muted;
         media.style.cssText = 'width:100%;height:100%;object-fit:contain;';
-        media.src = playlist[i];
-        media.currentTime = startTime;
-        media.addEventListener('loadedmetadata', () => media.play().catch(() => {}), { once: true });
-        container.appendChild(media);
-    } else if (['mp3','wav','ogg'].includes(ext)) {
+    } else {
         media = document.createElement('audio');
         media.controls = true;
         media.autoplay = true;
         media.muted = muted;
         media.style.cssText = 'width:100%;height:40px;';
-        media.src = playlist[i];
-        media.currentTime = startTime;
 
         thumb = document.createElement('img');
         thumb.src = audioThumbs[playlist[i]] || 'cache/no-cover.jpg';
         thumb.style.cssText = 'width:100%;height:100%;object-fit:contain;';
         container.appendChild(thumb);
-        container.appendChild(media);
     }
+
+    media.src = playlist[i];
+    media.currentTime = startTime;
+    container.appendChild(media);
+    media.addEventListener('loadedmetadata', () => media.play().catch(() => {}), { once: true });
 
     function play(idx) {
         i = (idx + playlist.length) % playlist.length;
@@ -556,20 +473,12 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
         media.src = nextFile;
         media.play().catch(() => {});
         if (thumb) thumb.src = audioThumbs[nextFile] || 'cache/no-cover.jpg';
-        if (['mp3','wav','ogg'].includes(nextFile.split('.').pop().toLowerCase())) {
-            lastFullscreenAudio = nextFile;
-        }
+        if (isAudio) lastFullscreen.file = nextFile;
     }
 
     function close() {
-        const currentExt = playlist[i].split('.').pop().toLowerCase();
-        if (['mp3','wav','ogg'].includes(currentExt)) {
-            lastFullscreenTime = media.currentTime;
-        } else {
-            lastFullscreenVideoTime = media.currentTime;
-            lastFullscreenVideo = playlist[i];
-        }
-
+        lastFullscreen.time = media.currentTime;
+        if (!isAudio) lastFullscreen.file = playlist[i];
         startIndex = Math.floor(allVideos.indexOf(playlist[i]) / totalCells) * totalCells;
         renderGrid();
         container.remove();
@@ -579,7 +488,7 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
     media.ondblclick = close;
     if (thumb) thumb.ondblclick = close;
 
-    if (fullscreenMode === 'tile' && ['mp3','wav','ogg'].includes(ext)) {
+    if (fullscreenMode === 'tile' && isAudio) {
         media.loop = true;
     } else {
         media.loop = false;
