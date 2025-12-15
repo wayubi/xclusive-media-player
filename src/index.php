@@ -378,6 +378,7 @@ function renderGrid() {
             const audio = document.createElement('audio');
             audio.controls = true;
             audio.preload = 'metadata';
+            audio.loop = true;
             audio.style.width = '100%';
             audio.dataset.src = file;
 
