@@ -638,7 +638,27 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
     const ext = playlist[i].split('.').pop().toLowerCase();
     let media, thumb;
 
-    if (['mp3','wav','ogg'].includes(ext)) {
+    if (['mp4','webm','mkv'].includes(ext)) {
+        media = document.createElement('video');
+        media.controls = true;       // overlay buttons replace native controls
+        media.loop = true;            // optional, if you want looping in fullscreen
+        media.muted = muted;          // start muted if grid is muted
+        media.playsInline = true;
+        media.style.width = '100%';
+        media.style.height = '100%';
+        media.style.objectFit = 'contain';
+        media.src = playlist[i];      // <- important: set src immediately
+        media.currentTime = startTime;
+
+        // Only play after metadata is loaded
+        media.addEventListener('loadedmetadata', () => {
+            media.play().catch(() => {});
+        }, { once: true });
+
+        container.appendChild(media);
+    }
+
+    else if (['mp3','wav','ogg'].includes(ext)) {
         media = document.createElement('audio');
         media.controls = true;
         media.autoplay = true;
@@ -656,17 +676,19 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
 
         container.appendChild(thumb);
         container.appendChild(media);
-    } else {
-        media = document.createElement('video');
-        media.src = playlist[i];
-        media.autoplay = true;
-        media.muted = muted;
-        media.controls = true;
-        media.style.width = '100%';
-        media.style.height = '100%';
-        media.style.objectFit = 'contain';
-        media.currentTime = startTime;
-        container.appendChild(media);
+    }
+    
+    else {
+        // media = document.createElement('video');
+        // media.src = playlist[i];
+        // media.autoplay = true;
+        // media.muted = muted;
+        // media.controls = true;
+        // media.style.width = '100%';
+        // media.style.height = '100%';
+        // media.style.objectFit = 'contain';
+        // media.currentTime = startTime;
+        // container.appendChild(media);
     }
 
     function play(idx) {
