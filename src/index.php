@@ -141,7 +141,7 @@ foreach ($audioThumbsRaw as $audioFsPath => $thumbFsPath) {
 // =====================
 if ($audited) {
     file_put_contents($auditFile, date('Y-m-d H:i:s') . " / $fileCount" . PHP_EOL);
-    header("Location: index.php?selected-path=" . urlencode($selected_path));
+    header("Location: index.php?selected-path=" . urlencode($selected_path) . "&columns=$selected_columns&rows=$selected_rows");
     exit;
 }
 
@@ -187,7 +187,14 @@ a { text-decoration:none; color:#1e90ff; }
 @media (max-width:768px){
   #form { flex-direction:row; justify-content:space-between; gap:6px; padding:6px 10px; }
   #form span[id="file-count"], #form select[name="columns"], #form select[name="rows"], #form button[id="refresh"], #form button[id="clear"], #form button[id="audit"], #form button[id="previous"], #form button[id="next"], #form span[id="audit-text"] { display:none; }
-  #grid { grid-template-columns:1fr; grid-template-rows:1fr; height:calc(100% - 72px); gap:0; padding:0; }
+    #grid { 
+        display:grid; 
+        grid-template-columns: repeat(<?php echo $selected_columns; ?>,1fr); 
+        grid-template-rows: repeat(<?php echo $selected_rows; ?>,1fr); 
+        gap:8px; 
+        padding:10px; 
+        height:calc(100% - 72px); 
+    }
 }
 </style>
 </head>
@@ -227,6 +234,28 @@ a { text-decoration:none; color:#1e90ff; }
   }
   ?>
   </div>
+
+    <!-- Columns select -->
+    <!-- <label for="columns">Columns:</label> -->
+    <select name="columns" id="columns" onchange="this.form.submit()">
+    <?php
+    for ($c = 1; $c <= 6; $c++) {
+        $sel = ($c == $selected_columns) ? ' selected' : '';
+        echo "<option value=\"$c\"$sel>$c</option>";
+    }
+    ?>
+    </select>
+
+    <!-- Rows select -->
+    <!-- <label for="rows">Rows:</label> -->
+    <select name="rows" id="rows" onchange="this.form.submit()">
+    <?php
+    for ($r = 1; $r <= 6; $r++) {
+        $sel = ($r == $selected_rows) ? ' selected' : '';
+        echo "<option value=\"$r\"$sel>$r</option>";
+    }
+    ?>
+    </select>
 
   <input type="hidden" name="muted" value="<?php echo $muted ? 'true':'false'; ?>">
 
