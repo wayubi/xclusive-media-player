@@ -258,18 +258,16 @@ let startIndex = 0;
 function renderGrid() {
     const grid = document.getElementById('grid');
 
-    // Pause old videos & audios to free resources
+    // Pause old videos & audios
     const oldMedia = grid.querySelectorAll('video, audio');
-    oldMedia.forEach(m => {
-        m.pause();
-        m.src = '';
-        m.load();
-    });
+    oldMedia.forEach(m => { m.pause(); m.src=''; m.load(); });
 
     grid.innerHTML = '';
 
     const endIndex = Math.min(startIndex + totalCells, allVideos.length);
     const visible = allVideos.slice(startIndex, endIndex);
+
+    let firstAudioUnmuted = false;
 
     visible.forEach((file, i) => {
         const container = document.createElement('div');
@@ -277,22 +275,20 @@ function renderGrid() {
 
         const ext = file.split('.').pop().toLowerCase();
 
-        if (['mp4', 'webm', 'mkv'].includes(ext)) {
+        if (['mp4','webm','mkv'].includes(ext)) {
             const video = document.createElement('video');
             video.loop = true;
             video.muted = muted;
             video.playsInline = true;
-            video.preload = 'none'; // Don't preload until visible
+            video.preload = 'none';
             video.style.width = '100%';
             video.style.height = '100%';
             video.style.objectFit = 'contain';
             video.onclick = () => startFullscreenFrom(allVideos.indexOf(file));
-
-            // Lazy load using IntersectionObserver
             video.dataset.src = file;
             container.appendChild(video);
 
-        } else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
+        } else if (['jpg','jpeg','png','gif','webp'].includes(ext)) {
             const img = document.createElement('img');
             img.loading = 'lazy';
             img.decoding = 'async';
@@ -300,7 +296,7 @@ function renderGrid() {
             img.ondblclick = () => startFullscreenFrom(allVideos.indexOf(file));
             container.appendChild(img);
 
-        } else if (['mp3', 'wav', 'ogg'].includes(ext)) {
+        } else if (['mp3','wav','ogg'].includes(ext)) {
             container.style.display = 'flex';
             container.style.flexDirection = 'column';
             container.style.justifyContent = 'center';
@@ -317,19 +313,28 @@ function renderGrid() {
 
             const audio = document.createElement('audio');
             audio.controls = true;
-            audio.muted = muted;
             audio.preload = 'metadata';
             audio.style.width = '100%';
-            audio.onclick = () => startFullscreenFrom(allVideos.indexOf(file));
             audio.dataset.src = file;
-            container.appendChild(audio);
 
+            // Only first audio in view unmuted
+            if (!firstAudioUnmuted && !muted) {
+                audio.muted = false;
+                firstAudioUnmuted = true;
+            } else {
+                audio.muted = true;
+            }
+
+            audio.onclick = () => startFullscreenFrom(allVideos.indexOf(file));
             audio.addEventListener('volumechange', () => {
                 if (!audio.muted) {
                     const allMedia = document.querySelectorAll('#grid video, #grid audio');
                     allMedia.forEach(m => { if (m !== audio) m.muted = true; });
                 }
             });
+
+            container.appendChild(audio);
+
         } else {
             container.innerHTML = `<div style="color:red; padding:4px;">Unsupported: ${file}</div>`;
         }
@@ -343,21 +348,20 @@ function renderGrid() {
         grid.appendChild(container);
     });
 
-    // IntersectionObserver for lazy-loading videos and audio covers
+    // IntersectionObserver (lazy-load)
     const observer = new IntersectionObserver(entries => {
         entries.forEach(entry => {
             if(entry.isIntersecting){
                 const el = entry.target;
-
                 const tag = el.tagName.toLowerCase();
 
                 if ((tag === 'video' || tag === 'audio') && el.dataset.src) {
                     el.src = el.dataset.src;
-                    el.play?.().catch(() => {});
+                    el.play?.().catch(()=>{});
                     delete el.dataset.src;
                 }
 
-                if(el.tagName.toLowerCase() === 'img' && el.dataset.src){
+                if(tag === 'img' && el.dataset.src){
                     el.src = el.dataset.src;
                     delete el.dataset.src;
                 }
@@ -393,7 +397,34 @@ function deleteGridFile(file){
 // --------------------
 // Mute toggle
 // --------------------
-function toggleMute(){ muted = !muted; document.getElementById('mute-button').innerHTML = muted ? '🔇':'🔊'; renderGrid(); }
+function toggleMute() {
+    const grid = document.getElementById('grid');
+    const allMedia = grid.querySelectorAll('audio, video');
+
+    // If currently muted, unmute only the first audio
+    if (muted) {
+        muted = false;
+        document.getElementById('mute-button').innerHTML = '🔊';
+        let firstUnmuted = false;
+        allMedia.forEach(m => {
+            if (m.tagName.toLowerCase() === 'audio') {
+                if (!firstUnmuted) {
+                    m.muted = false; // unmute the first audio
+                    firstUnmuted = true;
+                } else {
+                    m.muted = true;  // keep the rest muted
+                }
+            } else {
+                m.muted = muted; // videos follow global muted
+            }
+        });
+    } else {
+        // If currently unmuted, mute everything
+        muted = true;
+        document.getElementById('mute-button').innerHTML = '🔇';
+        allMedia.forEach(m => m.muted = true);
+    }
+}
 
 // --------------------
 // Fullscreen player
