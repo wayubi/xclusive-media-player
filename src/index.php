@@ -284,6 +284,8 @@ let startIndex = 0;
 // Track fullscreen state
 let lastFullscreenAudio = null;
 let lastFullscreenTime = 0;
+let lastFullscreenVideo = null;
+let lastFullscreenVideoTime = 0;
 
 let fullscreenMode = 'tile';
 
@@ -364,14 +366,14 @@ function renderGrid() {
             video.style.objectFit = 'contain';
             container.appendChild(video);
 
-            // Decide sound: only one video unmuted, like audio logic
-            const isLastFullscreen = (lastFullscreenAudio === file);
-            if (isLastFullscreen) {
+            const isLastFullscreenVideo = (lastFullscreenVideo === file);
+            if (isLastFullscreenVideo) {
+                video.currentTime = lastFullscreenVideoTime;
                 video.muted = false;
-            } else if (lastFullscreenAudio === null && !muted) {
+                video.play().catch(() => {});
+            } else if (!muted) {
                 const visibleVideos = visible.filter(f => ['mp4','webm','mkv'].includes(f.split('.').pop().toLowerCase()));
-                const isFirstVideo = visibleVideos[0] === file;
-                video.muted = !isFirstVideo;
+                video.muted = visibleVideos[0] !== file; // only first visible unmuted
             } else {
                 video.muted = true;
             }
@@ -629,6 +631,9 @@ function startFullscreenFrom(file, startTime = 0) {
     if (['mp3','wav','ogg'].includes(ext)) {
         lastFullscreenAudio = file;
         lastFullscreenTime = startTime;
+    } else if (['mp4','webm','mkv'].includes(ext)) {
+        lastFullscreenVideo = file;
+        lastFullscreenVideoTime = startTime;
     }
 
     startFullscreenPlayer(allVideos, idx, startTime);
@@ -719,9 +724,15 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
     }
 
     function close() {
-        if (media.tagName.toLowerCase() === 'audio') {
+        const ext = playlist[i].split('.').pop().toLowerCase();
+
+        if (['mp3','wav','ogg'].includes(ext)) {
             lastFullscreenTime = media.currentTime;
+        } else if (['mp4','webm','mkv'].includes(ext)) {
+            lastFullscreenVideoTime = media.currentTime;
+            lastFullscreenVideo = playlist[i];
         }
+
         startIndex = Math.floor(allVideos.indexOf(playlist[i]) / totalCells) * totalCells;
         renderGrid();
         container.remove();
