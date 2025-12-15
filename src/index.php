@@ -362,10 +362,10 @@ function renderGrid() {
         }
 
         else if (['mp3','wav','ogg'].includes(ext)) {
-            container.style.cssText = 'display:flex;flex-direction:column;justify-content:center;align-items:center;';
+            container.style.cssText = 'position:relative;display:flex;flex-direction:column;justify-content:center;align-items:center;';
 
             const audio = document.createElement('audio');
-            audio.controls = true;
+            audio.controls = false; // disable native controls
             audio.preload = 'metadata';
             audio.loop = true;
             audio.style.width = '100%';
@@ -381,27 +381,52 @@ function renderGrid() {
                 audio.muted = true;
             }
 
+            // Thumbnail image
             const img = document.createElement('img');
-            img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+            img.style.cssText = 'width:100%;height:100%;object-fit:cover;cursor:pointer;border-radius:8px;';
             img.dataset.src = audioThumbs[file] || 'cache/no-cover.jpg';
             img.onclick = () => startFullscreenFrom(file, audio.currentTime);
             container.appendChild(img);
             container.appendChild(audio);
 
-            audio.addEventListener('volumechange', () => {
+            // Overlay buttons
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;gap:10px;opacity:0;pointer-events:none;transition:opacity 0.2s;z-index:10;';
+
+            const fsBtn = document.createElement('button');
+            fsBtn.innerHTML = '⛶';
+            fsBtn.style.cssText = 'font-size:20px;padding:6px 10px;border:none;border-radius:6px;background:rgba(0,0,0,0.6);color:white;cursor:pointer;pointer-events:auto;';
+            fsBtn.onclick = e => { e.stopPropagation(); startFullscreenFrom(file, audio.currentTime); };
+            overlay.appendChild(fsBtn);
+
+            const muteBtn = document.createElement('button');
+            muteBtn.innerHTML = audio.muted ? '🔇' : '🔊';
+            muteBtn.style.cssText = fsBtn.style.cssText;
+            muteBtn.onclick = e => {
+                e.stopPropagation();
+                audio.muted = !audio.muted;
+                muteBtn.innerHTML = audio.muted ? '🔇' : '🔊';
                 if (!audio.muted) {
                     document.querySelectorAll('#grid audio, #grid video').forEach(m => m !== audio && (m.muted = true));
                     lastFullscreenAudio = null;
                     lastFullscreenTime = 0;
                     audio.play().catch(() => {});
                 }
-            });
+            };
+            overlay.appendChild(muteBtn);
+            container.appendChild(overlay);
+
+            container.addEventListener('mouseenter', () => overlay.style.opacity = '1');
+            container.addEventListener('mouseleave', () => overlay.style.opacity = '0');
 
             if (isLastFs && lastFullscreenTime > 0) {
                 audio.addEventListener('loadedmetadata', () => {
                     audio.currentTime = lastFullscreenTime;
                 }, { once: true });
             }
+
+            audioQueue.push(audio);
+            processAudioQueue();
         }
 
         else {
