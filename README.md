@@ -23,7 +23,6 @@
    ```bash
    git clone https://github.com/wayubi/xclusive-media-player.git
    cd xclusive-media-player
-````
 
 2. Run with Docker Compose:
 
