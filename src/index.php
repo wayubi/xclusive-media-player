@@ -44,14 +44,35 @@ function getSubfolders($path) {
 
 function getFiles($path) {
     if (!is_dir($path)) return [];
-    $entries = glob($path . '/*');
+
     $files = [];
-    foreach ($entries as $entry) {
-        if (!is_file($entry)) continue;
-        if (str_ends_with($entry, '.backup') || str_ends_with($entry, '.original')) continue;
-        $files[] = $entry;
+
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator(
+            $path,
+            FilesystemIterator::SKIP_DOTS
+        ),
+        RecursiveIteratorIterator::SELF_FIRST
+    );
+
+    foreach ($iterator as $fileInfo) {
+        if (!$fileInfo->isFile()) continue;
+
+        $file = $fileInfo->getPathname();
+
+        if (
+            str_ends_with($file, '.backup') ||
+            str_ends_with($file, '.original')
+        ) {
+            continue;
+        }
+
+        $files[] = $file;
     }
-    usort($files, fn($a,$b) => filemtime($b) <=> filemtime($a));
+
+    // newest first
+    usort($files, fn($a, $b) => filemtime($b) <=> filemtime($a));
+
     return $files;
 }
 
@@ -146,7 +167,13 @@ a { text-decoration:none; color:#1e90ff; }
 #file-count, #audit-text { font-weight:bold; margin:0 10px; }
 
 #folder-select-container { display: inline-flex; gap: 6px; align-items: center; }
-#folder-select-container select { margin: 0; }
+#folder-select-container select {
+    max-width: 180px;          /* adjust to taste */
+    min-width: 120px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 
 #grid { display:grid; grid-template-columns: repeat(<?php echo $selected_columns; ?>,1fr); grid-template-rows: repeat(<?php echo $selected_rows; ?>,1fr); gap:8px; padding:10px; height:calc(100% - 72px); }
 .video-container { position:relative; width:100%; height:100%; overflow:hidden; border-radius:8px; background:black; }
@@ -265,7 +292,7 @@ function renderGrid() {
             video.dataset.src = file;
             container.appendChild(video);
 
-        } else if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) {
+        } else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
             const img = document.createElement('img');
             img.loading = 'lazy';
             img.decoding = 'async';
