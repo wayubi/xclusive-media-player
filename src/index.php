@@ -425,122 +425,155 @@ function toggleMute() {
         allMedia.forEach(m => m.muted = true);
     }
 }
+// --------------------
+// Grid double-click
+// --------------------
+function startFullscreenFrom(idx) {
+    const gridMedia = document.querySelectorAll('#grid video, #grid audio');
+    const mediaToFullscreen = gridMedia[idx];
+    if (!mediaToFullscreen) return;
+
+    // Save current time of clicked media
+    const currentTime = mediaToFullscreen.currentTime;
+
+    // Pause all grid media except the one clicked
+    gridMedia.forEach(m => {
+        if (m !== mediaToFullscreen) m.pause();
+    });
+
+    // Pause clicked media (we'll resume in fullscreen)
+    mediaToFullscreen.pause();
+
+    startFullscreenPlayer(allVideos, idx, currentTime);
+}
 
 // --------------------
 // Fullscreen player
 // --------------------
-function startFullscreenPlayer(playlist, index=0){
-  if(!playlist.length) return;
-  let i = index;
+function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
+    if (!playlist.length) return;
+    let i = index;
 
-  // --------------------
-  // Pause all grid media
-  // --------------------
-  document.querySelectorAll('#grid video, #grid audio').forEach(m => {
-    m.pause();
-  });
+    const container = document.createElement('div');
+    container.style.cssText =
+        'position:fixed;top:0;left:0;width:100%;height:100%;background:black;display:flex;align-items:center;justify-content:center;flex-direction:column;z-index:9999;';
+    document.body.appendChild(container);
 
-  const container = document.createElement('div');
-  container.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:black;display:flex;align-items:center;justify-content:center;flex-direction:column;z-index:9999;';
-  document.body.appendChild(container);
+    const ext = playlist[i].split('.').pop().toLowerCase();
+    let media, thumb;
 
-  const ext = playlist[i].split('.').pop().toLowerCase();
-  let media, thumb;
+    if (['mp3', 'wav', 'ogg'].includes(ext)) {
+        media = document.createElement('audio');
+        media.controls = true;
+        media.autoplay = true;
+        media.muted = muted;
+        media.style.width = '100%';
+        media.style.height = '40px';
+        media.src = playlist[i];
+        media.currentTime = startTime;
 
-  if(['mp3','wav','ogg'].includes(ext)){
-    // Audio track
-    media = document.createElement('audio');
-    media.controls = true;
-    media.autoplay = true;
-    media.muted = muted;
-    media.style.width = '100%';
-    media.style.height = '40px';
-    media.src = playlist[i];
+        thumb = document.createElement('img');
+        thumb.src = audioThumbs[playlist[i]] ?? 'cache/no-cover.jpg';
+        thumb.style.width = '100%';
+        thumb.style.height = '100%';
+        thumb.style.objectFit = 'contain';
 
-    // Thumbnail image
-    thumb = document.createElement('img');
-    thumb.src = audioThumbs[playlist[i]] ?? 'cache/no-cover.jpg';
-    thumb.style.width = '100%';
-    thumb.style.height = '100%';
-    thumb.style.objectFit = 'contain';
-
-    container.appendChild(thumb);
-    container.appendChild(media);
-  } else {
-    // Video track
-    media = document.createElement('video');
-    media.src = playlist[i];
-    media.autoplay = true;
-    media.muted = muted;
-    media.controls = true;
-    media.style.width = '100%';
-    media.style.height = '100%';
-    media.style.objectFit = 'contain';
-    container.appendChild(media);
-  }
-
-  function play(idx){
-      i = (idx + playlist.length) % playlist.length;
-      const nextExt = playlist[i].split('.').pop().toLowerCase();
-      if(['mp3','wav','ogg'].includes(nextExt)){
-          media.src = playlist[i];
-          media.play().catch(()=>{});
-          if(thumb) thumb.src = audioThumbs[playlist[i]] ?? 'cache/no-cover.jpg';
-      } else {
-          media.src = playlist[i];
-          media.play().catch(()=>{});
-      }
-  }
-
-  function close(){
-    startIndex = Math.floor(allVideos.indexOf(playlist[i]) / totalCells) * totalCells;
-    renderGrid();
-    container.remove();
-    document.removeEventListener('keydown', keyHandler);
-  }
-
-  media.ondblclick = close;
-  if(thumb) thumb.ondblclick = close;
-  media.onended = () => play(i + 1);
-
-  // Wheel scroll for prev/next
-  container.addEventListener('wheel', function(e){
-    e.preventDefault();
-    if(e.deltaY > 0) play(i + 1);
-    else play(i - 1);
-  }, {passive:false});
-
-  // Touch swipe
-  let fsTouchStartY = 0;
-  container.addEventListener('touchstart', e => { if(e.touches.length===1) fsTouchStartY=e.touches[0].clientY; }, {passive:true});
-  container.addEventListener('touchend', e => {
-    const deltaY = e.changedTouches[0].clientY - fsTouchStartY;
-    if(Math.abs(deltaY)>50){
-      deltaY < 0 ? play(i+1) : play(i-1);
+        container.appendChild(thumb);
+        container.appendChild(media);
+    } else {
+        media = document.createElement('video');
+        media.src = playlist[i];
+        media.autoplay = true;
+        media.muted = muted;
+        media.controls = true;
+        media.style.width = '100%';
+        media.style.height = '100%';
+        media.style.objectFit = 'contain';
+        media.currentTime = startTime;
+        container.appendChild(media);
     }
-  }, {passive:true});
 
-  const keyHandler = e => {
-    if(e.key==='Escape') close();
-    if(e.key==='Delete'){
-      if(!confirm('Delete this file?')) return;
-      const deleted = playlist[i];
-      playlist.splice(i,1);
-      const idxAll = allVideos.indexOf(deleted);
-      if(idxAll!==-1) allVideos.splice(idxAll,1);
-      fetch('index.php?delete=' + encodeURIComponent(deleted));
-      renderGrid();
-      if(playlist.length===0){ close(); return; }
-      play(i % playlist.length);
+    function play(idx) {
+        i = (idx + playlist.length) % playlist.length;
+        const nextExt = playlist[i].split('.').pop().toLowerCase();
+        if (['mp3', 'wav', 'ogg'].includes(nextExt)) {
+            media.src = playlist[i];
+            media.play().catch(() => {});
+            if (thumb) thumb.src = audioThumbs[playlist[i]] ?? 'cache/no-cover.jpg';
+        } else {
+            media.src = playlist[i];
+            media.play().catch(() => {});
+        }
     }
-  };
-  document.addEventListener('keydown', keyHandler);
+
+    function close() {
+        // Resume paused grid media (except any audio that is muted globally)
+        const gridMedia = document.querySelectorAll('#grid video, #grid audio');
+        gridMedia.forEach(m => {
+            if (!m.paused) return; // skip already playing
+            if (!m.muted) m.play().catch(()=>{}); // only unmuted audios resume
+        });
+
+        startIndex = Math.floor(allVideos.indexOf(playlist[i]) / totalCells) * totalCells;
+        renderGrid();
+        container.remove();
+        document.removeEventListener('keydown', keyHandler);
+    }
+
+    media.ondblclick = close;
+    if (thumb) thumb.ondblclick = close;
+    media.onended = () => play(i + 1);
+
+    // Wheel scroll for prev/next
+    container.addEventListener(
+        'wheel',
+        function (e) {
+            e.preventDefault();
+            if (e.deltaY > 0) play(i + 1);
+            else play(i - 1);
+        },
+        { passive: false }
+    );
+
+    // Touch swipe
+    let fsTouchStartY = 0;
+    container.addEventListener(
+        'touchstart',
+        (e) => {
+            if (e.touches.length === 1) fsTouchStartY = e.touches[0].clientY;
+        },
+        { passive: true }
+    );
+    container.addEventListener(
+        'touchend',
+        (e) => {
+            const deltaY = e.changedTouches[0].clientY - fsTouchStartY;
+            if (Math.abs(deltaY) > 50) {
+                deltaY < 0 ? play(i + 1) : play(i - 1);
+            }
+        },
+        { passive: true }
+    );
+
+    const keyHandler = (e) => {
+        if (e.key === 'Escape') close();
+        if (e.key === 'Delete') {
+            if (!confirm('Delete this file?')) return;
+            const deleted = playlist[i];
+            playlist.splice(i, 1);
+            const idxAll = allVideos.indexOf(deleted);
+            if (idxAll !== -1) allVideos.splice(idxAll, 1);
+            fetch('index.php?delete=' + encodeURIComponent(deleted));
+            renderGrid();
+            if (playlist.length === 0) {
+                close();
+                return;
+            }
+            play(i % playlist.length);
+        }
+    };
+    document.addEventListener('keydown', keyHandler);
 }
-
-// --------------------
-// Grid double-click
-// --------------------
-function startFullscreenFrom(idx){ startFullscreenPlayer(allVideos, idx); }
 
 // --------------------
 // Play all / shuffle
