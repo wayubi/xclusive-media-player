@@ -288,18 +288,33 @@ let lastFullscreenTime = 0;
 // Audio loading queue to avoid browser concurrency stalls
 let audioQueue = [];
 let activeAudioLoads = 0;
-const MAX_CONCURRENT_AUDIO = 8;  // Safe for Firefox
+const MAX_CONCURRENT_AUDIO = 36;  // Safe for Firefox
 
 function processAudioQueue() {
     while (activeAudioLoads < MAX_CONCURRENT_AUDIO && audioQueue.length > 0) {
         const audio = audioQueue.shift();
+
+        if (!audio?.dataset?.src) continue;
+
         activeAudioLoads++;
-        audio.src = audio.dataset.src;
+
+        const src = audio.dataset.src;
         delete audio.dataset.src;
-        audio.play().catch(() => {});
-        // Decrease count when loaded or errored
-        audio.addEventListener('canplaythrough', () => activeAudioLoads--, { once: true });
-        audio.addEventListener('error', () => activeAudioLoads--, { once: true });
+
+        audio.src = src;
+
+        // 🔥 THIS IS THE FIX
+        audio.load();
+
+        // audio.play().catch(() => {});
+
+        const done = () => {
+            activeAudioLoads = Math.max(0, activeAudioLoads - 1);
+            processAudioQueue();
+        };
+
+        audio.addEventListener('loadedmetadata', done, { once: true });
+        audio.addEventListener('error', done, { once: true });
     }
 }
 
@@ -391,11 +406,17 @@ function renderGrid() {
             // Manual unmute → take control
             audio.addEventListener('volumechange', () => {
                 if (!audio.muted) {
+                    // Mute all other audios
                     document.querySelectorAll('#grid audio, #grid video').forEach(m => {
                         if (m !== audio) m.muted = true;
                     });
+
+                    // Clear fullscreen tracking
                     lastFullscreenAudio = null;
                     lastFullscreenTime = 0;
+
+                    // Play this audio immediately
+                    audio.play().catch(() => {});
                 }
             });
 
@@ -403,7 +424,7 @@ function renderGrid() {
                 if (isLastFullscreen && lastFullscreenTime > 0) {
                     audio.currentTime = lastFullscreenTime;
                 }
-                audio.play().catch(() => {});
+                // audio.play().catch(() => {});
             };
 
             audio.dataset.setupPending = isLastFullscreen ? 'true' : 'false';
@@ -429,7 +450,7 @@ function renderGrid() {
                 const tag = el.tagName.toLowerCase();
 
                 if (el.dataset.src) {
-                    if (tag === 'audio') {
+                    if (tag === 'audio' && el.dataset.src) {
                         audioQueue.push(el);
                         processAudioQueue();
                     } else if (tag === 'video') {
@@ -454,6 +475,29 @@ function renderGrid() {
             }
         });
     }, { root: null, threshold: 0.01 });
+
+    // Auto-play logic for grid
+    setTimeout(() => {
+        const audios = Array.from(grid.querySelectorAll('audio'));
+        let audioToPlay = null;
+
+        // 1️⃣ If returning from fullscreen, resume that audio
+        if (lastFullscreenAudio) {
+            audioToPlay = audios.find(a => a.src.endsWith(lastFullscreenAudio));
+            if (audioToPlay) {
+                audioToPlay.currentTime = lastFullscreenTime || 0;
+                audioToPlay.muted = false;
+                audioToPlay.play().catch(() => {});
+                return;
+            }
+        }
+
+        // 2️⃣ Otherwise, play first unmuted audio in grid
+        audioToPlay = audios.find(a => !a.muted);
+        if (audioToPlay) {
+            audioToPlay.play().catch(() => {});
+        }
+    }, 100); // small delay ensures IntersectionObserver & load queue processed
 
     grid.querySelectorAll('video, audio, img[data-src]').forEach(el => observer.observe(el));
 
