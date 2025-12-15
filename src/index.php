@@ -285,6 +285,24 @@ let startIndex = 0;
 let lastFullscreenAudio = null;
 let lastFullscreenTime = 0;
 
+// Audio loading queue to avoid browser concurrency stalls
+let audioQueue = [];
+let activeAudioLoads = 0;
+const MAX_CONCURRENT_AUDIO = 8;  // Safe for Firefox
+
+function processAudioQueue() {
+    while (activeAudioLoads < MAX_CONCURRENT_AUDIO && audioQueue.length > 0) {
+        const audio = audioQueue.shift();
+        activeAudioLoads++;
+        audio.src = audio.dataset.src;
+        delete audio.dataset.src;
+        audio.play().catch(() => {});
+        // Decrease count when loaded or errored
+        audio.addEventListener('canplaythrough', () => activeAudioLoads--, { once: true });
+        audio.addEventListener('error', () => activeAudioLoads--, { once: true });
+    }
+}
+
 // Helper
 function isFileVisible(file) {
     const endIndex = Math.min(startIndex + totalCells, allVideos.length);
@@ -410,35 +428,32 @@ function renderGrid() {
                 const el = entry.target;
                 const tag = el.tagName.toLowerCase();
 
-                if ((tag === 'video' || tag === 'audio') && el.dataset.src) {
-                    el.src = el.dataset.src;
-                    delete el.dataset.src;
-
-                    if (tag === 'video') {
-                        // Videos: play immediately
+                if (el.dataset.src) {
+                    if (tag === 'audio') {
+                        audioQueue.push(el);
+                        processAudioQueue();
+                    } else if (tag === 'video') {
+                        el.src = el.dataset.src;
                         el.play().catch(() => {});
+                    } else if (tag === 'img') {
+                        el.src = el.dataset.src;
                     }
-                    // Audios: play is handled in loadedmetadata listener (setupAfterLoad)
-
-                    // Only restore time for returning fullscreen audio
-                    if (tag === 'audio' && el.dataset.setupPending === 'true') {
-                        el.addEventListener('canplay', () => {
-                            if (lastFullscreenAudio === el.src && lastFullscreenTime > 0) {
-                                el.currentTime = lastFullscreenTime;
-                            }
-                        }, { once: true });
-                    }
+                    delete el.dataset.src;
                 }
 
-                if (tag === 'img' && el.dataset.src) {
-                    el.src = el.dataset.src;
-                    delete el.dataset.src;
+                // Restore time for returning fullscreen audio
+                if (tag === 'audio' && el.dataset.setupPending === 'true') {
+                    el.addEventListener('canplay', () => {
+                        if (lastFullscreenAudio === el.src && lastFullscreenTime > 0) {
+                            el.currentTime = lastFullscreenTime;
+                        }
+                    }, { once: true });
                 }
 
                 observer.unobserve(el);
             }
         });
-    }, { root: grid, threshold: 0.01 });
+    }, { root: null, threshold: 0.01 });
 
     grid.querySelectorAll('video, audio, img[data-src]').forEach(el => observer.observe(el));
 
