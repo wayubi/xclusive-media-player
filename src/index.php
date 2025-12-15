@@ -397,7 +397,89 @@ function toggleMute(){ muted = !muted; document.getElementById('mute-button').in
 // --------------------
 // Fullscreen player
 // --------------------
-function startFullscreenPlayer(playlist, index=0){ /* keep your fullscreen logic as-is */ }
+function startFullscreenPlayer(playlist, index=0){
+  if(!playlist.length) return;
+  let i = index;
+
+  const container = document.createElement('div');
+  container.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:black;display:flex;align-items:center;justify-content:center;z-index:9999;';
+  document.body.appendChild(container);
+
+  const ext = playlist[i].split('.').pop().toLowerCase();
+  const media = ['mp3','wav','ogg'].includes(ext)
+      ? document.createElement('audio')
+      : document.createElement('video');
+  media.src = playlist[i];
+  media.autoplay = true;
+  media.muted = muted;
+  media.controls = true;
+  media.style.width = '100%';
+  media.style.height = '100%';
+  media.style.objectFit = 'contain';
+  container.appendChild(media);
+
+  function play(idx){
+      i = (idx + playlist.length) % playlist.length;
+      media.src = playlist[i];
+      media.play().catch(()=>{});
+  }
+
+  function close(){
+    // Sync grid page with current video
+    startIndex = Math.floor(allVideos.indexOf(playlist[i]) / totalCells) * totalCells;
+    renderGrid();
+
+    container.remove();
+    document.removeEventListener('keydown', keyHandler);
+  }
+
+  media.ondblclick = close;
+  media.onended = () => play(i + 1);
+
+  // --- Wheel scroll for prev/next (fullscreen) ---
+  container.addEventListener('wheel', function(e){
+    e.preventDefault(); // prevent page scrolling
+    if(e.deltaY > 0) play(i + 1); // scroll down → next
+    else play(i - 1); // scroll up → previous
+  }, {passive:false});
+
+  // --- Touch swipe for fullscreen ---
+  let fsTouchStartY = 0;
+  container.addEventListener('touchstart', function(e){
+      if(e.touches.length === 1) fsTouchStartY = e.touches[0].clientY;
+  }, {passive:true});
+
+  container.addEventListener('touchend', function(e){
+      const fsTouchEndY = e.changedTouches[0].clientY;
+      const deltaY = fsTouchEndY - fsTouchStartY;
+
+      if(Math.abs(deltaY) > 50){ // minimum swipe distance
+          if(deltaY < 0){
+              play(i + 1); // swipe up → next video
+          } else {
+              play(i - 1); // swipe down → previous video
+          }
+      }
+  }, {passive:true});
+
+  const keyHandler = e => {
+    if(e.key === 'Escape') close();
+    if(e.key === 'Delete') {
+      let confirmDelete = confirm('Delete this file?');
+      if(!confirmDelete) return;
+
+      const deleted = playlist[i];
+      playlist.splice(i,1);
+      const idxAll = allVideos.indexOf(deleted);
+      if(idxAll !== -1) allVideos.splice(idxAll,1);
+      fetch('index.php?delete=' + encodeURIComponent(deleted));
+      renderGrid();
+      if(playlist.length === 0){ close(); return; }
+      play(i % playlist.length);
+    }
+  };
+  document.addEventListener('keydown', keyHandler);
+}
 
 // --------------------
 // Grid double-click
