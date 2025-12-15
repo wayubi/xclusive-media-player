@@ -302,19 +302,19 @@ function renderGrid() {
             container.style.alignItems = 'center';
             container.style.height = '100%';
 
-            const img = document.createElement('img');
-            img.style.width = '100%';
-            img.style.height = '100%';
-            img.style.objectFit = 'contain';
-            img.dataset.src = audioThumbs[file] ?? 'cache/no-cover.jpg';
-            img.ondblclick = () => startFullscreenFrom(file); // <-- pass file
-            container.appendChild(img);
-
             const audio = document.createElement('audio');
             audio.controls = true;
             audio.preload = 'metadata';
             audio.style.width = '100%';
             audio.dataset.src = file;
+
+            const img = document.createElement('img');
+            img.style.width = '100%';
+            img.style.height = '100%';
+            img.style.objectFit = 'contain';
+            img.dataset.src = audioThumbs[file] ?? 'cache/no-cover.jpg';
+            img.onclick = () => startFullscreenFrom(file, audio.currentTime);
+            container.appendChild(img);
 
             // Only first audio in view unmuted
             if (!firstAudioUnmuted && !muted) {
@@ -323,14 +323,13 @@ function renderGrid() {
             } else {
                 audio.muted = true;
             }
-            audio.onclick = () => startFullscreenFrom(file); // <-- pass file
+
             audio.addEventListener('volumechange', () => {
                 if (!audio.muted) {
                     const allMedia = document.querySelectorAll('#grid video, #grid audio');
                     allMedia.forEach(m => { if (m !== audio) m.muted = true; });
                 }
             });
-
             container.appendChild(audio);
 
         } else {
@@ -426,7 +425,7 @@ function toggleMute() {
 // --------------------
 // Grid double-click
 // --------------------
-function startFullscreenFrom(file) {
+function startFullscreenFrom(file, startTime = 0) {
     // Pause all grid media
     const gridMedia = document.querySelectorAll('#grid video, #grid audio');
     gridMedia.forEach(m => m.pause());
@@ -434,7 +433,7 @@ function startFullscreenFrom(file) {
     const idx = allVideos.indexOf(file);
     if (idx === -1) return;
 
-    startFullscreenPlayer(allVideos, idx);
+    startFullscreenPlayer(allVideos, idx, startTime); // pass startTime
 }
 
 // --------------------
