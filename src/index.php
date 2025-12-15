@@ -4,10 +4,7 @@
 // =====================
 $root_directory = './volumes';
 $root_directory_absolute = realpath($root_directory);
-
-if (!$root_directory_absolute) {
-    die('Root directory not found');
-}
+if (!$root_directory_absolute) die('Root directory not found');
 
 $is_mobile = stripos($_SERVER['HTTP_USER_AGENT'] ?? '', 'Mobile') !== false
           || stripos($_SERVER['HTTP_USER_AGENT'] ?? '', 'Android') !== false;
@@ -15,7 +12,6 @@ $is_mobile = stripos($_SERVER['HTTP_USER_AGENT'] ?? '', 'Mobile') !== false
 // GET parameters
 $selected_path_parts = array_values(array_filter($_GET['selected-path'] ?? [], 'strlen'));
 $selected_path = implode('/', $selected_path_parts);
-
 $selected_columns = $is_mobile ? 1 : max(1, min(6, (int)($_GET['columns'] ?? 3)));
 $selected_rows    = $is_mobile ? 1 : max(1, min(6, (int)($_GET['rows'] ?? 2)));
 $total_cells = $selected_columns * $selected_rows;
@@ -26,125 +22,102 @@ $fileCount = (int)($_GET['fileCount'] ?? 0);
 $delete_file = !empty($_GET['delete']) ? rawurldecode($_GET['delete']) : null;
 
 // =====================
-// HELPER FUNCTIONS
+// HELPERS
 // =====================
 function getSubfolders(string $path): array {
-    if (!is_dir($path)) return [];
-    $dirs = array_filter(scandir($path), fn($d) => $d !== '.' && $d !== '..' && is_dir("$path/$d"));
-    sort($dirs, SORT_STRING);
-    return array_values($dirs);
+    return is_dir($path) 
+        ? array_values(array_filter(scandir($path), fn($d) => $d !== '.' && $d !== '..' && is_dir("$path/$d")))
+        : [];
 }
 
 function getFiles(string $path): array {
     if (!is_dir($path)) return [];
-
     $files = [];
-    $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::LEAVES_ONLY
-    );
-
-    foreach ($iterator as $fileInfo) {
-        if (!$fileInfo->isFile()) continue;
-        $ext = strtolower($fileInfo->getExtension());
+    $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS));
+    foreach ($it as $f) {
+        if (!$f->isFile()) continue;
+        $ext = strtolower($f->getExtension());
         if (in_array($ext, ['backup', 'original'])) continue;
-        $files[] = $fileInfo->getPathname();
+        $files[] = $f->getPathname();
     }
-
-    usort($files, fn($a, $b) => filemtime($b) <=> filemtime($a));
+    usort($files, fn($a,$b) => filemtime($b) <=> filemtime($a));
     return $files;
 }
 
 function filesystemToWebPath(string $fsPath, string $rootFs, string $rootWeb): string {
-    $fsPath = str_replace('\\', '/', realpath($fsPath));
-    $rootFs = str_replace('\\', '/', $rootFs);
-    $relative = str_starts_with($fsPath, $rootFs) ? substr($fsPath, strlen($rootFs)) : $fsPath;
-    return $rootWeb . '/' . ltrim($relative, '/');
+    $fsPath = str_replace('\\','/',realpath($fsPath));
+    $rootFs = str_replace('\\','/',realpath($rootFs));
+    $relative = str_starts_with($fsPath,$rootFs) ? substr($fsPath,strlen($rootFs)) : $fsPath;
+    return $rootWeb.'/'.ltrim($relative,'/');
 }
 
 function handleFileDelete(?string $delete_file): void {
-    if ($delete_file && file_exists($delete_file)) {
-        $trashDirectory = '/tmp/4cg-trash';
-        if (!is_dir($trashDirectory)) mkdir($trashDirectory, 0777, true);
-        rename($delete_file, $trashDirectory . '/' . uniqid() . '_' . basename($delete_file));
-        exit;
-    }
+    if (!$delete_file || !file_exists($delete_file)) return;
+    $trash = '/tmp/4cg-trash';
+    if (!is_dir($trash)) mkdir($trash,0777,true);
+    rename($delete_file,$trash.'/'.uniqid().'_'.basename($delete_file));
+    exit;
 }
 
 function getCurrentPath(string $root, string $selected_path): string {
-    $path = $root . ($selected_path ? '/' . $selected_path : '');
-    $real = realpath($path) ?: $root;
-    return str_starts_with($real, $root) ? $real : $root;
+    $real = realpath($root.($selected_path ? '/'.$selected_path : '')) ?: $root;
+    return str_starts_with($real,$root) ? $real : $root;
 }
 
 function renderFolderSelects(array $selected_parts, string $root_abs): void {
     $parent = '';
     foreach ($selected_parts as $part) {
-        $folderPath = $root_abs . ($parent ? '/' . $parent : '');
+        $folderPath = $root_abs.($parent ? '/'.$parent : '');
         $subs = getSubfolders($folderPath);
         echo '<select name="selected-path[]" onchange="this.form.submit()">';
         echo '<option value="">[Select]</option>';
-        foreach ($subs as $f) {
-            $selected = ($f === $part) ? ' selected' : '';
-            echo "<option value=\"$f\"$selected>$f</option>";
-        }
+        foreach ($subs as $f) echo "<option value=\"$f\"".($f==$part?' selected':'').">$f</option>";
         echo '</select>';
-        $parent .= ($parent ? '/' : '') . $part;
+        $parent .= ($parent ? '/' : '').$part;
     }
-
-    $currentSubfolders = getSubfolders($root_abs . ($parent ? '/' . $parent : ''));
-    if (!empty($currentSubfolders)) {
-        echo '<select name="selected-path[]" onchange="this.form.submit()">';
-        echo '<option value="">[Select]</option>';
-        foreach ($currentSubfolders as $f) {
-            echo "<option value=\"$f\">$f</option>";
-        }
-        echo '</select>';
-    }
+    $subs = getSubfolders($root_abs.($parent ? '/'.$parent : ''));
+    if (!$subs) return;
+    echo '<select name="selected-path[]" onchange="this.form.submit()"><option value="">[Select]</option>';
+    foreach ($subs as $f) echo "<option value=\"$f\">$f</option>";
+    echo '</select>';
 }
 
 // =====================
-// MAIN LOGIC
+// MAIN
 // =====================
 handleFileDelete($delete_file);
 
 $current_path = getCurrentPath($root_directory_absolute, $selected_path);
-
-// Security reset if path escaped root
-if (!str_starts_with($current_path, $root_directory_absolute)) {
+if (!str_starts_with($current_path,$root_directory_absolute)) {
     $current_path = $root_directory_absolute;
     $selected_path_parts = [];
     $selected_path = '';
 }
 
-$auditFile = $current_path . '/.audited';
+$auditFile = $current_path.'/.audited';
 $auditedText = is_file($auditFile) ? trim(file_get_contents($auditFile)) : '';
 
 $allFilesRaw = getFiles($current_path);
-$webRoot = '/' . trim($root_directory, './');
-$allFiles = array_map(fn($f) => filesystemToWebPath($f, $root_directory_absolute, $webRoot), $allFilesRaw);
+$webRoot = '/'.trim($root_directory,'./');
+$allFiles = array_map(fn($f)=>filesystemToWebPath($f,$root_directory_absolute,$webRoot),$allFilesRaw);
 
-require_once __DIR__ . '/lib/audioCovers.php';
+require_once __DIR__.'/lib/audioCovers.php';
 $audioThumbsRaw = generateAudioCovers($allFilesRaw);
 
 $audioThumbs = [];
 $docRoot = realpath($_SERVER['DOCUMENT_ROOT'] ?? '');
-foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
-    $audioWeb = filesystemToWebPath($audioFs, $root_directory_absolute, $webRoot);
-    $thumbWeb = $docRoot
-        ? '/' . ltrim(str_replace('\\', '/', str_replace($docRoot, '', realpath($thumbFs))), '/')
-        : '';
+foreach ($audioThumbsRaw as $audioFs=>$thumbFs) {
+    $audioWeb = filesystemToWebPath($audioFs,$root_directory_absolute,$webRoot);
+    $thumbWeb = $docRoot ? '/'.ltrim(str_replace('\\','/',str_replace($docRoot,'',realpath($thumbFs))),'/') : '';
     $audioThumbs[$audioWeb] = $thumbWeb ?: 'cache/no-cover.jpg';
 }
 
 if ($audited) {
-    file_put_contents($auditFile, date('Y-m-d H:i:s') . " / $fileCount" . PHP_EOL);
-    $redirect = 'index.php?selected-path=' . implode('&selected-path=', array_map('urlencode', $selected_path_parts))
-              . "&columns=$selected_columns&rows=$selected_rows";
-    header("Location: $redirect");
-    exit;
+    file_put_contents($auditFile,date('Y-m-d H:i:s')." / $fileCount".PHP_EOL);
+    $redirect = 'index.php?selected-path='.implode('&selected-path=',array_map('urlencode',$selected_path_parts))
+              ."&columns=$selected_columns&rows=$selected_rows";
+    header("Location: $redirect"); exit;
 }
-
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -230,17 +203,14 @@ const buttonStyle = 'font-size:20px;padding:6px 10px;border:none;border-radius:6
 const centralOverlayStyle = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;gap:10px;z-index:10;opacity:0;transition:opacity 0.2s;pointer-events:none;';
 
 function processAudioQueue() {
-    while (activeAudioLoads < MAX_CONCURRENT_AUDIO && audioQueue.length > 0) {
+    while (activeAudioLoads < MAX_CONCURRENT_AUDIO && audioQueue.length) {
         const audio = audioQueue.shift();
         if (!audio?.dataset?.src) continue;
         activeAudioLoads++;
         audio.src = audio.dataset.src;
         delete audio.dataset.src;
         audio.load();
-        const done = () => {
-            activeAudioLoads = Math.max(0, activeAudioLoads - 1);
-            processAudioQueue();
-        };
+        const done = () => { activeAudioLoads = Math.max(0, activeAudioLoads - 1); processAudioQueue(); };
         audio.addEventListener('loadedmetadata', done, { once: true });
         audio.addEventListener('error', done, { once: true });
     }
@@ -290,13 +260,11 @@ function addCentralOverlay(container, mediaEl, file) {
 function createMediaContainer(file) {
     const container = document.createElement('div');
     container.className = 'video-container';
-
     const ext = file.split('.').pop().toLowerCase();
     const isAudio = ['mp3','wav','ogg'].includes(ext);
     const isVideo = ['mp4','webm','mkv'].includes(ext);
     const isImage = ['jpg','jpeg','png','gif','webp'].includes(ext);
     const isLastFs = lastFullscreen.file === file;
-
     let mediaEl = null;
 
     if (isVideo) {
@@ -316,7 +284,6 @@ function createMediaContainer(file) {
     }
     else if (isAudio) {
         container.style.cssText = 'position:relative;display:flex;flex-direction:column;justify-content:center;align-items:center;';
-
         mediaEl = document.createElement('audio');
         mediaEl.controls = false;
         mediaEl.preload = 'metadata';
@@ -353,9 +320,7 @@ function createMediaContainer(file) {
     addFileInfoOverlay(container, file);
 
     if ((isVideo || isAudio) && isLastFs && lastFullscreen.time > 0) {
-        mediaEl.addEventListener('loadedmetadata', () => {
-            mediaEl.currentTime = lastFullscreen.time;
-        }, { once: true });
+        mediaEl.addEventListener('loadedmetadata', () => { mediaEl.currentTime = lastFullscreen.time; }, { once: true });
     }
 
     return container;
@@ -367,11 +332,7 @@ function renderGrid() {
     grid.innerHTML = '';
 
     const visible = allVideos.slice(startIndex, Math.min(startIndex + totalCells, allVideos.length));
-
-    if (lastFullscreen.file && !isFileVisible(lastFullscreen.file)) {
-        lastFullscreen = { file: null, time: 0 };
-    }
-
+    if (lastFullscreen.file && !isFileVisible(lastFullscreen.file)) lastFullscreen = { file:null, time:0 };
     visible.forEach(file => grid.appendChild(createMediaContainer(file)));
 
     processAudioQueue();
@@ -387,21 +348,17 @@ function renderGrid() {
         });
     }, { threshold: 0.01 });
 
+    grid.querySelectorAll('video, img[data-src]').forEach(el => observer.observe(el));
+
     setTimeout(() => {
         if (lastFullscreen.file) {
             const media = [...grid.querySelectorAll('audio, video')].find(m => m.src?.endsWith(lastFullscreen.file));
-            if (media) {
-                media.currentTime = lastFullscreen.time || 0;
-                media.muted = false;
-                media.play().catch(() => {});
-                return;
-            }
+            if (media) { media.currentTime = lastFullscreen.time||0; media.muted=false; media.play().catch(()=>{}); return; }
         }
-        grid.querySelectorAll('audio, video').forEach(m => !m.muted && m.play().catch(() => {}));
+        grid.querySelectorAll('audio, video').forEach(m => !m.muted && m.play().catch(()=>{}));
     }, 100);
 
-    grid.querySelectorAll('video, img[data-src]').forEach(el => observer.observe(el));
-    document.getElementById('file-count').innerText = `${startIndex + 1} / ${allVideos.length}`;
+    document.getElementById('file-count').innerText = `${startIndex+1} / ${allVideos.length}`;
 }
 
 function nextGrid() { startIndex = (startIndex + totalCells) % allVideos.length; renderGrid(); }
@@ -410,163 +367,79 @@ function prevGrid() { startIndex = (startIndex - totalCells + allVideos.length) 
 function deleteGridFile(file) {
     if (!confirm('Delete this file?')) return;
     const idx = allVideos.indexOf(file);
-    if (idx !== -1) allVideos.splice(idx, 1);
-    fetch('index.php?delete=' + encodeURIComponent(file));
-    if (startIndex >= allVideos.length) startIndex = Math.max(0, allVideos.length - totalCells);
+    if (idx !== -1) allVideos.splice(idx,1);
+    fetch('index.php?delete='+encodeURIComponent(file));
+    if (startIndex >= allVideos.length) startIndex = Math.max(0, allVideos.length-totalCells);
     renderGrid();
 }
 
-function toggleMute() {
-    muted = !muted;
-    document.getElementById('mute-button').innerHTML = muted ? '🔇' : '🔊';
-    renderGrid();
-}
+function toggleMute() { muted = !muted; document.getElementById('mute-button').innerHTML = muted?'🔇':'🔊'; renderGrid(); }
 
-function startFullscreenFrom(file, startTime = 0) {
-    fullscreenMode = 'tile';
-    document.querySelectorAll('#grid video, #grid audio').forEach(m => m.pause());
-    lastFullscreen = { file, time: startTime };
-    startFullscreenPlayer(allVideos, allVideos.indexOf(file), startTime);
-}
+function startFullscreenFrom(file,startTime=0){ fullscreenMode='tile'; document.querySelectorAll('#grid video, #grid audio').forEach(m=>m.pause()); lastFullscreen={file,time:startTime}; startFullscreenPlayer(allVideos,allVideos.indexOf(file),startTime); }
 
-function createFullscreenMedia(playlist, i, startTime) {
+function createFullscreenMedia(playlist,i,startTime){
     const ext = playlist[i].split('.').pop().toLowerCase();
     const isAudio = ['mp3','wav','ogg'].includes(ext);
-
     const media = isAudio ? document.createElement('audio') : document.createElement('video');
     media.src = playlist[i];
     media.currentTime = startTime;
-    if (!isAudio) {
-        media.controls = true;
-        media.loop = true;
-        media.playsInline = true;
-        media.style.cssText = 'width:100%;height:100%;object-fit:contain;';
-    } else {
-        media.controls = true;
-        media.autoplay = true;
-        media.style.cssText = 'width:100%;height:40px;';
-    }
+    if(!isAudio){ media.controls=true; media.loop=true; media.playsInline=true; media.style.cssText='width:100%;height:100%;object-fit:contain;'; } 
+    else { media.controls=true; media.autoplay=true; media.style.cssText='width:100%;height:40px;'; }
     media.muted = muted;
-    media.addEventListener('loadedmetadata', () => media.play().catch(() => {}), { once: true });
-
-    return { media, isAudio };
+    media.addEventListener('loadedmetadata',()=>media.play().catch(()=>{}),{once:true});
+    return {media,isAudio};
 }
 
-function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
-    if (!playlist.length) return;
-    let i = index;
-
-    const container = document.createElement('div');
-    container.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:black;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;';
+function startFullscreenPlayer(playlist,index=0,startTime=0){
+    if(!playlist.length) return;
+    let i=index;
+    const container=document.createElement('div');
+    container.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:black;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;';
     document.body.appendChild(container);
 
-    let { media, isAudio } = createFullscreenMedia(playlist, i, startTime);
-    let thumb = null;
-
-    if (isAudio) {
-        thumb = document.createElement('img');
-        thumb.src = audioThumbs[playlist[i]] || 'cache/no-cover.jpg';
-        thumb.style.cssText = 'width:100%;height:100%;object-fit:contain;';
-        container.appendChild(thumb);
-    }
+    let {media,isAudio}=createFullscreenMedia(playlist,i,startTime);
+    let thumb=null;
+    if(isAudio){ thumb=document.createElement('img'); thumb.src=audioThumbs[playlist[i]]||'cache/no-cover.jpg'; thumb.style.cssText='width:100%;height:100%;object-fit:contain;'; container.appendChild(thumb); }
     container.appendChild(media);
 
-    function play(idx) {
-        i = (idx + playlist.length) % playlist.length;
-        const nextFile = playlist[i];
-        media.src = nextFile;
-        media.play().catch(() => {});
-        if (thumb) thumb.src = audioThumbs[nextFile] || 'cache/no-cover.jpg';
-        if (isAudio) lastFullscreen.file = nextFile;
-    }
+    function play(idx){ i=(idx+playlist.length)%playlist.length; const nextFile=playlist[i]; media.src=nextFile; media.play().catch(()=>{}); if(thumb) thumb.src=audioThumbs[nextFile]||'cache/no-cover.jpg'; if(isAudio) lastFullscreen.file=nextFile; }
+    function close(){ lastFullscreen.time=media.currentTime; if(!isAudio) lastFullscreen.file=playlist[i]; startIndex=Math.floor(allVideos.indexOf(playlist[i])/totalCells)*totalCells; renderGrid(); container.remove(); document.removeEventListener('keydown',keyHandler); }
 
-    function close() {
-        lastFullscreen.time = media.currentTime;
-        if (!isAudio) lastFullscreen.file = playlist[i];
-        startIndex = Math.floor(allVideos.indexOf(playlist[i]) / totalCells) * totalCells;
-        renderGrid();
-        container.remove();
-        document.removeEventListener('keydown', keyHandler);
-    }
+    media.ondblclick=close; if(thumb) thumb.ondblclick=close;
+    media.loop=(fullscreenMode==='tile'&&isAudio);
+    if(!media.loop) media.onended=()=>play(i+1);
 
-    media.ondblclick = close;
-    if (thumb) thumb.ondblclick = close;
+    container.addEventListener('wheel',e=>{ e.preventDefault(); e.deltaY>0?play(i+1):play(i-1); },{passive:false});
+    let touchY=0;
+    container.addEventListener('touchstart',e=>{ if(e.touches.length===1) touchY=e.touches[0].clientY; },{passive:true});
+    container.addEventListener('touchend',e=>{ const delta=e.changedTouches[0].clientY-touchY; if(Math.abs(delta)>50) delta<0?play(i+1):play(i-1); },{passive:true});
 
-    media.loop = (fullscreenMode === 'tile' && isAudio);
-    if (!media.loop) media.onended = () => play(i + 1);
-
-    container.addEventListener('wheel', e => { e.preventDefault(); e.deltaY > 0 ? play(i + 1) : play(i - 1); }, { passive: false });
-    let touchY = 0;
-    container.addEventListener('touchstart', e => { if (e.touches.length === 1) touchY = e.touches[0].clientY; }, { passive: true });
-    container.addEventListener('touchend', e => {
-        const delta = e.changedTouches[0].clientY - touchY;
-        if (Math.abs(delta) > 50) delta < 0 ? play(i + 1) : play(i - 1);
-    }, { passive: true });
-
-    const keyHandler = e => {
-        if (e.key === 'Escape') close();
-        if (e.key === 'Delete') {
-            if (!confirm('Delete this file?')) return;
-            const del = playlist[i];
-            playlist.splice(i, 1);
-            const globalIdx = allVideos.indexOf(del);
-            if (globalIdx !== -1) allVideos.splice(globalIdx, 1);
-            fetch('index.php?delete=' + encodeURIComponent(del));
-            renderGrid();
-            if (playlist.length === 0) close();
-            else play(i % playlist.length);
+    const keyHandler=e=>{
+        if(e.key==='Escape') close();
+        if(e.key==='Delete'){
+            if(!confirm('Delete this file?')) return;
+            const del=playlist[i]; playlist.splice(i,1);
+            const globalIdx=allVideos.indexOf(del); if(globalIdx!==-1) allVideos.splice(globalIdx,1);
+            fetch('index.php?delete='+encodeURIComponent(del)); renderGrid();
+            if(!playlist.length) close(); else play(i%playlist.length);
         }
     };
-    document.addEventListener('keydown', keyHandler);
+    document.addEventListener('keydown',keyHandler);
 }
 
-function playAll() {
-    fullscreenMode = 'playlist';
-    document.querySelectorAll('#grid audio, #grid video').forEach(m => m.pause());
-    startFullscreenPlayer(allVideos, startIndex);
-}
+function playAll(){ fullscreenMode='playlist'; document.querySelectorAll('#grid audio, #grid video').forEach(m=>m.pause()); startFullscreenPlayer(allVideos,startIndex); }
+function shufflePlay(){ fullscreenMode='playlist'; document.querySelectorAll('#grid audio, #grid video').forEach(m=>m.pause()); startFullscreenPlayer([...allVideos].sort(()=>Math.random()-0.5),0); }
+function runAudit(count){ const url=new URL(location); url.searchParams.set('audited','true'); url.searchParams.set('fileCount',count); location.href=url; }
 
-function shufflePlay() {
-    fullscreenMode = 'playlist';
-    document.querySelectorAll('#grid audio, #grid video').forEach(m => m.pause());
-    const shuffled = [...allVideos].sort(() => Math.random() - 0.5);
-    startFullscreenPlayer(shuffled, 0);
-}
+const grid=document.getElementById('grid'); let scrollDebounce=false;
+grid.addEventListener('wheel',e=>{ e.preventDefault(); if(scrollDebounce) return; scrollDebounce=true; setTimeout(()=>scrollDebounce=false,200); e.deltaY<0?prevGrid():nextGrid(); },{passive:false});
+let touchStartY=0;
+grid.addEventListener('touchstart',e=>{ if(e.touches.length===1) touchStartY=e.touches[0].clientY; },{passive:true});
+grid.addEventListener('touchend',e=>{ const delta=e.changedTouches[0].clientY-touchStartY; if(Math.abs(delta)>50) delta<0?nextGrid():prevGrid(); },{passive:true});
 
-function runAudit(count) {
-    const url = new URL(location);
-    url.searchParams.set('audited', 'true');
-    url.searchParams.set('fileCount', count);
-    location.href = url;
-}
+function setVhUnit(){ document.documentElement.style.setProperty('--vh',`${window.innerHeight*0.01}px`); }
+setVhUnit(); window.addEventListener('resize',setVhUnit); window.addEventListener('orientationchange',setVhUnit);
 
-// Navigation events
-const grid = document.getElementById('grid');
-let scrollDebounce = false;
-grid.addEventListener('wheel', e => {
-    e.preventDefault();
-    if (scrollDebounce) return;
-    scrollDebounce = true;
-    setTimeout(() => scrollDebounce = false, 200);
-    e.deltaY < 0 ? prevGrid() : nextGrid();
-}, { passive: false });
-
-let touchStartY = 0;
-grid.addEventListener('touchstart', e => { if (e.touches.length === 1) touchStartY = e.touches[0].clientY; }, { passive: true });
-grid.addEventListener('touchend', e => {
-    const delta = e.changedTouches[0].clientY - touchStartY;
-    if (Math.abs(delta) > 50) delta < 0 ? nextGrid() : prevGrid();
-}, { passive: true });
-
-// Mobile vh fix
-function setVhUnit() {
-    document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`);
-}
-setVhUnit();
-window.addEventListener('resize', setVhUnit);
-window.addEventListener('orientationchange', setVhUnit);
-
-// Initial render
 renderGrid();
 </script>
 </body>
