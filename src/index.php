@@ -253,8 +253,8 @@ let totalCells = <?php echo $total_cells; ?>;
 let startIndex = 0;
 
 // Track fullscreen state
-let lastFullscreenAudio = null;       // file URL
-let lastFullscreenTime = 0;           // current playback time when exiting
+let lastFullscreenAudio = null;       // file URL of last played fullscreen audio
+let lastFullscreenTime = 0;           // playback time when exiting fullscreen
 
 // --------------------
 // Render grid
@@ -270,6 +270,8 @@ function renderGrid() {
 
     const endIndex = Math.min(startIndex + totalCells, allVideos.length);
     const visible = allVideos.slice(startIndex, endIndex);
+
+    let firstAudioFound = false;
 
     visible.forEach((file) => {
         const container = document.createElement('div');
@@ -307,12 +309,15 @@ function renderGrid() {
             audio.style.width = '100%';
             audio.dataset.src = file;
 
-            // Determine if this audio should be unmuted
+            // Decide muted state
             const isLastFullscreen = (lastFullscreenAudio === file);
             if (isLastFullscreen) {
-                audio.muted = false;
+                audio.muted = false;           // priority: continue playing the one from fullscreen
+            } else if (!firstAudioFound && !muted && lastFullscreenAudio === null) {
+                audio.muted = false;           // normal case: unmute first visible audio
+                firstAudioFound = true;
             } else {
-                audio.muted = true;  // All others muted unless explicitly unmuted elsewhere
+                audio.muted = true;
             }
 
             const img = document.createElement('img');
@@ -324,29 +329,27 @@ function renderGrid() {
             container.appendChild(img);
             container.appendChild(audio);
 
-            // When this audio becomes unmuted, mute all others
+            // When user unmutes this audio manually, mute others
             audio.addEventListener('volumechange', () => {
                 if (!audio.muted) {
                     document.querySelectorAll('#grid audio, #grid video').forEach(m => {
                         if (m !== audio) m.muted = true;
                     });
+                    lastFullscreenAudio = null;  // user took manual control
                 }
             });
 
-            // Special handling after lazy-load: restore time and play if needed
+            // After load: restore time and play if it's the one we want playing
             const setupAfterLoad = () => {
                 if (isLastFullscreen && lastFullscreenTime > 0) {
                     audio.currentTime = lastFullscreenTime;
                 }
-                if (isLastFullscreen && !muted) {
+                if ((isLastFullscreen || (!firstAudioFound && !muted && lastFullscreenAudio === null)) && !audio.muted) {
                     audio.play().catch(() => {});
                 }
             };
 
-            // We'll call this after src is set in IntersectionObserver
             audio.dataset.setupPending = isLastFullscreen ? 'true' : 'false';
-
-            // Store reference for observer
             audio.addEventListener('loadedmetadata', setupAfterLoad, { once: true });
 
         } else {
@@ -362,7 +365,7 @@ function renderGrid() {
         grid.appendChild(container);
     });
 
-    // Lazy loading with special handling for lastFullscreenAudio
+    // Lazy loading observer
     const observer = new IntersectionObserver(entries => {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
@@ -373,7 +376,6 @@ function renderGrid() {
                     el.src = el.dataset.src;
                     delete el.dataset.src;
 
-                    // For audio: after loading, restore time and play if it was the fullscreen one
                     if (tag === 'audio' && el.dataset.setupPending === 'true') {
                         el.addEventListener('canplay', () => {
                             if (lastFullscreenAudio === el.src && lastFullscreenTime > 0) {
@@ -403,11 +405,11 @@ function renderGrid() {
     document.getElementById('file-count').innerText = `${startIndex + 1} / ${allVideos.length}`;
 }
 
-// Navigation (unchanged)
+// Navigation unchanged
 function nextGrid() { startIndex = (startIndex + totalCells) % allVideos.length; renderGrid(); }
 function prevGrid() { startIndex = (startIndex - totalCells + allVideos.length) % allVideos.length; renderGrid(); }
 
-// Delete (unchanged)
+// Delete unchanged
 function deleteGridFile(file) {
     if (!confirm('Delete this file?')) return;
     const idx = allVideos.indexOf(file);
@@ -417,21 +419,42 @@ function deleteGridFile(file) {
     renderGrid();
 }
 
-// Mute toggle (unchanged - still works for global mute)
+// --------------------
+// Mute toggle - FIXED
+// --------------------
 function toggleMute() {
     muted = !muted;
     document.getElementById('mute-button').innerHTML = muted ? '🔇' : '🔊';
-    document.querySelectorAll('#grid video, #grid audio').forEach(m => {
-        m.muted = muted || (m.tagName.toLowerCase() === 'audio' && lastFullscreenAudio !== m.src);
-    });
+
+    if (muted) {
+        // Mute everything
+        document.querySelectorAll('#grid video, #grid audio').forEach(m => m.muted = true);
+    } else {
+        // Unmute: prefer lastFullscreenAudio, otherwise first visible audio
+        const audios = document.querySelectorAll('#grid audio');
+        let unmutedOne = false;
+
+        audios.forEach(a => {
+            if (!unmutedOne && lastFullscreenAudio === a.src) {
+                a.muted = false;
+                unmutedOne = true;
+            } else if (!unmutedOne && lastFullscreenAudio === null) {
+                a.muted = false;
+                unmutedOne = true;
+            } else {
+                a.muted = true;
+            }
+        });
+
+        // If no audio was found (e.g. no audio files visible), do nothing extra
+    }
 }
 
 // --------------------
-// Enter fullscreen from grid
+// Enter fullscreen
 // --------------------
 function startFullscreenFrom(file, startTime = 0) {
-    const gridMedia = document.querySelectorAll('#grid video, #grid audio');
-    gridMedia.forEach(m => m.pause());
+    document.querySelectorAll('#grid video, #grid audio').forEach(m => m.pause());
 
     const idx = allVideos.indexOf(file);
     if (idx === -1) return;
@@ -446,7 +469,7 @@ function startFullscreenFrom(file, startTime = 0) {
 }
 
 // --------------------
-// Fullscreen player
+// Fullscreen player (only small change in close())
 // --------------------
 function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
     if (!playlist.length) return;
@@ -502,20 +525,18 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
             thumb.src = audioThumbs[nextFile] ?? 'cache/no-cover.jpg';
         }
 
-        // Update tracking
         if (['mp3','wav','ogg'].includes(nextExt)) {
             lastFullscreenAudio = nextFile;
         }
     }
 
     function close() {
-        // Save current time before closing
-        if (['mp3','wav','ogg'].includes(ext) || media.tagName === 'AUDIO') {
+        if (media.tagName.toLowerCase() === 'audio') {
             lastFullscreenTime = media.currentTime;
         }
 
         startIndex = Math.floor(allVideos.indexOf(playlist[i]) / totalCells) * totalCells;
-        renderGrid();  // This will now restore time + playback correctly
+        renderGrid();
         container.remove();
         document.removeEventListener('keydown', keyHandler);
     }
@@ -524,7 +545,7 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
     if (thumb) thumb.ondblclick = close;
     media.onended = () => play(i + 1);
 
-    // Navigation controls (wheel, touch, etc.) unchanged...
+    // Navigation (wheel, touch, keys) unchanged...
     container.addEventListener('wheel', e => { e.preventDefault(); e.deltaY > 0 ? play(i + 1) : play(i - 1); }, { passive: false });
 
     let fsTouchStartY = 0;
@@ -551,7 +572,7 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
     document.addEventListener('keydown', keyHandler);
 }
 
-// Play all / shuffle (unchanged)
+// Play all / shuffle unchanged
 function playAll() { startFullscreenPlayer(allVideos, startIndex); }
 function shufflePlay() {
     let shuffled = [...allVideos];
@@ -569,7 +590,7 @@ function runAudit(count) {
     window.location.href = url.toString();
 }
 
-// Grid navigation (wheel/touch) unchanged
+// Grid navigation unchanged
 const grid = document.getElementById('grid');
 let scrollDebounce = false;
 grid.addEventListener('wheel', e => { e.preventDefault(); if(scrollDebounce) return; scrollDebounce=true; setTimeout(()=>scrollDebounce=false,200); e.deltaY<0?prevGrid():nextGrid(); }, {passive:false});
