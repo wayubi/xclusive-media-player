@@ -269,7 +269,7 @@ function renderGrid() {
 
     let firstAudioUnmuted = false;
 
-    visible.forEach((file, i) => {
+    visible.forEach((file) => {
         const container = document.createElement('div');
         container.className = 'video-container';
 
@@ -284,16 +284,15 @@ function renderGrid() {
             video.style.width = '100%';
             video.style.height = '100%';
             video.style.objectFit = 'contain';
-            video.onclick = () => startFullscreenFrom(allVideos.indexOf(file));
             video.dataset.src = file;
+            video.onclick = () => startFullscreenFrom(file);  // <-- pass file
             container.appendChild(video);
-
         } else if (['jpg','jpeg','png','gif','webp'].includes(ext)) {
             const img = document.createElement('img');
             img.loading = 'lazy';
             img.decoding = 'async';
-            img.src = file;
-            img.ondblclick = () => startFullscreenFrom(allVideos.indexOf(file));
+            img.dataset.src = file;
+            img.ondblclick = () => startFullscreenFrom(file); // <-- pass file
             container.appendChild(img);
 
         } else if (['mp3','wav','ogg'].includes(ext)) {
@@ -308,7 +307,7 @@ function renderGrid() {
             img.style.height = '100%';
             img.style.objectFit = 'contain';
             img.dataset.src = audioThumbs[file] ?? 'cache/no-cover.jpg';
-            img.ondblclick = () => startFullscreenFrom(allVideos.indexOf(file));
+            img.ondblclick = () => startFullscreenFrom(file); // <-- pass file
             container.appendChild(img);
 
             const audio = document.createElement('audio');
@@ -324,8 +323,7 @@ function renderGrid() {
             } else {
                 audio.muted = true;
             }
-
-            audio.onclick = () => startFullscreenFrom(allVideos.indexOf(file));
+            audio.onclick = () => startFullscreenFrom(file); // <-- pass file
             audio.addEventListener('volumechange', () => {
                 if (!audio.muted) {
                     const allMedia = document.querySelectorAll('#grid video, #grid audio');
@@ -428,23 +426,15 @@ function toggleMute() {
 // --------------------
 // Grid double-click
 // --------------------
-function startFullscreenFrom(idx) {
+function startFullscreenFrom(file) {
+    // Pause all grid media
     const gridMedia = document.querySelectorAll('#grid video, #grid audio');
-    const mediaToFullscreen = gridMedia[idx];
-    if (!mediaToFullscreen) return;
+    gridMedia.forEach(m => m.pause());
 
-    // Save current time of clicked media
-    const currentTime = mediaToFullscreen.currentTime;
+    const idx = allVideos.indexOf(file);
+    if (idx === -1) return;
 
-    // Pause all grid media except the one clicked
-    gridMedia.forEach(m => {
-        if (m !== mediaToFullscreen) m.pause();
-    });
-
-    // Pause clicked media (we'll resume in fullscreen)
-    mediaToFullscreen.pause();
-
-    startFullscreenPlayer(allVideos, idx, currentTime);
+    startFullscreenPlayer(allVideos, idx);
 }
 
 // --------------------
