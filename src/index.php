@@ -320,6 +320,7 @@ function renderGrid() {
             audio.preload = 'metadata';
             audio.style.width = '100%';
             audio.onclick = () => startFullscreenFrom(allVideos.indexOf(file));
+            audio.dataset.src = file;
             container.appendChild(audio);
 
             audio.addEventListener('volumechange', () => {
@@ -347,9 +348,11 @@ function renderGrid() {
             if(entry.isIntersecting){
                 const el = entry.target;
 
-                if(el.tagName.toLowerCase() === 'video' && el.dataset.src){
+                const tag = el.tagName.toLowerCase();
+
+                if ((tag === 'video' || tag === 'audio') && el.dataset.src) {
                     el.src = el.dataset.src;
-                    el.play().catch(()=>{});
+                    el.play?.().catch(() => {});
                     delete el.dataset.src;
                 }
 
@@ -363,7 +366,7 @@ function renderGrid() {
         });
     }, { root: grid, threshold: 0.1 });
 
-    grid.querySelectorAll('video, img[data-src]').forEach(el => observer.observe(el));
+    grid.querySelectorAll('video, audio, img[data-src]').forEach(el => observer.observe(el));
 
     document.getElementById('file-count').innerText = `${startIndex + 1} / ${allVideos.length}`;
 }
