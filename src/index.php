@@ -360,10 +360,87 @@ function renderGrid() {
             video.playsInline = true;
             video.preload = 'none';
             video.dataset.src = file;
-            video.onclick = () => startFullscreenFrom(file);
+            video.style.width = '100%';
+            video.style.height = '100%';
+            video.style.objectFit = 'content';
             container.appendChild(video);
 
-        } else if (['jpg','jpeg','png','gif','webp'].includes(ext)) {
+            // Overlay container
+            const overlay = document.createElement('div');
+            overlay.style.cssText = `
+                position:absolute;
+                top:50%; left:50%;
+                transform:translate(-50%,-50%);
+                display:flex;
+                gap:10px;
+                z-index:10;
+                opacity:0;
+                transition:opacity 0.2s;
+                pointer-events:none;  /* allow clicks to pass through unless shown */
+            `;
+
+            // Fullscreen button
+            const fsBtn = document.createElement('button');
+            fsBtn.innerHTML = '⛶';
+            fsBtn.style.cssText = `
+                font-size:20px;
+                padding:6px 10px;
+                border:none;
+                border-radius:6px;
+                background:rgba(0,0,0,0.6);
+                color:white;
+                cursor:pointer;
+                pointer-events:auto;  /* enable button clicks */
+            `;
+            fsBtn.onclick = (e) => {
+                e.stopPropagation();
+                startFullscreenFrom(file, video.currentTime);
+            };
+            overlay.appendChild(fsBtn);
+
+            // Unmute button
+            const unmuteBtn = document.createElement('button');
+            unmuteBtn.innerHTML = muted ? '🔇' : '🔊';
+            unmuteBtn.style.cssText = fsBtn.style.cssText;
+            unmuteBtn.onclick = (e) => {
+                e.stopPropagation();
+
+                // Mute all other audios/videos
+                document.querySelectorAll('#grid audio, #grid video').forEach(m => {
+                    if (m !== video) m.muted = true;
+                });
+
+                // Reset all unmute buttons icons
+                document.querySelectorAll('#grid .video-container').forEach(vc => {
+                    const btn = vc.querySelector('button:nth-child(2)'); // second button = unmute
+                    if (btn) btn.innerHTML = '🔇';
+                });
+
+                // Unmute this video
+                video.muted = false;
+                video.play().catch(() => {});
+                lastFullscreenAudio = null;
+                lastFullscreenTime = 0;
+
+                // Update this video's icon
+                unmuteBtn.innerHTML = '🔊';
+            };
+            overlay.appendChild(unmuteBtn);
+
+            container.appendChild(overlay);
+
+            // Show overlay on hover
+            container.addEventListener('mouseenter', () => {
+                overlay.style.opacity = '1';
+                overlay.style.pointerEvents = 'auto';
+            });
+            container.addEventListener('mouseleave', () => {
+                overlay.style.opacity = '0';
+                overlay.style.pointerEvents = 'none';
+            });
+        }
+        
+        else if (['jpg','jpeg','png','gif','webp'].includes(ext)) {
             const img = document.createElement('img');
             img.loading = 'lazy';
             img.decoding = 'async';
