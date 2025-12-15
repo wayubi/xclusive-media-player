@@ -356,16 +356,27 @@ function renderGrid() {
         if (['mp4','webm','mkv'].includes(ext)) {
             const video = document.createElement('video');
             video.loop = true;
-            video.muted = muted;
             video.playsInline = true;
             video.preload = 'none';
             video.dataset.src = file;
             video.style.width = '100%';
             video.style.height = '100%';
-            video.style.objectFit = 'content';
+            video.style.objectFit = 'contain';
             container.appendChild(video);
 
-            // Overlay container
+            // Decide sound: only one video unmuted, like audio logic
+            const isLastFullscreen = (lastFullscreenAudio === file);
+            if (isLastFullscreen) {
+                video.muted = false;
+            } else if (lastFullscreenAudio === null && !muted) {
+                const visibleVideos = visible.filter(f => ['mp4','webm','mkv'].includes(f.split('.').pop().toLowerCase()));
+                const isFirstVideo = visibleVideos[0] === file;
+                video.muted = !isFirstVideo;
+            } else {
+                video.muted = true;
+            }
+
+            // Overlay & unmute button logic remains as you have it
             const overlay = document.createElement('div');
             overlay.style.cssText = `
                 position:absolute;
@@ -376,7 +387,7 @@ function renderGrid() {
                 z-index:10;
                 opacity:0;
                 transition:opacity 0.2s;
-                pointer-events:none;  /* allow clicks to pass through unless shown */
+                pointer-events:none;
             `;
 
             // Fullscreen button
@@ -390,7 +401,7 @@ function renderGrid() {
                 background:rgba(0,0,0,0.6);
                 color:white;
                 cursor:pointer;
-                pointer-events:auto;  /* enable button clicks */
+                pointer-events:auto;
             `;
             fsBtn.onclick = (e) => {
                 e.stopPropagation();
@@ -398,9 +409,9 @@ function renderGrid() {
             };
             overlay.appendChild(fsBtn);
 
-            // Unmute button
+            // Overlay unmute button
             const unmuteBtn = document.createElement('button');
-            unmuteBtn.innerHTML = muted ? '🔇' : '🔊';
+            unmuteBtn.innerHTML = video.muted ? '🔇' : '🔊';
             unmuteBtn.style.cssText = fsBtn.style.cssText;
             unmuteBtn.onclick = (e) => {
                 e.stopPropagation();
@@ -429,7 +440,6 @@ function renderGrid() {
 
             container.appendChild(overlay);
 
-            // Show overlay on hover
             container.addEventListener('mouseenter', () => {
                 overlay.style.opacity = '1';
                 overlay.style.pointerEvents = 'auto';
