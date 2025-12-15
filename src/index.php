@@ -285,6 +285,8 @@ let startIndex = 0;
 let lastFullscreenAudio = null;
 let lastFullscreenTime = 0;
 
+let fullscreenMode = 'tile';
+
 // Audio loading queue to avoid browser concurrency stalls
 let audioQueue = [];
 let activeAudioLoads = 0;
@@ -530,6 +532,7 @@ function toggleMute() {
 // Enter fullscreen
 // --------------------
 function startFullscreenFrom(file, startTime = 0) {
+    fullscreenMode = 'tile';
     document.querySelectorAll('#grid video, #grid audio').forEach(m => m.pause());
 
     const idx = allVideos.indexOf(file);
@@ -618,7 +621,14 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
 
     media.ondblclick = close;
     if (thumb) thumb.ondblclick = close;
-    media.onended = () => play(i + 1);
+
+    if (fullscreenMode === 'tile' && ['mp3','wav','ogg'].includes(ext)) {
+        media.loop = true;          // <-- loop the audio
+        media.onended = null;       // no need to handle next track
+    } else {
+        media.loop = false;
+        media.onended = () => play(i + 1); // normal playlist behavior
+    }
 
     // Navigation (wheel, touch, keys) unchanged...
     container.addEventListener('wheel', e => { e.preventDefault(); e.deltaY > 0 ? play(i + 1) : play(i - 1); }, { passive: false });
@@ -648,8 +658,15 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
 }
 
 // Play all / shuffle unchanged
-function playAll() { startFullscreenPlayer(allVideos, startIndex); }
+function playAll() {
+    fullscreenMode = 'playlist';
+    document.querySelectorAll('#grid audio, #grid video').forEach(m => m.pause());
+    startFullscreenPlayer(allVideos, startIndex);
+}
+
 function shufflePlay() {
+    fullscreenMode = 'playlist';
+    document.querySelectorAll('#grid audio, #grid video').forEach(m => m.pause());
     let shuffled = [...allVideos];
     for (let i = shuffled.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
