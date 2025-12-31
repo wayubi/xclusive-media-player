@@ -238,7 +238,36 @@ function isFileVisible(file) {
 function addFileInfoOverlay(container, file) {
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
-    overlay.innerHTML = `<span>${file}</span>`;
+    // overlay.style.position = 'absolute';
+    // overlay.style.bottom = '4px';
+    // overlay.style.left = '4px';
+    overlay.style.background = 'rgba(0,0,0,0.5)';
+    overlay.style.color = 'white';
+    overlay.style.padding = '2px 4px';
+    overlay.style.fontSize = '16px';
+    overlay.style.borderRadius = '4px';
+
+    const ext = file.split('.').pop().toLowerCase();
+    const isImage = ['jpg','jpeg','png','gif','webp'].includes(ext);
+    const isVideo = ['mp4','webm','mkv'].includes(ext);
+
+    if (isImage) {
+        const img = new Image();
+        img.onload = () => {
+            overlay.innerHTML = `${file} (${img.width}×${img.height})`;
+        };
+        img.src = file; // or dataset.src if using lazy loading
+    } else if (isVideo) {
+        const video = document.createElement('video');
+        video.preload = 'metadata';
+        video.onloadedmetadata = () => {
+            overlay.innerHTML = `${file} (${video.videoWidth}×${video.videoHeight})`;
+        };
+        video.src = file;
+    } else {
+        overlay.innerHTML = file; // for audio or unsupported files
+    }
+
     container.appendChild(overlay);
 }
 
@@ -296,13 +325,18 @@ function addCentralOverlay(container, mediaEl, file) {
     overlay.appendChild(selectBtn);
 
     // ===== Right: Fullscreen button (only for audio/video) =====
-    if (mediaEl && (mediaEl.tagName === 'VIDEO' || mediaEl.tagName === 'AUDIO')) {
-        const fsBtn = document.createElement('button');
-        fsBtn.innerHTML = '⛶';
-        fsBtn.style.cssText = buttonStyle;
-        fsBtn.onclick = e => { e.stopPropagation(); startFullscreenFrom(file, mediaEl.currentTime); };
-        overlay.appendChild(fsBtn);
+    const fsBtn = document.createElement('button');
+    fsBtn.innerHTML = '⛶';
+    fsBtn.style.cssText = buttonStyle;
+    fsBtn.onclick = e => {
+        e.stopPropagation();
+        // Safely get currentTime only if mediaEl exists and has it
+        const time = (mediaEl && typeof mediaEl.currentTime === 'number') ? mediaEl.currentTime : 0;
+        startFullscreenFrom(file, time);
+    };
+    overlay.appendChild(fsBtn);
 
+    if (mediaEl && (mediaEl.tagName === 'VIDEO' || mediaEl.tagName === 'AUDIO')) {
         // ===== Right: Mute/unmute button =====
         const muteBtn = document.createElement('button');
         muteBtn.innerHTML = mediaEl.muted ? '🔇' : '🔊';
@@ -375,7 +409,7 @@ function createMediaContainer(file) {
         img.loading = 'lazy';
         img.decoding = 'async';
         img.dataset.src = file;
-        img.ondblclick = () => startFullscreenFrom(file);
+        // img.onclick = () => startFullscreenFrom(file);
         container.appendChild(img);
     }
     else {
@@ -449,41 +483,144 @@ function createFullscreenMedia(playlist,i,startTime){
     return {media,isAudio};
 }
 
-function startFullscreenPlayer(playlist,index=0,startTime=0){
-    if(!playlist.length) return;
-    let i=index;
-    const container=document.createElement('div');
-    container.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:black;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;';
+function createFullscreenImage(playlist, index) {
+    const src = playlist[index];
+    const img = document.createElement('img');
+    img.src = src;
+    img.style.cssText = `
+        max-width: 95vw;
+        max-height: 92vh;
+        object-fit: contain;
+        border-radius: 8px;
+        box-shadow: 0 0 40px rgba(0,0,0,0.6);
+    `;
+    return img;
+}
+
+function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
+    if (!playlist.length) return;
+    let i = index;
+    const container = document.createElement('div');
+    container.style.cssText =
+        'position:fixed;top:0;left:0;width:100%;height:100%;background:black;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;';
     document.body.appendChild(container);
 
-    let {media,isAudio}=createFullscreenMedia(playlist,i,startTime);
-    let thumb=null;
-    if(isAudio){ thumb=document.createElement('img'); thumb.src=audioThumbs[playlist[i]]||'cache/no-cover.jpg'; thumb.style.cssText='width:100%;height:100%;object-fit:contain;'; container.appendChild(thumb); }
+    // ── Determine type early ───────────────────────────────────────
+    const currentFile = playlist[i];
+    const ext = currentFile.split('.').pop().toLowerCase();
+    const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext);
+
+    let media;
+    let isAudio = false;
+    let thumb = null;
+
+    if (isImage) {
+        // Simple static image
+        media = document.createElement('img');
+        media.src = currentFile;
+        media.style.cssText = 'max-width:94vw;max-height:90vh;object-fit:contain;border-radius:6px;';
+    } else {
+        // Original audio/video handling
+        const result = createFullscreenMedia(playlist, i, startTime);
+        media = result.media;
+        isAudio = result.isAudio;
+
+        if (isAudio) {
+            thumb = document.createElement('img');
+            thumb.src = audioThumbs[currentFile] || 'cache/no-cover.jpg';
+            thumb.style.cssText = 'width:100%;height:100%;object-fit:contain;';
+            container.appendChild(thumb);
+        }
+    }
+
     container.appendChild(media);
 
-    function play(idx){ i=(idx+playlist.length)%playlist.length; const nextFile=playlist[i]; media.src=nextFile; media.play().catch(()=>{}); if(thumb) thumb.src=audioThumbs[nextFile]||'cache/no-cover.jpg'; if(isAudio) lastFullscreen.file=nextFile; }
-    function close(){ lastFullscreen.time=media.currentTime; if(!isAudio) lastFullscreen.file=playlist[i]; startIndex=Math.floor(allVideos.indexOf(playlist[i])/totalCells)*totalCells; renderGrid(); container.remove(); document.removeEventListener('keydown',keyHandler); }
+    // ───────────────────────────────────────────────────────────────
 
-    media.ondblclick=close; if(thumb) thumb.ondblclick=close;
-    media.loop=(fullscreenMode==='tile'&&isAudio);
-    if(!media.loop) media.onended=()=>play(i+1);
+    function play(idx) {
+        i = (idx + playlist.length) % playlist.length;
+        const nextFile = playlist[i];
+        const nextExt = nextFile.split('.').pop().toLowerCase();
+        const nextIsImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(nextExt);
 
-    container.addEventListener('wheel',e=>{ e.preventDefault(); e.deltaY>0?play(i+1):play(i-1); },{passive:false});
-    let touchY=0;
-    container.addEventListener('touchstart',e=>{ if(e.touches.length===1) touchY=e.touches[0].clientY; },{passive:true});
-    container.addEventListener('touchend',e=>{ const delta=e.changedTouches[0].clientY-touchY; if(Math.abs(delta)>50) delta<0?play(i+1):play(i-1); },{passive:true});
+        if (nextIsImage) {
+            // Switch to image
+            container.innerHTML = '';
+            media = document.createElement('img');
+            media.src = nextFile;
+            media.style.cssText = 'max-width:94vw;max-height:90vh;object-fit:contain;border-radius:6px;';
+            container.appendChild(media);
+            media.ondblclick = close;
+        } else {
+            // Original audio/video switch
+            media.src = nextFile;
+            media.play().catch(() => {});
+            if (thumb) thumb.src = audioThumbs[nextFile] || 'cache/no-cover.jpg';
+            if (isAudio) lastFullscreen.file = nextFile; // only for audio
+        }
+    }
 
-    const keyHandler=e=>{
-        if(e.key==='Escape') close();
-        if(e.key==='Delete'){
-            if(!confirm('Delete this file?')) return;
-            const del=playlist[i]; playlist.splice(i,1);
-            const globalIdx=allVideos.indexOf(del); if(globalIdx!==-1) allVideos.splice(globalIdx,1);
-            fetch('index.php?delete='+encodeURIComponent(del)); renderGrid();
-            if(!playlist.length) close(); else play(i%playlist.length);
+    function close() {
+        // Only save time for audio/video
+        if (!isImage) {
+            lastFullscreen.time = media.currentTime;
+            if (!isAudio) lastFullscreen.file = playlist[i];
+        } else {
+            lastFullscreen.time = 0;
+            lastFullscreen.file = playlist[i]; // optional, for returning to same image
+        }
+
+        startIndex = Math.floor(allVideos.indexOf(playlist[i]) / totalCells) * totalCells;
+        renderGrid();
+        container.remove();
+        document.removeEventListener('keydown', keyHandler);
+    }
+
+    media.ondblclick = close;
+    if (thumb) thumb.ondblclick = close;
+
+    // Loop & auto-next only for audio/video
+    if (!isImage) {
+        media.loop = (fullscreenMode === 'tile' && isAudio);
+        if (!media.loop) media.onended = () => play(i + 1);
+    }
+
+    container.addEventListener('wheel', e => {
+        e.preventDefault();
+        e.deltaY > 0 ? play(i + 1) : play(i - 1);
+    }, { passive: false });
+
+    let touchY = 0;
+    container.addEventListener('touchstart', e => {
+        if (e.touches.length === 1) touchY = e.touches[0].clientY;
+    }, { passive: true });
+
+    container.addEventListener('touchend', e => {
+        const delta = e.changedTouches[0].clientY - touchY;
+        if (Math.abs(delta) > 50) delta < 0 ? play(i + 1) : play(i - 1);
+    }, { passive: true });
+
+    const keyHandler = e => {
+        if (e.key === 'Escape') close();
+        if (e.key === 'Delete') {
+            if (!confirm('Delete this file?')) return;
+            const del = playlist[i];
+            playlist.splice(i, 1);
+            const globalIdx = allVideos.indexOf(del);
+            if (globalIdx !== -1) allVideos.splice(globalIdx, 1);
+            fetch('index.php?delete=' + encodeURIComponent(del));
+            renderGrid();
+            if (!playlist.length) close();
+            else play(i % playlist.length);
         }
     };
-    document.addEventListener('keydown',keyHandler);
+    document.addEventListener('keydown', keyHandler);
+
+    container.addEventListener('click', function(e) {
+        if (e.target === container) {
+            close();
+        }
+    });
 }
 
 function playAll(){ fullscreenMode='playlist'; document.querySelectorAll('#grid audio, #grid video').forEach(m=>m.pause()); startFullscreenPlayer(allVideos,startIndex); }
