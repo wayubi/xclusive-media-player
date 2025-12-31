@@ -550,6 +550,14 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
         const isImage = ['jpg','jpeg','png','gif','webp'].includes(ext);
         const isAudio = ['mp3','wav','ogg'].includes(ext);
 
+        // If we are reusing the same element, just reattach it
+        if (mediaEl && lastFullscreen.file === file) {
+            container.innerHTML = '';
+            if (thumb) container.appendChild(thumb);
+            container.appendChild(mediaEl);
+            return; // continue playing naturally
+        }
+
         container.innerHTML = '';
 
         if (isImage) {
@@ -617,52 +625,58 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
             }, { once: true });
         }
 
-        // === attach loop/onended AFTER media is in DOM ===
+        // Attach loop/onended after element is in DOM
         const isSingleTileFullscreen = fullscreenMode === 'tile';
         mediaEl.loop = isSingleTileFullscreen && !isImage;
         if (!mediaEl.loop && !isImage) {
             mediaEl.onended = () => play(i + 1);
         }
+
+        // Track the current file only if not reusing
+        lastFullscreen.file = file;
+        if (!isImage && !isAudio) lastFullscreen.time = startTime;
     }
 
     function play(idx) {
-        // Normalize index
         i = (idx + playlist.length) % playlist.length;
 
-        // Save current media state before switching
+        const file = playlist[i];
+
+        // If same element, just reattach and return
+        if (mediaEl && lastFullscreen.file === file) {
+            container.innerHTML = '';
+            if (thumb) container.appendChild(thumb);
+            container.appendChild(mediaEl);
+            return;
+        }
+
+        // Save state before removing
         if (mediaEl) {
             if (mediaEl.tagName === 'AUDIO' || mediaEl.tagName === 'VIDEO') {
                 lastFullscreen.time = mediaEl.currentTime;
-                lastFullscreen.file = playlist[i]; // track current file
-                mediaEl.pause();
             }
-            if (thumb) {
-                thumb.remove();
-                thumb = null;
-            }
+            if (thumb) { thumb.remove(); thumb = null; }
             mediaEl.remove();
             mediaEl = null;
         }
 
-        // Create new media, starting from saved time if available
-        const startTime = (lastFullscreen.file === playlist[i] && lastFullscreen.time) ? lastFullscreen.time : 0;
-        createMedia(playlist[i], startTime);
+        const startTime = (lastFullscreen.file === file && lastFullscreen.time) ? lastFullscreen.time : 0;
+        createMedia(file, startTime);
     }
 
     function close() {
         if (mediaEl && mediaEl.tagName.toLowerCase() !== 'img') {
             lastFullscreen.time = mediaEl.currentTime;
-            lastFullscreen.file = playlist[i]; // always track last file
         } else {
             lastFullscreen.time = 0;
-            lastFullscreen.file = playlist[i];
         }
 
-        // Update grid to show the current file
+        lastFullscreen.file = playlist[i]; // track current file for reuse
+
+        // Update grid to show current file
         startIndex = Math.floor(allVideos.indexOf(playlist[i]) / totalCells) * totalCells;
         renderGrid();
 
-        // Cleanup DOM and listeners
         if (thumb) { thumb.remove(); thumb = null; }
         if (mediaEl) { mediaEl.remove(); mediaEl = null; }
         container?.remove();
