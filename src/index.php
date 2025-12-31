@@ -550,6 +550,7 @@ function createFullscreenImage(playlist, index) {
 function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
     if (!playlist.length) return;
     let i = index;
+
     const container = document.createElement('div');
     container.style.cssText =
         'position:fixed;top:0;left:0;width:100%;height:100%;background:black;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;';
@@ -589,18 +590,13 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
         media.addEventListener('loadedmetadata', () => media.play().catch(() => {}), {once:true});
     }
 
-    container.appendChild(media);
+    // Wrap media in inner div for click-outside space
+    const inner = document.createElement('div');
+    inner.style.cssText = 'max-width:90%; max-height:90%; display:flex; align-items:center; justify-content:center;';
+    inner.appendChild(media);
+    container.appendChild(inner);
 
-    // === Main loop behavior decision ===
-    const isSingleTileFullscreen = fullscreenMode === 'tile';
-    
-    media.loop = isSingleTileFullscreen && !isImage;  // loop both audio & video in tile mode
-
-    if (!media.loop && !isImage) {
-        media.onended = () => play(i + 1);
-    }
-    // ===================================
-
+    // ======= FULLSCREEN NAVIGATION & EVENT HANDLERS =======
     function play(idx) {
         i = (idx + playlist.length) % playlist.length;
         const nextFile = playlist[i];
@@ -608,84 +604,76 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
         const nextIsImage = ['jpg','jpeg','png','gif','webp'].includes(nextExt);
         const nextIsAudio = ['mp3','wav','ogg'].includes(nextExt);
 
-        if (nextIsImage) {
-            container.innerHTML = '';
-            media = document.createElement('img');
-            media.src = nextFile;
-            media.style.cssText = 'max-width:94vw;max-height:90vh;object-fit:contain;border-radius:6px;';
-            container.appendChild(media);
-            media.ondblclick = close;
+        container.innerHTML = ''; // clear container
+        let mediaEl = null;
+        let thumb = null;
+
+        if (nextIsAudio) {
+            mediaEl = document.createElement('audio');
+            mediaEl.src = nextFile;
+            mediaEl.autoplay = true;
+            mediaEl.controls = true;
+            mediaEl.style.cssText = 'width:100%;height:40px;';
+
+            thumb = document.createElement('img');
+            thumb.src = audioThumbs[nextFile] || 'cache/no-cover.jpg';
+            thumb.style.cssText = 'width:100%;height:100%;object-fit:contain;';
+        } else if (nextIsImage) {
+            mediaEl = document.createElement('img');
+            mediaEl.src = nextFile;
+            mediaEl.style.cssText = 'max-width:94vw;max-height:90vh;object-fit:contain;border-radius:6px;';
         } else {
-            // Clean previous media
-            container.removeChild(media);
-            if (thumb) {
-                container.removeChild(thumb);
-                thumb = null;
-            }
+            mediaEl = document.createElement('video');
+            mediaEl.src = nextFile;
+            mediaEl.autoplay = true;
+            mediaEl.controls = true;
+            mediaEl.playsInline = true;
+            mediaEl.style.cssText = 'width:100%;height:100%;object-fit:contain;';
+        }
 
-            media = nextIsAudio ? document.createElement('audio') : document.createElement('video');
-            media.src = nextFile;
-            media.autoplay = true;
-            media.playsInline = true;
-            media.controls = true;
-            media.muted = (fullscreenMode === 'playlist') ? muted : false;
+        // Wrap in inner div for clickable space
+        const inner = document.createElement('div');
+        inner.style.cssText = 'max-width:90%; max-height:90%; display:flex; align-items:center; justify-content:center;';
+        inner.appendChild(mediaEl);
+        if (thumb) inner.appendChild(thumb);
 
-            if (nextIsAudio) {
-                media.style.cssText = 'width:100%;height:40px;';
-                thumb = document.createElement('img');
-                thumb.src = audioThumbs[nextFile] || 'cache/no-cover.jpg';
-                thumb.style.cssText = 'width:100%;height:100%;object-fit:contain;';
-                container.appendChild(thumb);
-            } else {
-                media.style.cssText = 'width:100%;height:100%;object-fit:contain;';
-            }
+        container.appendChild(inner);
 
-            container.appendChild(media);
-
-            // Re-apply same loop logic
-            media.loop = isSingleTileFullscreen && !nextIsImage;
-            if (!media.loop && !nextIsImage) {
-                media.onended = () => play(i + 1);
-            }
-
-            media.play().catch(() => {});
+        if (mediaEl.tagName === 'VIDEO' || mediaEl.tagName === 'AUDIO') {
+            mediaEl.addEventListener('loadedmetadata', () => mediaEl.play().catch(() => {}), { once: true });
         }
     }
 
     function close() {
-        if (!isImage) {
-            lastFullscreen.time = media.currentTime;
-            if (!isAudio) lastFullscreen.file = playlist[i];
-        } else {
-            lastFullscreen.time = 0;
-            lastFullscreen.file = playlist[i];
-        }
+        if (!isImage) lastFullscreen.time = media.currentTime;
+        lastFullscreen.file = playlist[i];
         startIndex = Math.floor(allVideos.indexOf(playlist[i]) / totalCells) * totalCells;
         renderGrid();
+
+        cleanupWheel(); // remove wheel/key listeners
         container.remove();
-        document.removeEventListener('keydown', keyHandler);
     }
 
     media.ondblclick = close;
     if (thumb) thumb.ondblclick = close;
 
-    container.addEventListener('wheel', e => {
+    // ======= WHEEL & KEY HANDLING =======
+    const wheelHandler = e => {
         e.preventDefault();
+        e.stopPropagation();
         e.deltaY > 0 ? play(i + 1) : play(i - 1);
-    }, { passive: false });
-
-    let touchY = 0;
-    container.addEventListener('touchstart', e => {
-        if (e.touches.length === 1) touchY = e.touches[0].clientY;
-    }, { passive: true });
-
-    container.addEventListener('touchend', e => {
-        const delta = e.changedTouches[0].clientY - touchY;
-        if (Math.abs(delta) > 50) delta < 0 ? play(i + 1) : play(i - 1);
-    }, { passive: true });
+    };
+    container.addEventListener('wheel', wheelHandler, { passive: false });
+    if (media) media.addEventListener('wheel', wheelHandler, { passive: false });
+    if (thumb) thumb.addEventListener('wheel', wheelHandler, { passive: false });
 
     const keyHandler = e => {
         if (e.key === 'Escape') close();
+        if (['ArrowUp','ArrowDown'].includes(e.key)) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.key === 'ArrowDown' ? play(i + 1) : play(i - 1);
+        }
         if (e.key === 'Delete') {
             if (!confirm('Delete this file?')) return;
             const del = playlist[i];
@@ -700,10 +688,24 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
     };
     document.addEventListener('keydown', keyHandler);
 
-    container.addEventListener('click', function(e) {
-        if (e.target === container) {
-            close();
-        }
+    const cleanupWheel = () => {
+        container.removeEventListener('wheel', wheelHandler, { passive: false });
+        if (media) media.removeEventListener('wheel', wheelHandler, { passive: false });
+        if (thumb) thumb.removeEventListener('wheel', wheelHandler, { passive: false });
+        document.removeEventListener('keydown', keyHandler);
+    };
+
+    // ======= TOUCH SUPPORT =======
+    let touchY = 0;
+    container.addEventListener('touchstart', e => { if(e.touches.length===1) touchY=e.touches[0].clientY; }, { passive:true });
+    container.addEventListener('touchend', e => {
+        const delta = e.changedTouches[0].clientY - touchY;
+        if (Math.abs(delta) > 50) delta < 0 ? play(i + 1) : play(i - 1);
+    }, { passive:true });
+
+    // ======= CLICK-OUTSIDE TO CLOSE =======
+    container.addEventListener('click', e => {
+        if (e.target === container) close();
     });
 }
 
