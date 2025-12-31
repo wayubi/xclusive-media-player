@@ -533,141 +533,143 @@ function createFullscreenMedia(playlist,i,startTime){
     return {media,isAudio};
 }
 
-function createFullscreenImage(playlist, index) {
-    const src = playlist[index];
-    const img = document.createElement('img');
-    img.src = src;
-    img.style.cssText = `
-        max-width: 95vw;
-        max-height: 92vh;
-        object-fit: contain;
-        border-radius: 8px;
-        box-shadow: 0 0 40px rgba(0,0,0,0.6);
-    `;
-    return img;
-}
-
 function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
     if (!playlist.length) return;
     let i = index;
+
     const container = document.createElement('div');
     container.style.cssText =
-        'position:fixed;top:0;left:0;width:100%;height:100%;background:black;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;';
+        'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0, 0, 0, 1);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;';
     document.body.appendChild(container);
 
-    const currentFile = playlist[i];
-    const ext = currentFile.split('.').pop().toLowerCase();
-    const isImage = ['jpg','jpeg','png','gif','webp'].includes(ext);
-    const isAudio = ['mp3','wav','ogg'].includes(ext);
-
-    let media;
+    let mediaEl;
     let thumb = null;
 
-    if (isImage) {
-        media = document.createElement('img');
-        media.src = currentFile;
-        media.style.cssText = 'max-width:94vw;max-height:90vh;object-fit:contain;border-radius:6px;';
-    } else {
-        media = isAudio ? document.createElement('audio') : document.createElement('video');
-        media.src = currentFile;
-        media.currentTime = startTime;
-        media.autoplay = true;
-        media.playsInline = true;
-        media.controls = true;
-        media.muted = (fullscreenMode === 'playlist') ? muted : false;
+    function createMedia(file, startTime = 0) {
+        const ext = file.split('.').pop().toLowerCase();
+        const isImage = ['jpg','jpeg','png','gif','webp'].includes(ext);
+        const isAudio = ['mp3','wav','ogg'].includes(ext);
 
-        if (isAudio) {
-            media.style.cssText = 'width:100%;height:40px;';
-            thumb = document.createElement('img');
-            thumb.src = audioThumbs[currentFile] || 'cache/no-cover.jpg';
-            thumb.style.cssText = 'width:100%;height:100%;object-fit:contain;';
-            container.appendChild(thumb);
+        container.innerHTML = '';
+
+        if (isImage) {
+            mediaEl = document.createElement('img');
+            mediaEl.src = file;
+            mediaEl.style.cssText = `
+                max-width:95vw;
+                max-height:92vh;
+                object-fit:contain;
+                border-radius:8px;
+                box-shadow:0 0 40px rgba(0,0,0,0.6);
+                cursor:pointer;
+            `;
+            mediaEl.ondblclick = close;
+            container.appendChild(mediaEl);
         } else {
-            media.style.cssText = 'width:100%;height:100%;object-fit:contain;';
+            mediaEl = isAudio ? document.createElement('audio') : document.createElement('video');
+            mediaEl.src = file;
+            mediaEl.currentTime = startTime;
+            mediaEl.autoplay = true;
+            mediaEl.controls = !isAudio;
+            mediaEl.playsInline = !isAudio;
+            mediaEl.muted = !isAudio ? muted : false;
+
+            if (isAudio) {
+                mediaEl.style.cssText = 'width:100%;height:40px;margin-bottom:6px;border-radius:6px;';
+                thumb = document.createElement('img');
+                thumb.src = audioThumbs[file] || 'cache/no-cover.jpg';
+                thumb.style.cssText = `
+                    max-width:95vw;
+                    max-height:80vh;
+                    object-fit:contain;
+                    margin-bottom:6px;
+                    border-radius:8px;
+                    cursor:pointer;
+                `;
+                thumb.ondblclick = close;
+                container.appendChild(thumb);
+                container.appendChild(mediaEl);
+            } else {
+                mediaEl.style.cssText = `
+                    max-width:95vw;
+                    max-height:92vh;
+                    object-fit:contain;
+                    border-radius:8px;
+                    box-shadow:0 0 40px rgba(0,0,0,0.6);
+                    cursor:pointer;
+                `;
+                mediaEl.ondblclick = close;
+                container.appendChild(mediaEl);
+            }
+
+            mediaEl.addEventListener('loadedmetadata', () => {
+                if (!isAudio) {
+                    const aspect = mediaEl.videoWidth / mediaEl.videoHeight;
+                    if (aspect >= 1) {
+                        mediaEl.style.width = '95vw';
+                        mediaEl.style.height = 'auto';
+                    } else {
+                        mediaEl.style.width = 'auto';
+                        mediaEl.style.height = '92vh';
+                    }
+                    mediaEl.play().catch(() => {});
+                }
+            }, { once: true });
         }
 
-        media.addEventListener('loadedmetadata', () => media.play().catch(() => {}), {once:true});
+        // === attach loop/onended AFTER media is in DOM ===
+        const isSingleTileFullscreen = fullscreenMode === 'tile';
+        mediaEl.loop = isSingleTileFullscreen && !isImage;
+        if (!mediaEl.loop && !isImage) {
+            mediaEl.onended = () => play(i + 1);
+        }
     }
-
-    container.appendChild(media);
-
-    // === Main loop behavior decision ===
-    const isSingleTileFullscreen = fullscreenMode === 'tile';
-    
-    media.loop = isSingleTileFullscreen && !isImage;  // loop both audio & video in tile mode
-
-    if (!media.loop && !isImage) {
-        media.onended = () => play(i + 1);
-    }
-    // ===================================
 
     function play(idx) {
+        // Normalize index
         i = (idx + playlist.length) % playlist.length;
-        const nextFile = playlist[i];
-        const nextExt = nextFile.split('.').pop().toLowerCase();
-        const nextIsImage = ['jpg','jpeg','png','gif','webp'].includes(nextExt);
-        const nextIsAudio = ['mp3','wav','ogg'].includes(nextExt);
 
-        if (nextIsImage) {
-            container.innerHTML = '';
-            media = document.createElement('img');
-            media.src = nextFile;
-            media.style.cssText = 'max-width:94vw;max-height:90vh;object-fit:contain;border-radius:6px;';
-            container.appendChild(media);
-            media.ondblclick = close;
-        } else {
-            // Clean previous media
-            container.removeChild(media);
+        // Save current media state before switching
+        if (mediaEl) {
+            if (mediaEl.tagName === 'AUDIO' || mediaEl.tagName === 'VIDEO') {
+                lastFullscreen.time = mediaEl.currentTime;
+                lastFullscreen.file = playlist[i]; // track current file
+                mediaEl.pause();
+            }
             if (thumb) {
-                container.removeChild(thumb);
+                thumb.remove();
                 thumb = null;
             }
-
-            media = nextIsAudio ? document.createElement('audio') : document.createElement('video');
-            media.src = nextFile;
-            media.autoplay = true;
-            media.playsInline = true;
-            media.controls = true;
-            media.muted = (fullscreenMode === 'playlist') ? muted : false;
-
-            if (nextIsAudio) {
-                media.style.cssText = 'width:100%;height:40px;';
-                thumb = document.createElement('img');
-                thumb.src = audioThumbs[nextFile] || 'cache/no-cover.jpg';
-                thumb.style.cssText = 'width:100%;height:100%;object-fit:contain;';
-                container.appendChild(thumb);
-            } else {
-                media.style.cssText = 'width:100%;height:100%;object-fit:contain;';
-            }
-
-            container.appendChild(media);
-
-            // Re-apply same loop logic
-            media.loop = isSingleTileFullscreen && !nextIsImage;
-            if (!media.loop && !nextIsImage) {
-                media.onended = () => play(i + 1);
-            }
-
-            media.play().catch(() => {});
+            mediaEl.remove();
+            mediaEl = null;
         }
+
+        // Create new media, starting from saved time if available
+        const startTime = (lastFullscreen.file === playlist[i] && lastFullscreen.time) ? lastFullscreen.time : 0;
+        createMedia(playlist[i], startTime);
     }
 
     function close() {
-        if (!isImage) {
-            lastFullscreen.time = media.currentTime;
-            if (!isAudio) lastFullscreen.file = playlist[i];
+        if (mediaEl && mediaEl.tagName.toLowerCase() !== 'img') {
+            lastFullscreen.time = mediaEl.currentTime;
+            lastFullscreen.file = playlist[i]; // always track last file
         } else {
             lastFullscreen.time = 0;
             lastFullscreen.file = playlist[i];
         }
+
+        // Update grid to show the current file
         startIndex = Math.floor(allVideos.indexOf(playlist[i]) / totalCells) * totalCells;
         renderGrid();
-        container.remove();
+
+        // Cleanup DOM and listeners
+        if (thumb) { thumb.remove(); thumb = null; }
+        if (mediaEl) { mediaEl.remove(); mediaEl = null; }
+        container?.remove();
         document.removeEventListener('keydown', keyHandler);
     }
 
-    media.ondblclick = close;
-    if (thumb) thumb.ondblclick = close;
+    createMedia(playlist[i], startTime);
 
     container.addEventListener('wheel', e => {
         e.preventDefault();
@@ -700,10 +702,8 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
     };
     document.addEventListener('keydown', keyHandler);
 
-    container.addEventListener('click', function(e) {
-        if (e.target === container) {
-            close();
-        }
+    container.addEventListener('click', e => {
+        if (e.target === container) close();
     });
 }
 
