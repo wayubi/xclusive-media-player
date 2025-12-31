@@ -507,46 +507,60 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
         'position:fixed;top:0;left:0;width:100%;height:100%;background:black;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;';
     document.body.appendChild(container);
 
-    // ── Determine type early ───────────────────────────────────────
     const currentFile = playlist[i];
     const ext = currentFile.split('.').pop().toLowerCase();
-    const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext);
+    const isImage = ['jpg','jpeg','png','gif','webp'].includes(ext);
+    const isAudio = ['mp3','wav','ogg'].includes(ext);
 
     let media;
-    let isAudio = false;
     let thumb = null;
 
     if (isImage) {
-        // Simple static image
         media = document.createElement('img');
         media.src = currentFile;
         media.style.cssText = 'max-width:94vw;max-height:90vh;object-fit:contain;border-radius:6px;';
     } else {
-        // Original audio/video handling
-        const result = createFullscreenMedia(playlist, i, startTime);
-        media = result.media;
-        isAudio = result.isAudio;
+        media = isAudio ? document.createElement('audio') : document.createElement('video');
+        media.src = currentFile;
+        media.currentTime = startTime;
+        media.autoplay = true;
+        media.playsInline = true;
+        media.controls = true;
+        media.muted = (fullscreenMode === 'playlist') ? muted : false;
 
         if (isAudio) {
+            media.style.cssText = 'width:100%;height:40px;';
             thumb = document.createElement('img');
             thumb.src = audioThumbs[currentFile] || 'cache/no-cover.jpg';
             thumb.style.cssText = 'width:100%;height:100%;object-fit:contain;';
             container.appendChild(thumb);
+        } else {
+            media.style.cssText = 'width:100%;height:100%;object-fit:contain;';
         }
+
+        media.addEventListener('loadedmetadata', () => media.play().catch(() => {}), {once:true});
     }
 
     container.appendChild(media);
 
-    // ───────────────────────────────────────────────────────────────
+    // === Main loop behavior decision ===
+    const isSingleTileFullscreen = fullscreenMode === 'tile';
+    
+    media.loop = isSingleTileFullscreen && !isImage;  // loop both audio & video in tile mode
+
+    if (!media.loop && !isImage) {
+        media.onended = () => play(i + 1);
+    }
+    // ===================================
 
     function play(idx) {
         i = (idx + playlist.length) % playlist.length;
         const nextFile = playlist[i];
         const nextExt = nextFile.split('.').pop().toLowerCase();
-        const nextIsImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(nextExt);
+        const nextIsImage = ['jpg','jpeg','png','gif','webp'].includes(nextExt);
+        const nextIsAudio = ['mp3','wav','ogg'].includes(nextExt);
 
         if (nextIsImage) {
-            // Switch to image
             container.innerHTML = '';
             media = document.createElement('img');
             media.src = nextFile;
@@ -554,24 +568,50 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
             container.appendChild(media);
             media.ondblclick = close;
         } else {
-            // Original audio/video switch
+            // Clean previous media
+            container.removeChild(media);
+            if (thumb) {
+                container.removeChild(thumb);
+                thumb = null;
+            }
+
+            media = nextIsAudio ? document.createElement('audio') : document.createElement('video');
             media.src = nextFile;
+            media.autoplay = true;
+            media.playsInline = true;
+            media.controls = true;
+            media.muted = (fullscreenMode === 'playlist') ? muted : false;
+
+            if (nextIsAudio) {
+                media.style.cssText = 'width:100%;height:40px;';
+                thumb = document.createElement('img');
+                thumb.src = audioThumbs[nextFile] || 'cache/no-cover.jpg';
+                thumb.style.cssText = 'width:100%;height:100%;object-fit:contain;';
+                container.appendChild(thumb);
+            } else {
+                media.style.cssText = 'width:100%;height:100%;object-fit:contain;';
+            }
+
+            container.appendChild(media);
+
+            // Re-apply same loop logic
+            media.loop = isSingleTileFullscreen && !nextIsImage;
+            if (!media.loop && !nextIsImage) {
+                media.onended = () => play(i + 1);
+            }
+
             media.play().catch(() => {});
-            if (thumb) thumb.src = audioThumbs[nextFile] || 'cache/no-cover.jpg';
-            if (isAudio) lastFullscreen.file = nextFile; // only for audio
         }
     }
 
     function close() {
-        // Only save time for audio/video
         if (!isImage) {
             lastFullscreen.time = media.currentTime;
             if (!isAudio) lastFullscreen.file = playlist[i];
         } else {
             lastFullscreen.time = 0;
-            lastFullscreen.file = playlist[i]; // optional, for returning to same image
+            lastFullscreen.file = playlist[i];
         }
-
         startIndex = Math.floor(allVideos.indexOf(playlist[i]) / totalCells) * totalCells;
         renderGrid();
         container.remove();
@@ -580,12 +620,6 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
 
     media.ondblclick = close;
     if (thumb) thumb.ondblclick = close;
-
-    // Loop & auto-next only for audio/video
-    if (!isImage) {
-        media.loop = (fullscreenMode === 'tile' && isAudio);
-        if (!media.loop) media.onended = () => play(i + 1);
-    }
 
     container.addEventListener('wheel', e => {
         e.preventDefault();
