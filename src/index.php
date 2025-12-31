@@ -251,22 +251,24 @@ function addFileInfoOverlay(container, file) {
     const isImage = ['jpg','jpeg','png','gif','webp'].includes(ext);
     const isVideo = ['mp4','webm','mkv'].includes(ext);
 
-    if (isImage) {
-        const img = new Image();
-        img.onload = () => {
-            overlay.innerHTML = `${file} (${img.width}×${img.height})`;
-        };
-        img.src = file; // or dataset.src if using lazy loading
-    } else if (isVideo) {
-        const video = document.createElement('video');
-        video.preload = 'metadata';
-        video.onloadedmetadata = () => {
-            overlay.innerHTML = `${file} (${video.videoWidth}×${video.videoHeight})`;
-        };
-        video.src = file;
-    } else {
-        overlay.innerHTML = file; // for audio or unsupported files
-    }
+    // if (isImage) {
+    //     const img = new Image();
+    //     img.onload = () => {
+    //         overlay.innerHTML = `${file} (${img.width}×${img.height})`;
+    //     };
+    //     img.src = file; // or dataset.src if using lazy loading
+    // } else if (isVideo) {
+    //     const video = document.createElement('video');
+    //     video.preload = 'metadata';
+    //     video.onloadedmetadata = () => {
+    //         overlay.innerHTML = `${file} (${video.videoWidth}×${video.videoHeight})`;
+    //     };
+    //     video.src = file;
+    // } else {
+    //     overlay.innerHTML = file; // for audio or unsupported files
+    // }
+
+    overlay.innerHTML = file;
 
     container.appendChild(overlay);
 }
