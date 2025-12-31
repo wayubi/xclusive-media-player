@@ -1,4 +1,31 @@
 <?php
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $data = json_decode(file_get_contents('php://input'), true);
+    if (($data['action'] ?? null) === 'delete' && !empty($data['files'])) {
+        $files = $data['files'];
+
+        // Prepare CURL to internal api.php
+        $ch = curl_init('http://php-cli:8080/api.php'); // api-container = container name
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
+            'action' => 'delete',
+            'files' => $files
+        ]));
+
+        $response = curl_exec($ch);
+        if (curl_errno($ch)) {
+            echo json_encode(['error' => curl_error($ch)]);
+        } else {
+            echo $response; // forward API response to frontend
+        }
+        curl_close($ch);
+        exit;
+    }
+}
+
 // =====================
 // CONFIG / SETTINGS
 // =====================
@@ -18,7 +45,6 @@ $total_cells = $selected_columns * $selected_rows;
 $muted = !isset($_GET['muted']) || $_GET['muted'] === 'true';
 $audited = !empty($_GET['audited']);
 $fileCount = (int)($_GET['fileCount'] ?? 0);
-$delete_file = !empty($_GET['delete']) ? rawurldecode($_GET['delete']) : null;
 
 // =====================
 // HELPERS
@@ -61,30 +87,6 @@ function filesystemToWebPath(string $fsPath, string $rootFs, string $rootWeb): s
     return $rootWeb.'/'.ltrim($relative,'/');
 }
 
-function handleFileDelete(?string $delete_file): void {
-    if (!$delete_file) return;
-
-    // Convert web path (/volumes/...) to filesystem path in container
-    $fsPath = __DIR__ . str_replace('/', DIRECTORY_SEPARATOR, $delete_file);
-
-    // Call php-cli API
-    $url = 'http://php-cli:8080/api.php';
-    $data = json_encode([
-        'action' => 'delete',
-        'file'   => $fsPath,
-    ]);
-
-    $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-    $resp = curl_exec($ch);
-    curl_close($ch);
-
-    exit;
-}
-
 function getCurrentPath(string $root, string $selected_path): string {
     $real = realpath($root.($selected_path ? '/'.$selected_path : '')) ?: $root;
     return str_starts_with($real,$root) ? $real : $root;
@@ -114,8 +116,6 @@ function renderFolderSelects(array $selected_parts, string $root_abs): void {
 // =====================
 // MAIN
 // =====================
-handleFileDelete($delete_file);
-
 $current_path = getCurrentPath($root_directory_absolute, $selected_path);
 if (!str_starts_with($current_path,$root_directory_absolute)) {
     $current_path = $root_directory_absolute;
@@ -238,33 +238,86 @@ function isFileVisible(file) {
 function addFileInfoOverlay(container, file) {
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
-    overlay.innerHTML = `<span>${file}</span><button onclick="deleteGridFile('${file}')">Delete</button>`;
+    overlay.innerHTML = `<span>${file}</span>`;
     container.appendChild(overlay);
 }
 
 function addCentralOverlay(container, mediaEl, file) {
     const overlay = document.createElement('div');
-    overlay.style.cssText = centralOverlayStyle;
+    overlay.style.cssText = centralOverlayStyle + 'display:flex;justify-content:space-between;';
 
-    const fsBtn = document.createElement('button');
-    fsBtn.innerHTML = '⛶';
-    fsBtn.style.cssText = buttonStyle;
-    fsBtn.onclick = e => { e.stopPropagation(); startFullscreenFrom(file, mediaEl.currentTime); };
-    overlay.appendChild(fsBtn);
+    // ===== Left: Multi-select / delete X button =====
+    const selectBtn = document.createElement('button');
+    selectBtn.innerHTML = '🗙';
+    selectBtn.style.cssText = buttonStyle + 'background:gray;'; // GRAY by default
+    selectBtn.dataset.file = file;
+    selectBtn.dataset.selected = 'false';
 
-    const muteBtn = document.createElement('button');
-    muteBtn.innerHTML = mediaEl.muted ? '🔇' : '🔊';
-    muteBtn.style.cssText = buttonStyle;
-    muteBtn.onclick = e => {
+    selectBtn.onclick = e => {
         e.stopPropagation();
-        document.querySelectorAll('#grid audio, #grid video').forEach(m => m !== mediaEl && (m.muted = true));
-        document.querySelectorAll('#grid .video-container button:nth-child(2)').forEach(b => b.innerHTML = '🔇');
-        mediaEl.muted = false;
-        muteBtn.innerHTML = '🔊';
-        lastFullscreen = { file: null, time: 0 };
-        mediaEl.play().catch(() => {});
+        const selected = selectBtn.dataset.selected === 'true';
+        if (!selected) {
+            // First click → select
+            selectBtn.dataset.selected = 'true';
+            selectBtn.style.background = 'red';
+        } else {
+            // Second click → trigger delete
+            const allSelectedBtns = document.querySelectorAll('#grid .video-container button[data-selected="true"]');
+            const filesToDelete = Array.from(allSelectedBtns).map(b => b.dataset.file);
+            if (!filesToDelete.length) return;
+            if (!confirm(`Delete ${filesToDelete.length} file(s)?`)) return;
+
+            fetch('index.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'delete', files: filesToDelete })
+            })
+            .then(resp => resp.json())
+            .then(data => {
+                if (data.error) {
+                    alert('Error deleting files: ' + data.error);
+                    console.error(data);
+                    return;
+                }
+
+                filesToDelete.forEach(f => {
+                    const idx = allVideos.indexOf(f);
+                    if (idx !== -1) allVideos.splice(idx,1);
+                });
+                startIndex = Math.min(startIndex, Math.max(0, allVideos.length - totalCells));
+                renderGrid();
+            })
+            .catch(err => {
+                console.error('Delete request failed', err);
+                alert('Failed to delete files. See console for details.');
+            });
+        }
     };
-    overlay.appendChild(muteBtn);
+    overlay.appendChild(selectBtn);
+
+    // ===== Right: Fullscreen button (only for audio/video) =====
+    if (mediaEl && (mediaEl.tagName === 'VIDEO' || mediaEl.tagName === 'AUDIO')) {
+        const fsBtn = document.createElement('button');
+        fsBtn.innerHTML = '⛶';
+        fsBtn.style.cssText = buttonStyle;
+        fsBtn.onclick = e => { e.stopPropagation(); startFullscreenFrom(file, mediaEl.currentTime); };
+        overlay.appendChild(fsBtn);
+
+        // ===== Right: Mute/unmute button =====
+        const muteBtn = document.createElement('button');
+        muteBtn.innerHTML = mediaEl.muted ? '🔇' : '🔊';
+        muteBtn.style.cssText = buttonStyle;
+        muteBtn.onclick = e => {
+            e.stopPropagation();
+            document.querySelectorAll('#grid audio, #grid video').forEach(m => m !== mediaEl && (m.muted = true));
+            document.querySelectorAll('#grid .video-container button:nth-child(3)').forEach(b => b.innerHTML = '🔇');
+            mediaEl.muted = false;
+            muteBtn.innerHTML = '🔊';
+            lastFullscreen = { file: null, time: 0 };
+            mediaEl.play().catch(() => {});
+        };
+        overlay.appendChild(muteBtn);
+    }
 
     container.appendChild(overlay);
     container.addEventListener('mouseenter', () => overlay.style.opacity = '1');
@@ -294,7 +347,6 @@ function createMediaContainer(file) {
         if (isLastFs) mediaEl.muted = false;
 
         container.appendChild(mediaEl);
-        addCentralOverlay(container, mediaEl, file);
     }
     else if (isAudio) {
         container.style.cssText = 'position:relative;display:flex;flex-direction:column;justify-content:center;align-items:center;';
@@ -317,7 +369,6 @@ function createMediaContainer(file) {
         container.appendChild(img);
         container.appendChild(mediaEl);
         audioQueue.push(mediaEl);
-        addCentralOverlay(container, mediaEl, file);
     }
     else if (isImage) {
         const img = document.createElement('img');
@@ -331,6 +382,7 @@ function createMediaContainer(file) {
         container.innerHTML = `<div style="color:red;padding:4px;">Unsupported: ${file}</div>`;
     }
 
+    addCentralOverlay(container, mediaEl, file);
     addFileInfoOverlay(container, file);
 
     if ((isVideo || isAudio) && isLastFs && lastFullscreen.time > 0) {
@@ -379,15 +431,6 @@ function renderGrid() {
 
 function nextGrid() { startIndex = (startIndex + totalCells) % allVideos.length; renderGrid(); }
 function prevGrid() { startIndex = (startIndex - totalCells + allVideos.length) % allVideos.length; renderGrid(); }
-
-function deleteGridFile(file) {
-    if (!confirm('Delete this file?')) return;
-    const idx = allVideos.indexOf(file);
-    if (idx !== -1) allVideos.splice(idx,1);
-    fetch('index.php?delete='+encodeURIComponent(file));
-    if (startIndex >= allVideos.length) startIndex = Math.max(0, allVideos.length-totalCells);
-    renderGrid();
-}
 
 function toggleMute() { muted = !muted; document.getElementById('mute-button').innerHTML = muted?'🔇':'🔊'; renderGrid(); }
 
