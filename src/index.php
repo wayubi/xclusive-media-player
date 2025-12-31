@@ -62,10 +62,26 @@ function filesystemToWebPath(string $fsPath, string $rootFs, string $rootWeb): s
 }
 
 function handleFileDelete(?string $delete_file): void {
-    if (!$delete_file || !file_exists($delete_file)) return;
-    $trash = '/tmp/4cg-trash';
-    if (!is_dir($trash)) mkdir($trash,0777,true);
-    rename($delete_file,$trash.'/'.uniqid().'_'.basename($delete_file));
+    if (!$delete_file) return;
+
+    // Convert web path (/volumes/...) to filesystem path in container
+    $fsPath = __DIR__ . str_replace('/', DIRECTORY_SEPARATOR, $delete_file);
+
+    // Call php-cli API
+    $url = 'http://php-cli:8080/api.php';
+    $data = json_encode([
+        'action' => 'delete',
+        'file'   => $fsPath,
+    ]);
+
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+    $resp = curl_exec($ch);
+    curl_close($ch);
+
     exit;
 }
 

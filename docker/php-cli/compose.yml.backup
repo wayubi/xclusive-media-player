@@ -1,9 +1,0 @@
-services:
-  4cg:
-    build: .
-    ports:
-      - 8050:8080
-    volumes:
-      - ./data/apache/4cg:/opt/4cg
-      - /mnt/md2/incoming/pocket:/opt/4cg/volumes
-    restart: unless-stopped

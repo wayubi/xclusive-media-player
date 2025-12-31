@@ -10,6 +10,7 @@ services:
         hard: 8192
     depends_on:
       - php-fpm
+      - php-cli
     ports:
       - "8050:80"
     volumes:
@@ -29,18 +30,15 @@ services:
     networks:
       - app_network
 
-  # php-cli:
-  #   # image: php:8.4-cli
-  #   # working_dir: /var/www/html
-  #   build: .
-  #   volumes:
-  #     - ./src:/var/www/html
-  #     - ./volumes:/var/www/html/volumes
-  #   ports:
-  #     - "8050:8080"
-  #   # command: ["php", "-S", "0.0.0.0:8080", "./"]
-  #   # networks:
-  #   #   - app_network
+  php-cli:
+    image: php:8.4-cli
+    working_dir: /var/www/html
+    volumes:
+      - ./src:/var/www/html
+      - ./volumes:/var/www/html/volumes
+    command: ["php", "-S", "0.0.0.0:8080", "api.php"]
+    networks:
+      - app_network
 
 networks:
   app_network:
