@@ -15,9 +15,9 @@ $files = $data['file'] ?? $data['files'] ?? null;
 
 error_log("API request received: " . print_r($data, true));
 
-if (!$action || !$files) {
+if (!$action) {
     http_response_code(400);
-    echo json_encode(['error' => 'Missing parameters']);
+    echo json_encode(['error' => 'Missing action']);
     exit;
 }
 
@@ -59,6 +59,39 @@ switch ($action) {
         }
 
         echo json_encode(['status' => 'ok', 'results' => $results]);
+        break;
+
+    case 'audit':
+        $path  = $data['path'] ?? null;
+        $count = (int)($data['count'] ?? 0);
+
+        if (!$path) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Missing path']);
+            exit;
+        }
+
+        $fsPath = realpath(__DIR__ . '/' . ltrim($path, '/'));
+        if (!$fsPath || !is_dir($fsPath)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid path']);
+            exit;
+        }
+
+        $auditFile = $fsPath . '/.audited';
+        $timestamp = date('ymd');
+        $line = "$timestamp / $count";
+
+        if (file_put_contents($auditFile, $line . PHP_EOL) === false) {
+            http_response_code(500);
+            echo json_encode(['error' => 'Failed to write audit file']);
+            exit;
+        }
+
+        echo json_encode([
+            'status' => 'ok',
+            'text'   => $line
+        ]);
         break;
 
     default:

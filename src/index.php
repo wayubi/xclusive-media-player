@@ -2,24 +2,53 @@
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $data = json_decode(file_get_contents('php://input'), true);
-    if (($data['action'] ?? null) === 'delete' && !empty($data['files'])) {
-        $files = $data['files'];
 
-        // Prepare CURL to internal api.php
-        $ch = curl_init('http://php-cli:8080/api.php'); // api-container = container name
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
-            'action' => 'delete',
-            'files' => $files
-        ]));
+    // =====================
+    // DELETE
+    // =====================
+    if (($data['action'] ?? null) === 'delete' && !empty($data['files'])) {
+        $ch = curl_init('http://php-cli:8080/api.php');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+            CURLOPT_POSTFIELDS     => json_encode([
+                'action' => 'delete',
+                'files'  => $data['files']
+            ])
+        ]);
 
         $response = curl_exec($ch);
         if (curl_errno($ch)) {
             echo json_encode(['error' => curl_error($ch)]);
         } else {
-            echo $response; // forward API response to frontend
+            echo $response;
+        }
+        curl_close($ch);
+        exit;
+    }
+
+    // =====================
+    // AUDIT
+    // =====================
+    if (($data['action'] ?? null) === 'audit' && !empty($data['path'])) {
+        $ch = curl_init('http://php-cli:8080/api.php');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+            CURLOPT_POSTFIELDS     => json_encode([
+                'action' => 'audit',
+                'path'   => $data['path'],
+                'count'  => (int)($data['count'] ?? 0)
+            ])
+        ]);
+
+        $response = curl_exec($ch);
+        if (curl_errno($ch)) {
+            echo json_encode(['error' => curl_error($ch)]);
+        } else {
+            echo $response;
         }
         curl_close($ch);
         exit;
@@ -43,7 +72,6 @@ $selected_rows    = $is_mobile ? 1 : max(1, min(6, (int)($_GET['rows'] ?? 2)));
 $total_cells = $selected_columns * $selected_rows;
 
 $muted = !isset($_GET['muted']) || $_GET['muted'] === 'true';
-$audited = !empty($_GET['audited']);
 $fileCount = (int)($_GET['fileCount'] ?? 0);
 
 // =====================
@@ -72,8 +100,15 @@ function getFiles(string $path): array {
     foreach ($it as $file) {
         if (!$file->isFile()) continue;
 
+        // Skip audit files
+        if ($file->getFilename() === '.audited') continue;
+
         // Normalize path safely
-        $pathname = iconv('UTF-8', 'UTF-8//IGNORE', $file->getPathname());
+        $pathname = $file->getPathname();
+
+        if (!mb_check_encoding($pathname, 'UTF-8')) {
+            $pathname = iconv('UTF-8', 'UTF-8//IGNORE', $pathname);
+        }
 
         // Only log if the file literally doesn't exist (rare)
         if (!file_exists($pathname)) {
@@ -146,13 +181,6 @@ foreach ($audioThumbsRaw as $audioFs=>$thumbFs) {
     $audioWeb = filesystemToWebPath($audioFs,$root_directory_absolute,$webRoot);
     $thumbWeb = $docRoot ? '/'.ltrim(str_replace('\\','/',str_replace($docRoot,'',realpath($thumbFs))),'/') : '';
     $audioThumbs[$audioWeb] = $thumbWeb ?: 'cache/no-cover.jpg';
-}
-
-if ($audited) {
-    file_put_contents($auditFile,date('Y-m-d H:i:s')." / $fileCount".PHP_EOL);
-    $redirect = 'index.php?selected-path='.implode('&selected-path=',array_map('urlencode',$selected_path_parts))
-              ."&columns=$selected_columns&rows=$selected_rows";
-    header("Location: $redirect"); exit;
 }
 ?>
 <!DOCTYPE html>
@@ -668,7 +696,31 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
 
 function playAll(){ fullscreenMode='playlist'; document.querySelectorAll('#grid audio, #grid video').forEach(m=>m.pause()); startFullscreenPlayer(allVideos,startIndex); }
 function shufflePlay(){ fullscreenMode='playlist'; document.querySelectorAll('#grid audio, #grid video').forEach(m=>m.pause()); startFullscreenPlayer([...allVideos].sort(()=>Math.random()-0.5),0); }
-function runAudit(count){ const url=new URL(location); url.searchParams.set('audited','true'); url.searchParams.set('fileCount',count); location.href=url; }
+
+function runAudit(count) {
+    fetch('index.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'audit',
+            path: <?= json_encode($selected_path ? $root_directory.'/'.$selected_path : $root_directory) ?>,
+            count: count
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            alert('Audit failed: ' + data.error);
+            return;
+        }
+
+        document.getElementById('audit-text').innerText = `[ ${data.text} ]`;
+    })
+    .catch(err => {
+        console.error('Audit request failed', err);
+        alert('Audit request failed');
+    });
+}
 
 const grid=document.getElementById('grid'); let scrollDebounce=false;
 grid.addEventListener('wheel',e=>{ e.preventDefault(); if(scrollDebounce) return; scrollDebounce=true; setTimeout(()=>scrollDebounce=false,200); e.deltaY<0?prevGrid():nextGrid(); },{passive:false});
