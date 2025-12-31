@@ -50,9 +50,16 @@ $fileCount = (int)($_GET['fileCount'] ?? 0);
 // HELPERS
 // =====================
 function getSubfolders(string $path): array {
-    return is_dir($path) 
-        ? array_values(array_filter(scandir($path), fn($d) => $d !== '.' && $d !== '..' && is_dir("$path/$d")))
-        : [];
+    if (!is_dir($path)) {
+        return [];
+    }
+
+    $folders = scandir($path);
+    $filtered = array_filter($folders, fn($d) => $d !== '.' && $d !== '..' && is_dir("$path/$d"));
+    usort($filtered, function($a, $b) {
+        return strcasecmp($a, $b);
+    });
+    return array_values($filtered);
 }
 
 function getFiles(string $path): array {
