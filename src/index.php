@@ -65,7 +65,20 @@ if (!$root_directory_absolute) die('Root directory not found');
 $is_mobile = stripos($_SERVER['HTTP_USER_AGENT'] ?? '', 'Mobile') !== false
           || stripos($_SERVER['HTTP_USER_AGENT'] ?? '', 'Android') !== false;
 
-$selected_path_parts = array_values(array_filter($_GET['selected-path'] ?? [], 'strlen'));
+$raw_parts = array_values(array_filter($_GET['selected-path'] ?? [], 'strlen'));
+$selected_path_parts = [];
+
+$cursor = $root_directory_absolute;
+
+foreach ($raw_parts as $part) {
+    $next = $cursor . '/' . $part;
+    if (!is_dir($next)) {
+        break;
+    }
+    $selected_path_parts[] = $part;
+    $cursor = $next;
+}
+
 $selected_path = implode('/', $selected_path_parts);
 $selected_columns = $is_mobile ? 1 : max(1, min(6, (int)($_GET['columns'] ?? 3)));
 $selected_rows    = $is_mobile ? 1 : max(1, min(6, (int)($_GET['rows'] ?? 2)));
