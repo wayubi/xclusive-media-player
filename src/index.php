@@ -31,15 +31,26 @@ function getSubfolders(string $path): array {
 
 function getFiles(string $path): array {
     if (!is_dir($path)) return [];
+
     $files = [];
-    $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS));
-    foreach ($it as $f) {
-        if (!$f->isFile()) continue;
-        $ext = strtolower($f->getExtension());
-        if (in_array($ext, ['backup', 'original'])) continue;
-        $files[] = $f->getPathname();
+    $dirIterator = new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS);
+    $it = new RecursiveIteratorIterator($dirIterator, RecursiveIteratorIterator::SELF_FIRST);
+
+    foreach ($it as $file) {
+        if (!$file->isFile()) continue;
+
+        // Normalize path safely
+        $pathname = iconv('UTF-8', 'UTF-8//IGNORE', $file->getPathname());
+
+        // Only log if the file literally doesn't exist (rare)
+        if (!file_exists($pathname)) {
+            error_log("Warning: File truly missing or invalid UTF-8: $pathname");
+        }
+
+        $files[] = $pathname;
     }
-    usort($files, fn($a,$b) => filemtime($b) <=> filemtime($a));
+
+    usort($files, fn($a, $b) => @filemtime($b) <=> @filemtime($a));
     return $files;
 }
 
