@@ -418,41 +418,46 @@ function createMediaContainer(file) {
     const isLastFs = lastFullscreen.file === file;
     let mediaEl = null;
 
-    if (isVideo) {
-        mediaEl = document.createElement('video');
+    if (isVideo || isAudio) {
+        mediaEl = isVideo 
+            ? document.createElement('video') 
+            : document.createElement('audio');
+
         mediaEl.loop = true;
-        mediaEl.playsInline = true;
+        mediaEl.playsInline = true;  // useful for both
         mediaEl.preload = 'none';
         mediaEl.dataset.src = file;
+        mediaEl.dataset.file = file;
 
-        const visibleVideos = allVideos.slice(startIndex, startIndex + totalCells)
-            .filter(f => ['mp4','webm','mkv'].includes(f.split('.').pop().toLowerCase()));
-        mediaEl.muted = muted || (!isLastFs && visibleVideos[0] !== file);
-        if (isLastFs) mediaEl.muted = false;
+        // Priority: recent fullscreen (if visible) → wins
+        const isRecentFullscreen = (lastFullscreen.file === file) && isFileVisible(file);
+
+        // Base state: respect global muted flag
+        let shouldBeUnmuted = isRecentFullscreen;
+
+        // If global is unmuted AND no fullscreen priority → default to first visible media
+        if (!shouldBeUnmuted && !muted) {
+            const visibleMedia = allVideos.slice(startIndex, startIndex + totalCells)
+                .filter(f => /\.(mp4|webm|mkv|mp3|wav|ogg)$/i.test(f));
+            if (visibleMedia[0] === file) {
+                shouldBeUnmuted = true;
+            }
+        }
+
+        mediaEl.muted = !shouldBeUnmuted;
+
+        // Audio-specific setup
+        if (isAudio) {
+            container.style.cssText = 'position:relative;display:flex;flex-direction:column;justify-content:center;align-items:center;';
+            const img = document.createElement('img');
+            img.style.cssText = 'width:100%;height:100%;object-fit:cover;cursor:pointer;border-radius:8px;';
+            img.dataset.src = audioThumbs[file] || 'cache/no-cover.jpg';
+            img.onclick = () => startFullscreenFrom(file, mediaEl.currentTime);
+            container.appendChild(img);
+            audioQueue.push(mediaEl);
+        }
 
         container.appendChild(mediaEl);
-    }
-    else if (isAudio) {
-        container.style.cssText = 'position:relative;display:flex;flex-direction:column;justify-content:center;align-items:center;';
-        mediaEl = document.createElement('audio');
-        mediaEl.controls = false;
-        mediaEl.preload = 'metadata';
-        mediaEl.loop = true;
-        mediaEl.style.width = '100%';
-        mediaEl.dataset.src = file;
-
-        const visibleAudios = allVideos.slice(startIndex, startIndex + totalCells)
-            .filter(f => ['mp3','wav','ogg'].includes(f.split('.').pop().toLowerCase()));
-        const shouldUnmute = isLastFs || (!lastFullscreen.file && !muted && visibleAudios[0] === file);
-        mediaEl.muted = !shouldUnmute;
-
-        const img = document.createElement('img');
-        img.style.cssText = 'width:100%;height:100%;object-fit:cover;cursor:pointer;border-radius:8px;';
-        img.dataset.src = audioThumbs[file] || 'cache/no-cover.jpg';
-        img.onclick = () => startFullscreenFrom(file, mediaEl.currentTime);
-        container.appendChild(img);
-        container.appendChild(mediaEl);
-        audioQueue.push(mediaEl);
     }
     else if (isImage) {
         const img = document.createElement('img');
@@ -503,12 +508,27 @@ function renderGrid() {
     grid.querySelectorAll('video, img[data-src]').forEach(el => observer.observe(el));
 
     setTimeout(() => {
-        if (lastFullscreen.file) {
-            const media = [...grid.querySelectorAll('audio, video')].find(m => m.src?.endsWith(lastFullscreen.file));
-            if (media) { media.currentTime = lastFullscreen.time||0; media.muted=false; media.play().catch(()=>{}); return; }
+        const recentMedia = [...grid.querySelectorAll('audio, video')]
+            .find(m => m.dataset.file === lastFullscreen.file);
+
+        if (recentMedia) {
+            recentMedia.currentTime = lastFullscreen.time || 0;
+            recentMedia.muted = false;
+            recentMedia.play().catch(() => {});
+            return;
         }
-        grid.querySelectorAll('audio, video').forEach(m => !m.muted && m.play().catch(()=>{}));
-    }, 100);
+
+        // If global unmuted → make sure first media plays
+        if (!muted) {
+            const firstMedia = grid.querySelector('audio, video');
+            if (firstMedia) {
+                firstMedia.muted = false;
+                firstMedia.play().catch(() => {});
+            }
+        }
+    }, 150);
+
+    enforceSingleUnmuted();
 
     document.getElementById('file-count').innerText = `${startIndex+1} / ${allVideos.length}`;
 }
@@ -516,7 +536,59 @@ function renderGrid() {
 function nextGrid() { startIndex = (startIndex + totalCells) % allVideos.length; renderGrid(); }
 function prevGrid() { startIndex = (startIndex - totalCells + allVideos.length) % allVideos.length; renderGrid(); }
 
-function toggleMute() { muted = !muted; document.getElementById('mute-button').innerHTML = muted?'🔇':'🔊'; renderGrid(); }
+function toggleMute() {
+    muted = !muted;
+    document.getElementById('mute-button').innerHTML = muted ? '🔇' : '🔊';
+    
+    // Reset fullscreen priority when toggling global mute (prevents old fullscreen overriding)
+    if (muted) {
+        lastFullscreen = { file: null, time: 0 };
+    }
+    
+    renderGrid();
+}
+
+function enforceSingleUnmuted() {
+    const videos = Array.from(document.querySelectorAll('#grid video'));
+    if (!videos.length) return;
+
+    // Find which one should be unmuted
+    let targetVideo = null;
+
+    // Priority 1: recent fullscreen video (if visible)
+    if (lastFullscreen.file) {
+        targetVideo = videos.find(v => v.dataset.file === lastFullscreen.file);
+    }
+
+    // Priority 2: if no fullscreen priority → first visible (when global unmuted)
+    if (!targetVideo && !muted) {
+        targetVideo = videos[0];
+    }
+
+    if (targetVideo) {
+        // Mute all, unmute only the target
+        videos.forEach(v => v.muted = true);
+        targetVideo.muted = false;
+        targetVideo.play().catch(() => {});
+
+        // Sync overlay emojis
+        document.querySelectorAll('#grid .video-container button:nth-child(3)').forEach(b => {
+            b.innerHTML = '🔇';
+        });
+        // Find the button for the target video and set 🔊
+        const targetContainer = targetVideo.closest('.video-container');
+        if (targetContainer) {
+            const muteBtn = targetContainer.querySelector('button:nth-child(3)');
+            if (muteBtn) muteBtn.innerHTML = '🔊';
+        }
+    } else {
+        // No target → mute everything
+        videos.forEach(v => v.muted = true);
+        document.querySelectorAll('#grid .video-container button:nth-child(3)').forEach(b => {
+            b.innerHTML = '🔇';
+        });
+    }
+}
 
 function startFullscreenFrom(file,startTime=0){ fullscreenMode='tile'; document.querySelectorAll('#grid video, #grid audio').forEach(m=>m.pause()); lastFullscreen={file,time:startTime}; startFullscreenPlayer(allVideos,allVideos.indexOf(file),startTime); }
 
