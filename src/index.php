@@ -772,18 +772,48 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
         if (Math.abs(delta) > 50) delta < 0 ? play(i + 1) : play(i - 1);
     }, { passive: true });
 
-    const keyHandler = e => {
-        if (e.key === 'Escape') close();
+    const keyHandler = async e => {
+        if (e.key === 'Escape') return close();
+
         if (e.key === 'Delete') {
             if (!confirm('Delete this file?')) return;
+
             const del = playlist[i];
-            playlist.splice(i, 1);
-            const globalIdx = allVideos.indexOf(del);
-            if (globalIdx !== -1) allVideos.splice(globalIdx, 1);
-            fetch('index.php?delete=' + encodeURIComponent(del));
-            renderGrid();
-            if (!playlist.length) close();
-            else play(i % playlist.length);
+
+            try {
+                // Use POST JSON API instead of old GET
+                const resp = await fetch('index.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'delete', files: [del] })
+                });
+                const data = await resp.json();
+
+                if (data.error) {
+                    alert('Error deleting file: ' + data.error);
+                    console.error(data);
+                    return;
+                }
+
+                // Remove from playlist and allVideos
+                playlist.splice(i, 1);
+                const globalIdx = allVideos.indexOf(del);
+                if (globalIdx !== -1) allVideos.splice(globalIdx, 1);
+
+                // Update grid
+                renderGrid();
+
+                // If playlist is empty, close fullscreen
+                if (!playlist.length) return close();
+
+                // Play next video in place of deleted one
+                i = i % playlist.length;
+                play(i);
+
+            } catch (err) {
+                console.error('Delete request failed', err);
+                alert('Failed to delete file. See console.');
+            }
         }
     };
     document.addEventListener('keydown', keyHandler);
