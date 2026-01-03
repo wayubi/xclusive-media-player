@@ -1,2 +1,19 @@
+##### PHP / Backend #####
 src/cache/
 src/vendor/
+
+##### Android / Gradle #####
+android-app/.gradle/
+android-app/build/
+android-app/app/build/
+
+# Android Studio / IntelliJ
+android-app/.idea/
+android-app/*.iml
+
+# Local SDK / machine config
+android-app/local.properties
+
+##### OS junk #####
+.DS_Store
+Thumbs.db
