@@ -27,13 +27,18 @@ class MainActivity : AppCompatActivity() {
     private var playerView: PlayerView? = null
     private var player: ExoPlayer? = null
 
+    private val useExoPlayer: Boolean by lazy {
+        resources.getBoolean(R.bool.use_exoplayer)
+    }
+
     private val serverBase by lazy {
         val ip = getString(R.string.server_ip)
         val port = getString(R.string.server_port)
         "http://$ip:$port"
     }
 
-    @OptIn(UnstableApi::class) override fun onCreate(savedInstanceState: Bundle?) {
+    @OptIn(UnstableApi::class)
+    override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         window.decorView.setBackgroundColor(android.graphics.Color.BLACK)
@@ -51,12 +56,19 @@ class MainActivity : AppCompatActivity() {
 //        playerView?.requestFocus()
 
         setupWebView()
-        webView.loadUrl(serverBase)
+
+        if (useExoPlayer) {
+            webView.loadUrl(serverBase)
+        } else {
+            webView.visibility = View.VISIBLE
+            playerView?.visibility = View.GONE
+            webView.loadUrl(serverBase)
+        }
 
         // Back button handling
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (playerView?.visibility == View.VISIBLE) {
+                if (useExoPlayer && playerView?.visibility == View.VISIBLE) {
                     stopVideo()
                 } else if (webView.canGoBack()) {
                     webView.goBack()
@@ -88,7 +100,7 @@ class MainActivity : AppCompatActivity() {
             setRenderPriority(WebSettings.RenderPriority.HIGH) // Deprecated but still helps
         }
 
-        webView.addJavascriptInterface(PlayerBridge(this, serverBase), "AndroidPlayer")
+        webView.addJavascriptInterface(PlayerBridge(this, serverBase, useExoPlayer), "AndroidPlayer")
 
         webView.webChromeClient = object : WebChromeClient() {
             override fun onCreateWindow(
@@ -112,6 +124,15 @@ class MainActivity : AppCompatActivity() {
                     return true
                 }
                 return false
+            }
+
+            // Inject JS after the page has finished loading
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                webView.evaluateJavascript(
+                    "window.useExoPlayer = ${useExoPlayer.toString()};",
+                    null
+                )
             }
         }
     }
@@ -170,6 +191,10 @@ class MainActivity : AppCompatActivity() {
 
     fun stopFromJs() {
         stopVideo()
+    }
+
+    fun loadWebViewUrl(url: String) {
+        webView.loadUrl(url);
     }
 
     private fun stopVideo() {
