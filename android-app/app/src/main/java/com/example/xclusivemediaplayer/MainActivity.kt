@@ -27,7 +27,11 @@ class MainActivity : AppCompatActivity() {
     private var playerView: PlayerView? = null
     private var player: ExoPlayer? = null
 
-    private val serverBase = "http://192.168.11.200:8050"
+    private val serverBase by lazy {
+        val ip = getString(R.string.server_ip)
+        val port = getString(R.string.server_port)
+        "http://$ip:$port"
+    }
 
     @OptIn(UnstableApi::class) override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -84,7 +88,7 @@ class MainActivity : AppCompatActivity() {
             setRenderPriority(WebSettings.RenderPriority.HIGH) // Deprecated but still helps
         }
 
-        webView.addJavascriptInterface(PlayerBridge(this), "AndroidPlayer")
+        webView.addJavascriptInterface(PlayerBridge(this, serverBase), "AndroidPlayer")
 
         webView.webChromeClient = object : WebChromeClient() {
             override fun onCreateWindow(

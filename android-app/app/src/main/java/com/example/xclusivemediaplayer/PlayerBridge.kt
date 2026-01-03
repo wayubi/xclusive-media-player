@@ -3,7 +3,7 @@ package com.example.xclusivemediaplayer
 import android.webkit.JavascriptInterface
 import org.json.JSONArray
 
-class PlayerBridge(private val activity: MainActivity) {
+class PlayerBridge(private val activity: MainActivity, private val serverBase: String) {
 
     @JavascriptInterface
     fun playFullscreen(playlistJson: String, index: Int, startTime: Double) {
@@ -24,7 +24,6 @@ class PlayerBridge(private val activity: MainActivity) {
     private fun convertLocalPathsToHttp(playlistJson: String): String {
         val playlist = JSONArray(playlistJson)
         val httpPlaylist = mutableListOf<String>()
-        val serverBase = "http://192.168.11.200:8050"
 
         for (i in 0 until playlist.length()) {
             val localPath = playlist.getString(i).replace("\\", "/")
