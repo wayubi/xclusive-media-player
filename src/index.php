@@ -609,6 +609,15 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
     if (!playlist.length) return;
     let i = index;
 
+    if (window.AndroidPlayer && window.useExoPlayer) {
+        AndroidPlayer.playFullscreen(
+            JSON.stringify(playlist),
+            i,
+            startTime
+        );
+        return;
+    }
+
     const container = document.createElement('div');
     container.style.cssText =
         'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0, 0, 0, 1);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;';
@@ -775,6 +784,24 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
     const keyHandler = async e => {
         if (e.key === 'Escape') return close();
 
+        // Fire TV close fullscreen mode
+        if (e.keyCode === 38 || e.keyCode === 40) {
+            e.preventDefault();
+            return close();
+        }
+
+        // Fire TV previous / next in fullscreen
+        if (e.keyCode === 37) { // Left arrow → previous
+            e.preventDefault();
+            play(i - 1);
+            return;
+        }
+        if (e.keyCode === 39) { // Right arrow → next
+            e.preventDefault();
+            play(i + 1);
+            return;
+        }
+
         if (e.key === 'Delete') {
             if (!confirm('Delete this file?')) return;
 
@@ -859,6 +886,11 @@ grid.addEventListener('touchend',e=>{ const delta=e.changedTouches[0].clientY-to
 
 function setVhUnit(){ document.documentElement.style.setProperty('--vh',`${window.innerHeight*0.01}px`); }
 setVhUnit(); window.addEventListener('resize',setVhUnit); window.addEventListener('orientationchange',setVhUnit);
+
+// Temporary debugging for Fire TV remote keys
+// document.addEventListener('keydown', e => {
+//    alert(`Key pressed!\nkey: "${e.key}"\nkeyCode: ${e.keyCode}`);
+// });
 
 renderGrid();
 </script>
