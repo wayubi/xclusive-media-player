@@ -31,7 +31,9 @@ services:
       - app_network
 
   php-cli:
-    image: php:8.4-cli
+    build:
+      context: ./docker/php-cli
+      dockerfile: Dockerfile
     working_dir: /var/www/html
     volumes:
       - ./src:/var/www/html

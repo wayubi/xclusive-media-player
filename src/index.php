@@ -53,6 +53,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         curl_close($ch);
         exit;
     }
+
+    // =====================
+    // METADATA
+    // =====================
+    if (($data['action'] ?? null) === 'metadata' && !empty($data['file'])) {
+        $ch = curl_init('http://php-cli:8080/api.php');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+            CURLOPT_POSTFIELDS     => json_encode([
+                'action' => 'metadata',
+                'file'   => $data['file']
+            ])
+        ]);
+
+        $response = curl_exec($ch);
+        if (curl_errno($ch)) {
+            echo json_encode(['error' => curl_error($ch)]);
+        } else {
+            echo $response;
+        }
+        curl_close($ch);
+        exit;
+    }
 }
 
 // =====================
@@ -283,42 +308,76 @@ function isFileVisible(file) {
     return allVideos.slice(startIndex, end).includes(file);
 }
 
-function addFileInfoOverlay(container, file) {
+async function addFileInfoOverlay(container, file) {
+    if (getComputedStyle(container).position === 'static') {
+        container.style.position = 'relative';
+    }
+
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
-    // overlay.style.position = 'absolute';
-    // overlay.style.bottom = '4px';
-    // overlay.style.left = '4px';
-    overlay.style.background = 'rgba(0,0,0,0.5)';
+    overlay.style.background = 'rgba(0,0,0,0.6)';
     overlay.style.color = 'white';
-    overlay.style.padding = '2px 4px';
-    overlay.style.fontSize = '16px';
+    overlay.style.padding = '2px 6px';
+    overlay.style.fontSize = '14px';
     overlay.style.borderRadius = '4px';
-
-    const ext = file.split('.').pop().toLowerCase();
-    const isImage = ['jpg','jpeg','png','gif','webp'].includes(ext);
-    const isVideo = ['mp4','webm','mkv'].includes(ext);
-
-    // if (isImage) {
-    //     const img = new Image();
-    //     img.onload = () => {
-    //         overlay.innerHTML = `${file} (${img.width}×${img.height})`;
-    //     };
-    //     img.src = file; // or dataset.src if using lazy loading
-    // } else if (isVideo) {
-    //     const video = document.createElement('video');
-    //     video.preload = 'metadata';
-    //     video.onloadedmetadata = () => {
-    //         overlay.innerHTML = `${file} (${video.videoWidth}×${video.videoHeight})`;
-    //     };
-    //     video.src = file;
-    // } else {
-    //     overlay.innerHTML = file; // for audio or unsupported files
-    // }
-
-    overlay.innerHTML = file;
+    overlay.style.pointerEvents = 'none';
+    overlay.textContent = file;
 
     container.appendChild(overlay);
+
+    try {
+        const res = await fetch('index.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'metadata',
+                file: file
+            })
+        });
+
+        if (!res.ok) throw new Error('Metadata request failed');
+
+        const meta = await res.json();
+        const parts = [meta.file];
+
+        // Video dimensions
+        if (meta.video?.width && meta.video?.height) {
+            parts.push(`${meta.video.width}×${meta.video.height}`);
+        }
+
+        // Duration in h m s
+        if (meta.duration) {
+            let totalSec = Math.floor(meta.duration);
+            const h = Math.floor(totalSec / 3600);
+            totalSec %= 3600;
+            const m = Math.floor(totalSec / 60);
+            const s = totalSec % 60;
+            const durationStr = `${h ? h + 'h ' : ''}${m ? m + 'm ' : ''}${s}s`;
+            parts.push(durationStr);
+        }
+
+        // Filesize in MB
+        if (meta.filesize) {
+            const mb = (meta.filesize / 1024 / 1024).toFixed(2);
+            parts.push(`${mb} MB`);
+        }
+
+        // Video codec, FPS, bitrate
+        if (meta.video) {
+            if (meta.video.codec) parts.push(meta.video.codec);
+            if (meta.video.fps) parts.push(`${meta.video.fps} FPS`);
+        }
+        if (meta.bitrate) {
+            const kbps = Math.round(meta.bitrate / 1000);
+            parts.push(`${kbps} kbps`);
+        }
+
+        overlay.textContent = parts.join(' • ');
+
+    } catch (err) {
+        console.warn('Metadata error:', err);
+        overlay.textContent = file; // fallback
+    }
 }
 
 function addCentralOverlay(container, mediaEl, file) {

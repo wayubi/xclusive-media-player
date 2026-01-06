@@ -94,6 +94,85 @@ switch ($action) {
         ]);
         break;
 
+    case 'metadata':
+        $file = $files[0] ?? null;
+        if (!$file) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Missing file']);
+            exit;
+        }
+
+        // Resolve filesystem path safely
+        $root = realpath(__DIR__ . '/volumes');
+        $fsPath = realpath(__DIR__ . '/' . ltrim($file, '/'));
+
+        if (!$fsPath || !str_starts_with($fsPath, $root) || !is_file($fsPath)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid file path']);
+            exit;
+        }
+
+        $cacheDir = $root . '/.metadata';
+        if (!is_dir($cacheDir)) {
+            mkdir($cacheDir, 0777, true);
+        }
+
+        $hash = sha1($fsPath);
+        $cacheFile = "$cacheDir/$hash.json";
+
+        if (!file_exists($cacheFile)) {
+            $cmd = sprintf(
+                'ffprobe -v quiet -print_format json -show_format -show_streams %s',
+                escapeshellarg($fsPath)
+            );
+
+            $raw = shell_exec($cmd);
+            if (!$raw) {
+                http_response_code(500);
+                echo json_encode(['error' => 'ffprobe failed']);
+                exit;
+            }
+
+            $meta = json_decode($raw, true);
+
+            // ---- Normalize useful fields ----
+            $video = null;
+            $audio = null;
+
+            foreach ($meta['streams'] ?? [] as $s) {
+                if ($s['codec_type'] === 'video' && !$video) $video = $s;
+                if ($s['codec_type'] === 'audio' && !$audio) $audio = $s;
+            }
+
+            $out = [
+                'file'      => basename($fsPath),
+                'filesize'  => filesize($fsPath),
+                'duration'  => isset($meta['format']['duration']) ? (float)$meta['format']['duration'] : null,
+                'bitrate'   => isset($meta['format']['bit_rate']) ? (int)$meta['format']['bit_rate'] : null,
+
+                'video' => $video ? [
+                    'codec'   => $video['codec_name'] ?? null,
+                    'width'   => $video['width'] ?? null,
+                    'height'  => $video['height'] ?? null,
+                    'fps'     => isset($video['avg_frame_rate']) && $video['avg_frame_rate'] !== '0/0'
+                        ? eval('return ' . $video['avg_frame_rate'] . ';')
+                        : null,
+                    'pix_fmt' => $video['pix_fmt'] ?? null,
+                ] : null,
+
+                'audio' => $audio ? [
+                    'codec'     => $audio['codec_name'] ?? null,
+                    'channels'  => $audio['channels'] ?? null,
+                    'sample_rate' => $audio['sample_rate'] ?? null,
+                ] : null,
+            ];
+
+            file_put_contents($cacheFile, json_encode($out, JSON_PRETTY_PRINT));
+        }
+
+        echo file_get_contents($cacheFile);
+        break;
+
     default:
         http_response_code(400);
         echo json_encode(['error' => 'Unknown action']);
