@@ -810,10 +810,8 @@ function renderGrid() {
         Math.max(0, allVideos.length - startIndex)
     );
 
-    const maxCols = <?= $selected_columns ?>;
-    const cols = autoColumns(visibleCount, maxCols);
+    const cols = Math.min(visibleCount, <?= $selected_columns ?>);
     const rows = Math.ceil(visibleCount / cols);
-
     grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
     grid.style.gridAutoRows = `${100 / rows}%`;
 
@@ -880,14 +878,6 @@ function computeGridDimensions(count, maxCols) {
     const cols = maxCols;
     const rows = Math.ceil(count / cols);
     return { cols, rows };
-}
-
-function autoColumns(count, maxCols) {
-    if (count <= 1) return 1;
-    if (count === 2) return 2;
-    if (count <= 4) return Math.min(2, maxCols);
-    if (count <= 6) return Math.min(3, maxCols);
-    return maxCols;
 }
 
 // ================================
