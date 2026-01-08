@@ -231,10 +231,10 @@ function renderSingleFolderSelect(array $selected_parts, string $current_abs_pat
     $has_children = !empty($subfolders);
     ?>
     <select name="goto_folder" id="folder-select"
-            onchange="this.form.action = 'index.php?t=' + Date.now(); this.form.submit();"
+            onchange="this.form.submit()"
             style="min-width:220px; max-width:360px; font-size:1.05rem;"
             autofocus>
-        <option value="" disabled <?= $has_children ? '' : 'selected' ?>>
+        <option value="" disabled selected>
             — <?= $has_children ? 'Select subfolder' : ($is_root ? 'No folders found' : 'No subfolders') ?> —
         </option>
 
