@@ -43,10 +43,11 @@ switch ($action) {
         $results = [];
 
         foreach ($files as $file) {
+            $decodedFile = urldecode($file);
             // Strip /volumes prefix
-            $cleanFile = ltrim(preg_replace('#^/volumes/#i', '', $file), '/');
+            $cleanFile = ltrim(preg_replace('#^/volumes/#i', '', $decodedFile), '/');
             $fsPath = realpath($root . '/' . $cleanFile);
-            
+
             if (!$fsPath || !str_starts_with($fsPath, $root) || !file_exists($fsPath)) {
                 $results[$file] = 'not_found';
                 continue;
