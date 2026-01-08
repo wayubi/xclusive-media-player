@@ -664,6 +664,7 @@ html, body {
 <script>
 // Core state
 let allVideos = <?= json_encode($allFiles, JSON_UNESCAPED_SLASHES) ?>;
+let allFilesWithPaths = <?= json_encode($allFilesRaw, JSON_UNESCAPED_SLASHES) ?>;
 const audioThumbs = <?= json_encode($audioThumbs, JSON_UNESCAPED_SLASHES) ?>;
 let muted = <?= $muted ? 'true' : 'false' ?>;
 const totalCells = <?= $total_cells ?>;
@@ -761,6 +762,13 @@ async function addFileInfoOverlay(container, file) {
         metaElem.textContent = parts.join(' • ');
 
         if (meta.file) filenameElem.textContent = meta.file;
+
+        if (currentSearch && !meta.file.toLowerCase().includes(currentSearch)) {
+            const folderMatchTag = document.createElement('div');
+            folderMatchTag.textContent = 'Folder match';
+            folderMatchTag.style.cssText = 'font-size:11px; color:#7c3aed; margin-top:4px;';
+            metaElem.appendChild(folderMatchTag);
+        }
 
     } catch {
         metaElem.textContent = '';
@@ -1266,12 +1274,47 @@ window.addEventListener('orientationchange', setVhUnit);
 // ================================
 // SEARCH FEATURE
 // ================================
+const searchableItems = allFilesWithPaths.map(fullPath => {
+    const webPath = '<?= $webRoot ?>/' + fullPath
+        .replace('<?= $root_directory_absolute ?>/', '')
+        .split('/')
+        .map(encodeURIComponent)
+        .join('/');
+
+    const parts = fullPath.split('/');
+    const filename = parts[parts.length - 1];
+    const folderPath = parts.slice(0, -1).join('/');
+    const folderNames = parts.slice(1, -1);
+
+    return {
+        webPath: webPath,
+        filename: filename.toLowerCase(),
+        folderNames: folderNames.map(n => n.toLowerCase()),
+        fullFolderPath: folderPath.toLowerCase()
+    };
+});
+
 function applySearch(term) {
     term = (term || '').trim().toLowerCase();
     currentSearch = term;
-    allVideos = term ? originalVideos.filter(f => f.toLowerCase().includes(term)) : [...originalVideos];
+
+    if (!term) {
+        allVideos = searchableItems.map(item => item.webPath);
+        startIndex = 0;
+        renderGrid();
+        document.getElementById('search-overlay').style.display = 'none';
+        return;
+    }
+
+    const filtered = searchableItems.filter(item => {
+        if (item.filename.includes(term)) return true;
+        return item.folderNames.some(folder => folder.includes(term));
+    });
+
+    allVideos = filtered.map(item => item.webPath);
     startIndex = 0;
     renderGrid();
+
     document.getElementById('search-overlay').style.display = 'none';
 }
 
