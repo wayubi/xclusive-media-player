@@ -74,7 +74,7 @@ switch ($action) {
         }
 
         // Audit paths don't have /volumes prefix usually, but clean anyway
-        $cleanPath = ltrim(preg_replace('#^/volumes/#i', '', $path), '/');
+        $cleanPath = ltrim(preg_replace('#^./volumes/#i', '', $path), '/');
         $fsPath = realpath($root . '/' . $cleanPath);
         
         if (!$fsPath || !str_starts_with($fsPath, $root) || !is_dir($fsPath)) {
