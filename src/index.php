@@ -247,6 +247,56 @@ html, body { margin:0; padding:0; height:100%; overflow:hidden; font-family: 'Se
   #form { flex-direction:row; justify-content:space-between; gap:6px; padding:6px 10px; }
   #form span[id="file-count"], #form select[name="columns"], #form select[name="rows"], #form button[id="refresh"], #form button[id="clear"], #form button[id="audit"], #form button[id="previous"], #form button[id="next"], #form span[id="audit-text"] { display:none; }
 }
+
+#search-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.search-container {
+  position: relative;
+  width: 90%;
+  max-width: 700px;
+}
+
+#search-input {
+  width: 100%;
+  padding: 18px 60px 18px 20px;
+  font-size: 20px;
+  border: none;
+  border-radius: 12px;
+  background: #1f1f1f;
+  color: white;
+  outline: none;
+  box-shadow: 0 0 0 2px #444;
+}
+
+#search-input:focus {
+  box-shadow: 0 0 0 3px #0066ff;
+}
+
+#search-clear {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: #888;
+  font-size: 28px;
+  cursor: pointer;
+  padding: 8px;
+}
+
+#search-clear:hover {
+  color: #ff4d4f;
+}
+
 </style>
 </head>
 <body>
@@ -272,9 +322,17 @@ html, body { margin:0; padding:0; height:100%; overflow:hidden; font-family: 'Se
 
 <div id="grid"></div>
 
+<!-- Search Overlay -->
+<div id="search-overlay" style="display:none;">
+  <div class="search-container">
+    <input type="text" id="search-input" placeholder="Type to search filenames... (Enter to filter, ESC to cancel)" autocomplete="off" />
+    <button id="search-clear" title="Clear search">✕</button>
+  </div>
+</div>
+
 <script>
 // ===== Optimized Grid JS =====
-const allVideos = <?= json_encode($allFiles, JSON_UNESCAPED_SLASHES) ?>;
+let allVideos = <?= json_encode($allFiles, JSON_UNESCAPED_SLASHES) ?>;
 const audioThumbs = <?= json_encode($audioThumbs, JSON_UNESCAPED_SLASHES) ?>;
 let muted = <?= $muted ? 'true' : 'false' ?>;
 const totalCells = <?= $total_cells ?>;
@@ -288,6 +346,9 @@ const MAX_CONCURRENT_AUDIO = 36;
 
 const buttonStyle = 'font-size:20px;padding:6px 10px;border:none;border-radius:6px;background:rgba(0,0,0,0.6);color:white;cursor:pointer;pointer-events:auto;';
 const centralOverlayStyle = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;gap:10px;z-index:10;opacity:0;transition:opacity 0.2s;pointer-events:none;';
+
+let originalVideos = [...allVideos];
+let currentSearch = '';
 
 function processAudioQueue() {
     while (activeAudioLoads < MAX_CONCURRENT_AUDIO && audioQueue.length) {
@@ -586,7 +647,10 @@ function renderGrid() {
     enforceSingleUnmuted();
     syncMuteIcons();
 
-    document.getElementById('file-count').innerText = `${startIndex+1} / ${allVideos.length}`;
+    document.getElementById('file-count').innerText = 
+        currentSearch 
+            ? `Search: ${startIndex+1} / ${allVideos.length} (of ${originalVideos.length})`
+            : `${startIndex+1} / ${allVideos.length}`;
 }
 
 function nextGrid() { startIndex = (startIndex + totalCells) % allVideos.length; renderGrid(); }
@@ -937,6 +1001,115 @@ setVhUnit(); window.addEventListener('resize',setVhUnit); window.addEventListene
 // Temporary debugging for Fire TV remote keys
 // document.addEventListener('keydown', e => {
 //    alert(`Key pressed!\nkey: "${e.key}"\nkeyCode: ${e.keyCode}`);
+// });
+
+// =============================================
+// SEARCH FEATURE
+// =============================================
+
+// Apply search filter
+function applySearch(term) {
+    term = (term || '').trim().toLowerCase();
+    currentSearch = term;
+
+    if (!term) {
+        allVideos = [...originalVideos];
+    } else {
+        allVideos = originalVideos.filter(file => 
+            file.toLowerCase().includes(term)
+        );
+    }
+
+    startIndex = 0;
+    renderGrid();
+    document.getElementById('search-overlay').style.display = 'none';
+}
+
+// Show search overlay
+function showSearch() {
+    const overlay = document.getElementById('search-overlay');
+    const input = document.getElementById('search-input');
+    
+    if (!overlay || !input) return;
+    
+    overlay.style.display = 'flex';
+    input.value = currentSearch;
+    input.focus();
+    input.select();
+}
+
+// Close search without applying
+function closeSearch() {
+    const overlay = document.getElementById('search-overlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
+    const input = document.getElementById('search-input');
+    if (input) input.blur();
+}
+
+// =============================================
+// Attach all search event listeners AFTER DOM is ready
+// =============================================
+document.addEventListener('DOMContentLoaded', () => {
+    const overlay = document.getElementById('search-overlay');
+    const input = document.getElementById('search-input');
+    const clearBtn = document.getElementById('search-clear');
+
+    if (!input || !overlay) {
+        console.warn('Search elements not found in DOM');
+        return;
+    }
+
+    // Clear button
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            input.value = '';
+            applySearch('');
+        });
+    }
+
+    // Input: Enter / ESC
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            applySearch(input.value);
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            closeSearch();
+        }
+    });
+
+    // Global keyboard handler
+    document.addEventListener('keydown', e => {
+        // If user is typing in any input, only allow ESC to close
+        if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
+            if (e.key === 'Escape') {
+                closeSearch();
+                e.preventDefault();
+            }
+            return;
+        }
+
+        // Global shortcuts
+        if (e.key === '/') {
+            e.preventDefault();
+            showSearch();
+        }
+        else if (e.key === 'Escape' && overlay.style.display === 'flex') {
+            closeSearch();
+            e.preventDefault();
+        }
+    });
+});
+
+// Optional: live preview (uncomment if you want it — can be slow with many files)
+// let searchTimeout;
+// document.getElementById('search-input')?.addEventListener('input', e => {
+//     clearTimeout(searchTimeout);
+//     searchTimeout = setTimeout(() => {
+//         applySearch(e.target.value);
+//     }, 400);
 // });
 
 renderGrid();
