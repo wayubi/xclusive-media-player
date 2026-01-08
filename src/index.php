@@ -722,6 +722,7 @@ async function addFileInfoOverlay(container, file) {
         const meta = await res.json();
 
         const parts = [];
+        if (meta.folder) parts.push(meta.folder);
         if (meta.video?.width && meta.video?.height) parts.push(`${meta.video.width}×${meta.video.height}`);
         if (meta.duration) {
             let sec = Math.floor(meta.duration);

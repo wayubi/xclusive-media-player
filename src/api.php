@@ -154,6 +154,7 @@ switch ($action) {
 
             $output = [
                 'file'     => basename($fsPath),
+                'folder'   => basename(dirname($fsPath)),
                 'filesize' => filesize($fsPath),
                 'duration' => $meta['format']['duration'] ?? null,
                 'bitrate'  => isset($meta['format']['bit_rate']) ? (int)$meta['format']['bit_rate'] : null,
