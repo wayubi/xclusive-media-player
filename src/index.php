@@ -80,18 +80,99 @@ $root_directory_absolute = realpath($root_directory) ?: die('Root directory not 
 $is_mobile = stripos($_SERVER['HTTP_USER_AGENT'] ?? '', 'Mobile') !== false
           || stripos($_SERVER['HTTP_USER_AGENT'] ?? '', 'Android') !== false;
 
-$selected_path_parts = array_values(array_filter($_GET['selected-path'] ?? [], 'strlen'));
-$cursor = $root_directory_absolute;
-$selected_path_parts_final = [];
+// ================================
+// NAVIGATION HANDLING
+// ================================
 
-foreach ($selected_path_parts as $part) {
-    $next = $cursor . '/' . $part;
-    if (!is_dir($next)) break;
-    $selected_path_parts_final[] = $part;
-    $cursor = $next;
+// 1. Get incoming path segments (used only if no goto)
+$path_segments = array_filter(
+    (array)($_GET['path'] ?? []),
+    fn($v) => is_string($v) && strlen(trim($v)) > 0 && $v !== '..'
+);
+
+// 2. Compute current absolute path from incoming segments (base for goto)
+$current_abs_path = $root_directory_absolute;
+foreach ($path_segments as $seg) {
+    $next = $current_abs_path . '/' . $seg;
+    if (is_dir($next)) {
+        $current_abs_path = $next;
+    } else {
+        // Safety: stop if invalid segment
+        break;
+    }
 }
 
+// 3. Handle navigation actions (both Go Back and folder selection)
+$nav_action = null;
+$nav_value = null;
+
+if (isset($_GET['goto']) && $_GET['goto'] === '..') {
+    $nav_action = 'up';
+} elseif (!empty($_GET['goto_folder'])) {
+    $nav_action = 'down';
+    $nav_value = $_GET['goto_folder'];
+}
+
+// Only process if there's a navigation request
+if ($nav_action !== null) {
+    // Build current absolute path from incoming path[] segments (safe base)
+    $current_abs_path = $root_directory_absolute;
+    foreach ($path_segments as $seg) {
+        $next = $current_abs_path . '/' . $seg;
+        if (is_dir($next)) {
+            $current_abs_path = $next;
+        } else {
+            // Stop on invalid segment to prevent errors
+            break;
+        }
+    }
+
+    // Apply the navigation
+    if ($nav_action === 'up') {
+        $current_abs_path = dirname($current_abs_path);
+        // Safety clamp: never go above root
+        if (strpos($current_abs_path, $root_directory_absolute) !== 0) {
+            $current_abs_path = $root_directory_absolute;
+        }
+    } elseif ($nav_action === 'down') {
+        $next = $current_abs_path . '/' . $nav_value;
+        if (is_dir($next)) {
+            $current_abs_path = $next;
+        }
+        // If not a dir → silently stay (you can add feedback later)
+    }
+
+    // Rebuild clean path segments from the final physical path
+    $relative = substr($current_abs_path, strlen($root_directory_absolute));
+    $clean_segments = array_filter(
+        explode('/', trim(str_replace('\\', '/', $relative), '/')),
+        fn($v) => $v !== ''
+    );
+
+    // Build clean query string for redirect
+    $query = [];
+    foreach ($clean_segments as $seg) {
+        $query[] = 'path[]=' . urlencode($seg);
+    }
+    // Preserve other params
+    if (isset($_GET['columns'])) $query[] = 'columns=' . (int)$_GET['columns'];
+    if (isset($_GET['rows']))    $query[] = 'rows=' . (int)$_GET['rows'];
+    if (isset($_GET['muted']))   $query[] = 'muted=' . $_GET['muted'];
+
+    // Cache buster
+    $query[] = 't=' . time();
+
+    $redirect = 'index.php' . (empty($query) ? '' : '?' . implode('&', $query));
+
+    // Perform the redirect to clean URL
+    header("Location: $redirect");
+    exit;
+}
+
+// If no navigation action → use incoming path[] as-is
+$selected_path_parts_final = $path_segments;
 $selected_path = implode('/', $selected_path_parts_final);
+
 $selected_columns = $is_mobile ? 1 : max(1, min(6, (int)($_GET['columns'] ?? 3)));
 $selected_rows    = $is_mobile ? 1 : max(1, min(6, (int)($_GET['rows'] ?? 2)));
 $total_cells = $selected_columns * $selected_rows;
@@ -144,27 +225,26 @@ function getCurrentPath(string $root, string $selected_path): string {
     return str_starts_with($real, $root) ? $real : $root;
 }
 
-function renderFolderSelects(array $selected_parts, string $root_abs): void {
-    $parent = '';
-    foreach ($selected_parts as $part) {
-        $folderPath = $root_abs . ($parent ? '/' . $parent : '');
-        $subs = getSubfolders($folderPath);
-        echo '<select name="selected-path[]" onchange="this.form.submit()">';
-        echo '<option value="">[Select]</option>';
-        foreach ($subs as $f) {
-            echo "<option value=\"$f\"" . ($f === $part ? ' selected' : '') . ">$f</option>";
-        }
-        echo '</select>';
-        $parent .= ($parent ? '/' : '') . $part;
-    }
-    $folderPath = $root_abs . ($parent ? '/' . $parent : '');
-    $subs = getSubfolders($folderPath);
-    if ($subs) {
-        echo '<select name="selected-path[]" onchange="this.form.submit()">';
-        echo '<option value="" selected>[Select]</option>';
-        foreach ($subs as $f) echo "<option value=\"$f\">$f</option>";
-        echo '</select>';
-    }
+function renderSingleFolderSelect(array $selected_parts, string $current_abs_path): void {
+    $is_root = empty($selected_parts);
+    $subfolders = getSubfolders($current_abs_path);
+    $has_children = !empty($subfolders);
+    ?>
+    <select name="goto_folder" id="folder-select"
+            onchange="this.form.action = 'index.php?t=' + Date.now(); this.form.submit();"
+            style="min-width:220px; max-width:360px; font-size:1.05rem;"
+            autofocus>
+        <option value="" disabled <?= $has_children ? '' : 'selected' ?>>
+            — <?= $has_children ? 'Select subfolder' : ($is_root ? 'No folders found' : 'No subfolders') ?> —
+        </option>
+
+        <?php foreach ($subfolders as $folder): ?>
+            <option value="<?= htmlspecialchars($folder) ?>">
+                <?= htmlspecialchars($folder) ?>
+            </option>
+        <?php endforeach; ?>
+    </select>
+    <?php
 }
 
 // ================================
@@ -217,9 +297,7 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
   --grid-gap: 12px;
 }
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 html, body {
   margin: 0;
@@ -232,38 +310,42 @@ html, body {
   overflow: hidden;
 }
 
-/* ========================================================================== 
-   HEADER / CONTROLS BAR
-   ========================================================================== */
 #options-form {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
-
   background: linear-gradient(to bottom, rgba(20,20,28,0.92), rgba(15,15,22,0.88));
   backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border);
-
   position: sticky;
   top: 0;
   z-index: 100;
-
-  -webkit-overflow-scrolling: touch;
 }
 
 #folder-select-container {
   display: flex;
-  flex-direction: row;
-  gap: 6px;
   align-items: center;
   flex-shrink: 0;
 }
 
-#options-form span {
+#folder-select-container button {
+    padding: 8px 14px;
+    background: linear-gradient(145deg, #2a2a35, #22222c);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
     white-space: nowrap;
+}
+
+#folder-select-container button:hover {
+    background: var(--surface-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 10px rgba(124,58,237,0.2);
 }
 
 #options-form select,
@@ -277,9 +359,6 @@ html, body {
   font-weight: 500;
   cursor: pointer;
   transition: var(--transition);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   height: 36px;
   min-width: 36px;
   white-space: nowrap;
@@ -291,38 +370,12 @@ html, body {
   transform: translateY(-1px);
 }
 
-#options-form button {
-  background: linear-gradient(145deg, #2a2a35, #22222c);
-  box-shadow: 0 2px 10px rgba(0,0,0,0.4);
-}
-
-#options-form button:hover {
-  box-shadow: 0 4px 18px rgba(124,58,237,0.28);
-}
-
-#mute-button,
-#refresh,
-#clear,
-#audit,
-#previous,
-#next {
-  font-size: 1.2rem;
-  padding: 6px;
-  height: 36px;
-  min-width: 36px;
-}
-
-#mute-button.active {
-  color: var(--accent-glow);
-}
-
-/* Folder selects specific styling */
-#folder-select-container select {
-  max-width: 220px;
-  min-width: 140px;
+#folder-select {
+  min-width: 220px;
+  max-width: 380px;
+  font-size: 1.05rem;
   background: var(--surface);
   border: 1px solid var(--border);
-  color: var(--text);
 }
 
 /* ========================================================================== 
@@ -536,10 +589,37 @@ html, body {
 
 <form id="options-form" method="get" action="index.php">
   <span id="file-count">1 / <?php echo count($allFiles); ?></span>
-  <div id="folder-select-container"><?php renderFolderSelects($selected_path_parts_final, $root_directory_absolute); ?></div>
-  <select name="columns" onchange="this.form.submit()"><?php for ($c=1;$c<=6;$c++): ?><option value="<?= $c ?>" <?= $c==$selected_columns?'selected':'' ?>><?= $c ?></option><?php endfor; ?></select>
-  <select name="rows" onchange="this.form.submit()"><?php for ($r=1;$r<=6;$r++): ?><option value="<?= $r ?>" <?= $r==$selected_rows?'selected':'' ?>><?= $r ?></option><?php endfor; ?></select>
+  <?php foreach ($selected_path_parts_final as $part): ?>
+      <input type="hidden" name="path[]" value="<?= htmlspecialchars($part) ?>">
+  <?php endforeach; ?> 
+  <div id="folder-select-container" style="display: flex; align-items: center; gap: 10px;">
+      <?php if (!empty($selected_path_parts_final)): ?>
+          <button type="submit" name="goto" value=".." 
+                  onclick="this.form.action = 'index.php?t=' + Date.now();"
+                  style="padding: 8px 14px; background: var(--surface-hover); 
+                        border: 1px solid var(--border); border-radius: var(--radius);
+                        color: var(--text); font-weight: 500; cursor: pointer;">
+              ↑ Go Back
+          </button>
+      <?php endif; ?>
+
+      <?php renderSingleFolderSelect($selected_path_parts_final, $current_path); ?>
+  </div>
+
+  <select name="columns" onchange="this.form.submit()">
+    <?php for ($c=1;$c<=6;$c++): ?>
+      <option value="<?= $c ?>" <?= $c==$selected_columns?'selected':'' ?>><?= $c ?></option>
+    <?php endfor; ?>
+  </select>
+
+  <select name="rows" onchange="this.form.submit()">
+    <?php for ($r=1;$r<=6;$r++): ?>
+      <option value="<?= $r ?>" <?= $r==$selected_rows?'selected':'' ?>><?= $r ?></option>
+    <?php endfor; ?>
+  </select>
+
   <input type="hidden" name="muted" value="<?= $muted?'true':'false' ?>">
+  
   <button type="button" id="mute-button" onclick="toggleMute()"><?= $muted?'🔇':'🔊' ?></button>
   <button type="button" onclick="playAll()">▶</button>
   <button type="button" onclick="shufflePlay()">🔀</button>
