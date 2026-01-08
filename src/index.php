@@ -296,10 +296,29 @@ function isFileVisible(file) {
 
 async function addFileInfoOverlay(container, file) {
     container.style.position ||= 'relative';
+
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
-    overlay.style.cssText = 'background:rgba(0,0,0,0.6);color:white;padding:2px 6px;font-size:14px;border-radius:4px;pointer-events:none;';
-    overlay.textContent = file;
+    overlay.style.cssText = `
+        background: rgba(0,0,0,0.6);
+        color: white;
+        padding: 4px 6px;
+        font-size: 14px;
+        border-radius: 4px;
+        pointer-events: none;
+        display: inline-block;
+    `;
+
+    const filenameElem = document.createElement('div');
+    filenameElem.textContent = file;
+    filenameElem.style.fontWeight = 'bold';
+
+    const metaElem = document.createElement('div');
+    metaElem.style.fontSize = '12px';
+    metaElem.style.marginTop = '2px';
+
+    overlay.appendChild(filenameElem);
+    overlay.appendChild(metaElem);
     container.appendChild(overlay);
 
     try {
@@ -310,7 +329,8 @@ async function addFileInfoOverlay(container, file) {
         });
         if (!res.ok) throw new Error('Metadata failed');
         const meta = await res.json();
-        const parts = [meta.file];
+
+        const parts = [];
         if (meta.video?.width && meta.video?.height) parts.push(`${meta.video.width}×${meta.video.height}`);
         if (meta.duration) {
             let sec = Math.floor(meta.duration);
@@ -324,9 +344,14 @@ async function addFileInfoOverlay(container, file) {
             if (meta.video.fps) parts.push(`${meta.video.fps} FPS`);
         }
         if (meta.bitrate) parts.push(Math.round(meta.bitrate / 1000) + ' kbps');
-        overlay.textContent = parts.join(' • ');
+
+        metaElem.textContent = parts.join(' • ');
+
+        if (meta.file) filenameElem.textContent = meta.file;
+
     } catch {
-        overlay.textContent = file;
+        metaElem.textContent = '';
+        filenameElem.textContent = file;
     }
 }
 
