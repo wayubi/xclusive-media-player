@@ -326,7 +326,10 @@ async function addFileInfoOverlay(container, file) {
         const res = await fetch('index.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'metadata', file })
+            body: JSON.stringify({ 
+                action: 'metadata', 
+                file: decodeURIComponent(file)
+            })
         });
         if (!res.ok) throw new Error('Metadata failed');
         const meta = await res.json();
