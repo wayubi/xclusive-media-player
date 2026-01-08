@@ -1,11 +1,11 @@
 <?php
 
+// ================================
+// POST HANDLERS
+// ================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $data = json_decode(file_get_contents('php://input'), true);
 
-    // =====================
-    // DELETE
-    // =====================
     if (($data['action'] ?? null) === 'delete' && !empty($data['files'])) {
         $ch = curl_init('http://php-cli:8080/api.php');
         curl_setopt_array($ch, [
@@ -17,7 +17,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'files'  => $data['files']
             ])
         ]);
-
         $response = curl_exec($ch);
         if (curl_errno($ch)) {
             echo json_encode(['error' => curl_error($ch)]);
@@ -28,9 +27,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    // =====================
-    // AUDIT
-    // =====================
     if (($data['action'] ?? null) === 'audit' && !empty($data['path'])) {
         $ch = curl_init('http://php-cli:8080/api.php');
         curl_setopt_array($ch, [
@@ -43,7 +39,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'count'  => (int)($data['count'] ?? 0)
             ])
         ]);
-
         $response = curl_exec($ch);
         if (curl_errno($ch)) {
             echo json_encode(['error' => curl_error($ch)]);
@@ -54,9 +49,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    // =====================
-    // METADATA
-    // =====================
     if (($data['action'] ?? null) === 'metadata' && !empty($data['file'])) {
         $ch = curl_init('http://php-cli:8080/api.php');
         curl_setopt_array($ch, [
@@ -68,7 +60,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'file'   => $data['file']
             ])
         ]);
-
         $response = curl_exec($ch);
         if (curl_errno($ch)) {
             echo json_encode(['error' => curl_error($ch)]);
@@ -80,96 +71,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// =====================
-// CONFIG / SETTINGS
-// =====================
+// ================================
+// CONFIG & PATH HANDLING
+// ================================
 $root_directory = './volumes';
-$root_directory_absolute = realpath($root_directory);
-if (!$root_directory_absolute) die('Root directory not found');
+$root_directory_absolute = realpath($root_directory) ?: die('Root directory not found');
 
 $is_mobile = stripos($_SERVER['HTTP_USER_AGENT'] ?? '', 'Mobile') !== false
           || stripos($_SERVER['HTTP_USER_AGENT'] ?? '', 'Android') !== false;
 
-$raw_parts = array_values(array_filter($_GET['selected-path'] ?? [], 'strlen'));
-$selected_path_parts = [];
-
+$selected_path_parts = array_values(array_filter($_GET['selected-path'] ?? [], 'strlen'));
 $cursor = $root_directory_absolute;
+$selected_path_parts_final = [];
 
-foreach ($raw_parts as $part) {
+foreach ($selected_path_parts as $part) {
     $next = $cursor . '/' . $part;
-    if (!is_dir($next)) {
-        break;
-    }
-    $selected_path_parts[] = $part;
+    if (!is_dir($next)) break;
+    $selected_path_parts_final[] = $part;
     $cursor = $next;
 }
 
-$selected_path = implode('/', $selected_path_parts);
+$selected_path = implode('/', $selected_path_parts_final);
 $selected_columns = $is_mobile ? 1 : max(1, min(6, (int)($_GET['columns'] ?? 3)));
 $selected_rows    = $is_mobile ? 1 : max(1, min(6, (int)($_GET['rows'] ?? 2)));
 $total_cells = $selected_columns * $selected_rows;
 
 $muted = !isset($_GET['muted']) || $_GET['muted'] === 'true';
-$fileCount = (int)($_GET['fileCount'] ?? 0);
 
-// =====================
-// HELPERS
-// =====================
+// ================================
+// FILESYSTEM HELPERS
+// ================================
 function getSubfolders(string $path): array {
-    if (!is_dir($path)) {
-        return [];
-    }
-
+    if (!is_dir($path)) return [];
     $folders = scandir($path);
     $filtered = array_filter($folders, fn($d) => $d !== '.' && $d !== '..' && is_dir("$path/$d"));
-    usort($filtered, function($a, $b) {
-        return strcasecmp($a, $b);
-    });
+    usort($filtered, 'strcasecmp');
     return array_values($filtered);
 }
 
 function getFiles(string $path): array {
     if (!is_dir($path)) return [];
-
     $files = [];
-    $dirIterator = new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS);
-    $it = new RecursiveIteratorIterator($dirIterator, RecursiveIteratorIterator::SELF_FIRST);
-
+    $it = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::SELF_FIRST
+    );
     foreach ($it as $file) {
-        if (!$file->isFile()) continue;
-
-        // Skip audit files
-        if ($file->getFilename() === '.audited') continue;
-
-        // Normalize path safely
+        if (!$file->isFile() || $file->getFilename() === '.audited') continue;
         $pathname = $file->getPathname();
-
         if (!mb_check_encoding($pathname, 'UTF-8')) {
             $pathname = iconv('UTF-8', 'UTF-8//IGNORE', $pathname);
         }
-
-        // Only log if the file literally doesn't exist (rare)
         if (!file_exists($pathname)) {
-            error_log("Warning: File truly missing or invalid UTF-8: $pathname");
+            error_log("Missing file: $pathname");
         }
-
         $files[] = $pathname;
     }
-
     usort($files, fn($a, $b) => @filemtime($b) <=> @filemtime($a));
     return $files;
 }
 
 function filesystemToWebPath(string $fsPath, string $rootFs, string $rootWeb): string {
-    $fsPath = str_replace('\\','/',realpath($fsPath));
-    $rootFs = str_replace('\\','/',realpath($rootFs));
-    $relative = str_starts_with($fsPath,$rootFs) ? substr($fsPath,strlen($rootFs)) : $fsPath;
-    return $rootWeb.'/'.ltrim($relative,'/');
+    $fsPath = str_replace('\\', '/', realpath($fsPath));
+    $rootFs = str_replace('\\', '/', realpath($rootFs));
+    $relative = str_starts_with($fsPath, $rootFs) ? substr($fsPath, strlen($rootFs)) : $fsPath;
+    return $rootWeb . '/' . ltrim($relative, '/');
 }
 
 function getCurrentPath(string $root, string $selected_path): string {
-    $real = realpath($root.($selected_path ? '/'.$selected_path : '')) ?: $root;
-    return str_starts_with($real,$root) ? $real : $root;
+    $real = realpath($root . ($selected_path ? '/' . $selected_path : '')) ?: $root;
+    return str_starts_with($real, $root) ? $real : $root;
 }
 
 function renderFolderSelects(array $selected_parts, string $root_abs): void {
@@ -179,7 +150,9 @@ function renderFolderSelects(array $selected_parts, string $root_abs): void {
         $subs = getSubfolders($folderPath);
         echo '<select name="selected-path[]" onchange="this.form.submit()">';
         echo '<option value="">[Select]</option>';
-        foreach ($subs as $f) echo "<option value=\"$f\"" . ($f === $part ? ' selected' : '') . ">$f</option>";
+        foreach ($subs as $f) {
+            echo "<option value=\"$f\"" . ($f === $part ? ' selected' : '') . ">$f</option>";
+        }
         echo '</select>';
         $parent .= ($parent ? '/' : '') . $part;
     }
@@ -193,31 +166,25 @@ function renderFolderSelects(array $selected_parts, string $root_abs): void {
     }
 }
 
-// =====================
-// MAIN
-// =====================
+// ================================
+// MAIN LOGIC
+// ================================
 $current_path = getCurrentPath($root_directory_absolute, $selected_path);
-if (!str_starts_with($current_path,$root_directory_absolute)) {
-    $current_path = $root_directory_absolute;
-    $selected_path_parts = [];
-    $selected_path = '';
-}
-
-$auditFile = $current_path.'/.audited';
+$auditFile = $current_path . '/.audited';
 $auditedText = is_file($auditFile) ? trim(file_get_contents($auditFile)) : '';
 
 $allFilesRaw = getFiles($current_path);
-$webRoot = '/'.trim($root_directory,'./');
-$allFiles = array_map(fn($f)=>filesystemToWebPath($f,$root_directory_absolute,$webRoot),$allFilesRaw);
+$webRoot = '/' . trim($root_directory, './');
+$allFiles = array_map(fn($f) => filesystemToWebPath($f, $root_directory_absolute, $webRoot), $allFilesRaw);
 
-require_once __DIR__.'/lib/audioCovers.php';
+require_once __DIR__ . '/lib/audioCovers.php';
 $audioThumbsRaw = generateAudioCovers($allFilesRaw);
 
 $audioThumbs = [];
 $docRoot = realpath($_SERVER['DOCUMENT_ROOT'] ?? '');
-foreach ($audioThumbsRaw as $audioFs=>$thumbFs) {
-    $audioWeb = filesystemToWebPath($audioFs,$root_directory_absolute,$webRoot);
-    $thumbWeb = $docRoot ? '/'.ltrim(str_replace('\\','/',str_replace($docRoot,'',realpath($thumbFs))),'/') : '';
+foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
+    $audioWeb = filesystemToWebPath($audioFs, $root_directory_absolute, $webRoot);
+    $thumbWeb = $docRoot ? '/' . ltrim(str_replace('\\', '/', str_replace($docRoot, '', realpath($thumbFs))), '/') : '';
     $audioThumbs[$audioWeb] = $thumbWeb ?: 'cache/no-cover.jpg';
 }
 ?>
@@ -243,60 +210,16 @@ html, body { margin:0; padding:0; height:100%; overflow:hidden; font-family: 'Se
 .video-container:hover .overlay { opacity:1; pointer-events:auto; }
 .overlay button { background:#ff4d4f; border:none; border-radius:4px; color:#fff; font-size:10px; padding:2px 6px; cursor:pointer; margin-left:6px; }
 .overlay button:hover { background:#d9363e; }
-@media (max-width:768px){
+#search-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:10000; display:flex; align-items:center; justify-content:center; }
+.search-container { position:relative; width:90%; max-width:700px; }
+#search-input { width:100%; padding:18px 60px 18px 20px; font-size:20px; border:none; border-radius:12px; background:#1f1f1f; color:white; outline:none; box-shadow:0 0 0 2px #444; }
+#search-input:focus { box-shadow:0 0 0 3px #0066ff; }
+#search-clear { position:absolute; right:12px; top:50%; transform:translateY(-50%); background:transparent; border:none; color:#888; font-size:28px; cursor:pointer; padding:8px; }
+#search-clear:hover { color:#ff4d4f; }
+@media (max-width:768px) {
   #form { flex-direction:row; justify-content:space-between; gap:6px; padding:6px 10px; }
   #form span[id="file-count"], #form select[name="columns"], #form select[name="rows"], #form button[id="refresh"], #form button[id="clear"], #form button[id="audit"], #form button[id="previous"], #form button[id="next"], #form span[id="audit-text"] { display:none; }
 }
-
-#search-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.85);
-  z-index: 10000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.search-container {
-  position: relative;
-  width: 90%;
-  max-width: 700px;
-}
-
-#search-input {
-  width: 100%;
-  padding: 18px 60px 18px 20px;
-  font-size: 20px;
-  border: none;
-  border-radius: 12px;
-  background: #1f1f1f;
-  color: white;
-  outline: none;
-  box-shadow: 0 0 0 2px #444;
-}
-
-#search-input:focus {
-  box-shadow: 0 0 0 3px #0066ff;
-}
-
-#search-clear {
-  position: absolute;
-  right: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: transparent;
-  border: none;
-  color: #888;
-  font-size: 28px;
-  cursor: pointer;
-  padding: 8px;
-}
-
-#search-clear:hover {
-  color: #ff4d4f;
-}
-
 </style>
 </head>
 <body>
@@ -304,7 +227,7 @@ html, body { margin:0; padding:0; height:100%; overflow:hidden; font-family: 'Se
 <div id="form">
 <form id="options-form" method="get" action="index.php">
   <span id="file-count">1 / <?php echo count($allFiles); ?></span>
-  <div id="folder-select-container"><?php renderFolderSelects($selected_path_parts, $root_directory_absolute); ?></div>
+  <div id="folder-select-container"><?php renderFolderSelects($selected_path_parts_final, $root_directory_absolute); ?></div>
   <select name="columns" onchange="this.form.submit()"><?php for ($c=1;$c<=6;$c++): ?><option value="<?= $c ?>" <?= $c==$selected_columns?'selected':'' ?>><?= $c ?></option><?php endfor; ?></select>
   <select name="rows" onchange="this.form.submit()"><?php for ($r=1;$r<=6;$r++): ?><option value="<?= $r ?>" <?= $r==$selected_rows?'selected':'' ?>><?= $r ?></option><?php endfor; ?></select>
   <input type="hidden" name="muted" value="<?= $muted?'true':'false' ?>">
@@ -322,16 +245,15 @@ html, body { margin:0; padding:0; height:100%; overflow:hidden; font-family: 'Se
 
 <div id="grid"></div>
 
-<!-- Search Overlay -->
 <div id="search-overlay" style="display:none;">
   <div class="search-container">
-    <input type="text" id="search-input" placeholder="Type to search filenames... (Enter to filter, ESC to cancel)" autocomplete="off" />
+    <input type="text" id="search-input" placeholder="Search filenames… (Enter to filter, ESC to cancel)" autocomplete="off" />
     <button id="search-clear" title="Clear search">✕</button>
   </div>
 </div>
 
 <script>
-// ===== Optimized Grid JS =====
+// Core state
 let allVideos = <?= json_encode($allFiles, JSON_UNESCAPED_SLASHES) ?>;
 const audioThumbs = <?= json_encode($audioThumbs, JSON_UNESCAPED_SLASHES) ?>;
 let muted = <?= $muted ? 'true' : 'false' ?>;
@@ -339,7 +261,10 @@ const totalCells = <?= $total_cells ?>;
 let startIndex = 0;
 let lastFullscreen = { file: null, time: 0 };
 let fullscreenMode = 'tile';
+let originalVideos = [...allVideos];
+let currentSearch = '';
 
+// Audio loading queue
 const audioQueue = [];
 let activeAudioLoads = 0;
 const MAX_CONCURRENT_AUDIO = 36;
@@ -347,9 +272,9 @@ const MAX_CONCURRENT_AUDIO = 36;
 const buttonStyle = 'font-size:20px;padding:6px 10px;border:none;border-radius:6px;background:rgba(0,0,0,0.6);color:white;cursor:pointer;pointer-events:auto;';
 const centralOverlayStyle = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;gap:10px;z-index:10;opacity:0;transition:opacity 0.2s;pointer-events:none;';
 
-let originalVideos = [...allVideos];
-let currentSearch = '';
-
+// ================================
+// MEDIA HELPERS
+// ================================
 function processAudioQueue() {
     while (activeAudioLoads < MAX_CONCURRENT_AUDIO && audioQueue.length) {
         const audio = audioQueue.shift();
@@ -370,74 +295,38 @@ function isFileVisible(file) {
 }
 
 async function addFileInfoOverlay(container, file) {
-    if (getComputedStyle(container).position === 'static') {
-        container.style.position = 'relative';
-    }
-
+    container.style.position ||= 'relative';
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
-    overlay.style.background = 'rgba(0,0,0,0.6)';
-    overlay.style.color = 'white';
-    overlay.style.padding = '2px 6px';
-    overlay.style.fontSize = '14px';
-    overlay.style.borderRadius = '4px';
-    overlay.style.pointerEvents = 'none';
+    overlay.style.cssText = 'background:rgba(0,0,0,0.6);color:white;padding:2px 6px;font-size:14px;border-radius:4px;pointer-events:none;';
     overlay.textContent = file;
-
     container.appendChild(overlay);
 
     try {
         const res = await fetch('index.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                action: 'metadata',
-                file: file
-            })
+            body: JSON.stringify({ action: 'metadata', file })
         });
-
-        if (!res.ok) throw new Error('Metadata request failed');
-
+        if (!res.ok) throw new Error('Metadata failed');
         const meta = await res.json();
         const parts = [meta.file];
-
-        // Video dimensions
-        if (meta.video?.width && meta.video?.height) {
-            parts.push(`${meta.video.width}×${meta.video.height}`);
-        }
-
-        // Duration in h m s
+        if (meta.video?.width && meta.video?.height) parts.push(`${meta.video.width}×${meta.video.height}`);
         if (meta.duration) {
-            let totalSec = Math.floor(meta.duration);
-            const h = Math.floor(totalSec / 3600);
-            totalSec %= 3600;
-            const m = Math.floor(totalSec / 60);
-            const s = totalSec % 60;
-            const durationStr = `${h ? h + 'h ' : ''}${m ? m + 'm ' : ''}${s}s`;
-            parts.push(durationStr);
+            let sec = Math.floor(meta.duration);
+            const h = Math.floor(sec / 3600); sec %= 3600;
+            const m = Math.floor(sec / 60); sec %= 60;
+            parts.push(`${h ? h + 'h ' : ''}${m ? m + 'm ' : ''}${sec}s`);
         }
-
-        // Filesize in MB
-        if (meta.filesize) {
-            const mb = (meta.filesize / 1024 / 1024).toFixed(2);
-            parts.push(`${mb} MB`);
-        }
-
-        // Video codec, FPS, bitrate
+        if (meta.filesize) parts.push((meta.filesize / 1024 / 1024).toFixed(2) + ' MB');
         if (meta.video) {
             if (meta.video.codec) parts.push(meta.video.codec);
             if (meta.video.fps) parts.push(`${meta.video.fps} FPS`);
         }
-        if (meta.bitrate) {
-            const kbps = Math.round(meta.bitrate / 1000);
-            parts.push(`${kbps} kbps`);
-        }
-
+        if (meta.bitrate) parts.push(Math.round(meta.bitrate / 1000) + ' kbps');
         overlay.textContent = parts.join(' • ');
-
-    } catch (err) {
-        console.warn('Metadata error:', err);
-        overlay.textContent = file; // fallback
+    } catch {
+        overlay.textContent = file;
     }
 }
 
@@ -445,78 +334,58 @@ function addCentralOverlay(container, mediaEl, file) {
     const overlay = document.createElement('div');
     overlay.style.cssText = centralOverlayStyle + 'display:flex;justify-content:space-between;';
 
-    // ===== Left: Multi-select / delete X button =====
     const selectBtn = document.createElement('button');
     selectBtn.innerHTML = '🗙';
-    selectBtn.style.cssText = buttonStyle + 'background:gray;'; // GRAY by default
+    selectBtn.style.cssText = buttonStyle + 'background:gray;';
     selectBtn.dataset.file = file;
     selectBtn.dataset.selected = 'false';
-
     selectBtn.onclick = e => {
         e.stopPropagation();
-        const selected = selectBtn.dataset.selected === 'true';
-        if (!selected) {
-            // First click → select
+        if (selectBtn.dataset.selected === 'false') {
             selectBtn.dataset.selected = 'true';
             selectBtn.style.background = 'red';
         } else {
-            // Second click → trigger delete
-            const allSelectedBtns = document.querySelectorAll('#grid .video-container button[data-selected="true"]');
-            const filesToDelete = Array.from(allSelectedBtns).map(b => b.dataset.file);
-            if (!filesToDelete.length) return;
-            if (!confirm(`Delete ${filesToDelete.length} file(s)?`)) return;
-
+            const selected = Array.from(document.querySelectorAll('#grid .video-container button[data-selected="true"]'));
+            const filesToDelete = selected.map(b => b.dataset.file);
+            if (!filesToDelete.length || !confirm(`Delete ${filesToDelete.length} file(s)?`)) return;
             fetch('index.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'delete', files: filesToDelete })
             })
-            .then(resp => resp.json())
+            .then(r => r.json())
             .then(data => {
-                if (data.error) {
-                    alert('Error deleting files: ' + data.error);
-                    console.error(data);
-                    return;
-                }
-
+                if (data.error) return alert('Delete error: ' + data.error);
                 filesToDelete.forEach(f => {
                     const idx = allVideos.indexOf(f);
-                    if (idx !== -1) allVideos.splice(idx,1);
+                    if (idx !== -1) allVideos.splice(idx, 1);
                 });
                 startIndex = Math.min(startIndex, Math.max(0, allVideos.length - totalCells));
                 renderGrid();
             })
-            .catch(err => {
-                console.error('Delete request failed', err);
-                alert('Failed to delete files. See console for details.');
-            });
+            .catch(() => alert('Delete failed'));
         }
     };
     overlay.appendChild(selectBtn);
 
-    // ===== Right: Fullscreen button (only for audio/video) =====
     const fsBtn = document.createElement('button');
     fsBtn.innerHTML = '⛶';
     fsBtn.style.cssText = buttonStyle;
     fsBtn.onclick = e => {
         e.stopPropagation();
-        // Safely get currentTime only if mediaEl exists and has it
-        const time = (mediaEl && typeof mediaEl.currentTime === 'number') ? mediaEl.currentTime : 0;
+        const time = mediaEl && typeof mediaEl.currentTime === 'number' ? mediaEl.currentTime : 0;
         startFullscreenFrom(file, time);
     };
     overlay.appendChild(fsBtn);
 
     if (mediaEl && (mediaEl.tagName === 'VIDEO' || mediaEl.tagName === 'AUDIO')) {
-        // ===== Right: Mute/unmute button =====
         const muteBtn = document.createElement('button');
         muteBtn.className = 'mute-btn';
         muteBtn.innerHTML = mediaEl.muted ? '🔇' : '🔊';
         muteBtn.style.cssText = buttonStyle;
         muteBtn.onclick = e => {
             e.stopPropagation();
-            document.querySelectorAll('#grid audio, #grid video').forEach(m => {
-                m.muted = true;
-            });
+            document.querySelectorAll('#grid audio, #grid video').forEach(m => m.muted = true);
             mediaEl.muted = false;
             lastFullscreen = { file: null, time: 0 };
             mediaEl.play().catch(() => {});
@@ -537,42 +406,31 @@ function createMediaContainer(file) {
     const isAudio = ['mp3','wav','ogg'].includes(ext);
     const isVideo = ['mp4','webm','mkv'].includes(ext);
     const isImage = ['jpg','jpeg','png','gif','webp'].includes(ext);
-    const isLastFs = lastFullscreen.file === file;
+
     let mediaEl = null;
 
     if (isVideo || isAudio) {
-        mediaEl = isVideo 
-            ? document.createElement('video') 
-            : document.createElement('audio');
-
+        mediaEl = isVideo ? document.createElement('video') : document.createElement('audio');
         mediaEl.loop = true;
-        mediaEl.playsInline = true;  // useful for both
+        mediaEl.playsInline = true;
         mediaEl.preload = 'none';
         mediaEl.dataset.src = file;
         mediaEl.dataset.file = file;
 
-        // Priority: recent fullscreen (if visible) → wins
-        const isRecentFullscreen = (lastFullscreen.file === file) && isFileVisible(file);
-
-        // Base state: muted unless conditions met and global not muted
+        const isRecentFullscreen = lastFullscreen.file === file && isFileVisible(file);
         let shouldBeUnmuted = false;
         if (!muted) {
-            if (isRecentFullscreen) {
-                shouldBeUnmuted = true;
-            } else {
+            if (isRecentFullscreen) shouldBeUnmuted = true;
+            else {
                 const visibleMedia = allVideos.slice(startIndex, startIndex + totalCells)
                     .filter(f => /\.(mp4|webm|mkv|mp3|wav|ogg)$/i.test(f));
-                if (visibleMedia[0] === file) {
-                    shouldBeUnmuted = true;
-                }
+                if (visibleMedia[0] === file) shouldBeUnmuted = true;
             }
         }
-
         mediaEl.muted = !shouldBeUnmuted;
 
-        // Audio-specific setup
         if (isAudio) {
-            container.style.cssText = 'position:relative;display:flex;flex-direction:column;justify-content:center;align-items:center;';
+            container.style.cssText = 'display:flex;flex-direction:column;justify-content:center;align-items:center;';
             const img = document.createElement('img');
             img.style.cssText = 'width:100%;height:100%;object-fit:cover;cursor:pointer;border-radius:8px;';
             img.dataset.src = audioThumbs[file] || 'cache/no-cover.jpg';
@@ -582,37 +440,39 @@ function createMediaContainer(file) {
         }
 
         container.appendChild(mediaEl);
-    }
-    else if (isImage) {
+    } else if (isImage) {
         const img = document.createElement('img');
         img.loading = 'lazy';
         img.decoding = 'async';
         img.dataset.src = file;
-        // img.onclick = () => startFullscreenFrom(file);
         container.appendChild(img);
-    }
-    else {
+    } else {
         container.innerHTML = `<div style="color:red;padding:4px;">Unsupported: ${file}</div>`;
     }
 
     addCentralOverlay(container, mediaEl, file);
     addFileInfoOverlay(container, file);
 
-    if ((isVideo || isAudio) && isLastFs && lastFullscreen.time > 0) {
-        mediaEl.addEventListener('loadedmetadata', () => { mediaEl.currentTime = lastFullscreen.time; }, { once: true });
+    if ((isVideo || isAudio) && lastFullscreen.file === file && lastFullscreen.time > 0) {
+        mediaEl.addEventListener('loadedmetadata', () => {
+            mediaEl.currentTime = lastFullscreen.time;
+        }, { once: true });
     }
 
     return container;
 }
 
+// ================================
+// GRID RENDERING & NAVIGATION
+// ================================
 function renderGrid() {
     const grid = document.getElementById('grid');
     grid.querySelectorAll('video, audio').forEach(m => { m.pause(); m.src = ''; m.load(); });
     grid.innerHTML = '';
 
     const visible = allVideos.slice(startIndex, Math.min(startIndex + totalCells, allVideos.length));
-    if (lastFullscreen.file && !isFileVisible(lastFullscreen.file)) lastFullscreen = { file:null, time:0 };
-    
+    if (lastFullscreen.file && !isFileVisible(lastFullscreen.file)) lastFullscreen = { file: null, time: 0 };
+
     const fragment = document.createDocumentFragment();
     visible.forEach(file => fragment.appendChild(createMediaContainer(file)));
     grid.appendChild(fragment);
@@ -629,17 +489,16 @@ function renderGrid() {
             }
         });
     }, { threshold: 0.01 });
+
     grid.querySelectorAll('video, img[data-src]').forEach(el => observer.observe(el));
 
     setTimeout(() => {
         const recentMedia = [...grid.querySelectorAll('audio, video')]
             .find(m => m.dataset.file === lastFullscreen.file);
-
         if (recentMedia) {
             recentMedia.currentTime = lastFullscreen.time || 0;
             recentMedia.play().catch(() => {});
         }
-
         enforceSingleUnmuted();
         syncMuteIcons();
     }, 150);
@@ -649,22 +508,27 @@ function renderGrid() {
 
     document.getElementById('file-count').innerText = 
         currentSearch 
-            ? `Search: ${startIndex+1} / ${allVideos.length} (of ${originalVideos.length})`
-            : `${startIndex+1} / ${allVideos.length}`;
+            ? `Filtered: ${startIndex + 1} / ${allVideos.length} (of ${originalVideos.length})`
+            : `${startIndex + 1} / ${allVideos.length}`;
 }
 
-function nextGrid() { startIndex = (startIndex + totalCells) % allVideos.length; renderGrid(); }
-function prevGrid() { startIndex = (startIndex - totalCells + allVideos.length) % allVideos.length; renderGrid(); }
+function nextGrid() {
+    startIndex = (startIndex + totalCells) % allVideos.length;
+    renderGrid();
+}
 
+function prevGrid() {
+    startIndex = (startIndex - totalCells + allVideos.length) % allVideos.length;
+    renderGrid();
+}
+
+// ================================
+// MUTE & SINGLE AUDIO CONTROL
+// ================================
 function toggleMute() {
     muted = !muted;
     document.getElementById('mute-button').innerHTML = muted ? '🔇' : '🔊';
-    
-    // Reset fullscreen priority when toggling global mute (prevents old fullscreen overriding)
-    if (muted) {
-        lastFullscreen = { file: null, time: 0 };
-    }
-    
+    if (muted) lastFullscreen = { file: null, time: 0 };
     renderGrid();
 }
 
@@ -673,19 +537,12 @@ function enforceSingleUnmuted() {
     if (!media.length) return;
 
     let target = null;
-
     if (!muted) {
-        if (lastFullscreen.file) {
-            target = media.find(m => m.dataset.file === lastFullscreen.file);
-        }
-
-        if (!target) {
-            target = media[0];
-        }
+        if (lastFullscreen.file) target = media.find(m => m.dataset.file === lastFullscreen.file);
+        if (!target) target = media[0];
     }
 
     media.forEach(m => m.muted = true);
-
     if (target) {
         target.muted = false;
         target.play().catch(() => {});
@@ -695,25 +552,19 @@ function enforceSingleUnmuted() {
 function syncMuteIcons() {
     document.querySelectorAll('#grid .video-container').forEach(container => {
         const media = container.querySelector('video, audio');
-        const btn   = container.querySelector('.mute-btn');
-        if (!media || !btn) return;
-        btn.innerHTML = media.muted ? '🔇' : '🔊';
+        const btn = container.querySelector('.mute-btn');
+        if (media && btn) btn.innerHTML = media.muted ? '🔇' : '🔊';
     });
 }
 
-function startFullscreenFrom(file,startTime=0){ fullscreenMode='tile'; document.querySelectorAll('#grid video, #grid audio').forEach(m=>m.pause()); lastFullscreen={file,time:startTime}; startFullscreenPlayer(allVideos,allVideos.indexOf(file),startTime); }
-
-function createFullscreenMedia(playlist,i,startTime){
-    const ext = playlist[i].split('.').pop().toLowerCase();
-    const isAudio = ['mp3','wav','ogg'].includes(ext);
-    const media = isAudio ? document.createElement('audio') : document.createElement('video');
-    media.src = playlist[i];
-    media.currentTime = startTime;
-    if(!isAudio){ media.controls=true; media.loop=true; media.playsInline=true; media.style.cssText='width:100%;height:100%;object-fit:contain;'; } 
-    else { media.controls=true; media.autoplay=true; media.style.cssText='width:100%;height:40px;'; }
-    media.muted = muted;
-    media.addEventListener('loadedmetadata',()=>media.play().catch(()=>{}),{once:true});
-    return {media,isAudio};
+// ================================
+// FULLSCREEN PLAYER
+// ================================
+function startFullscreenFrom(file, startTime = 0) {
+    fullscreenMode = 'tile';
+    document.querySelectorAll('#grid video, #grid audio').forEach(m => m.pause());
+    lastFullscreen = { file, time: startTime };
+    startFullscreenPlayer(allVideos, allVideos.indexOf(file), startTime);
 }
 
 function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
@@ -721,33 +572,26 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
     let i = index;
 
     if (window.AndroidPlayer && window.useExoPlayer) {
-        AndroidPlayer.playFullscreen(
-            JSON.stringify(playlist),
-            i,
-            startTime
-        );
+        AndroidPlayer.playFullscreen(JSON.stringify(playlist), i, startTime);
         return;
     }
 
     const container = document.createElement('div');
-    container.style.cssText =
-        'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0, 0, 0, 1);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;';
+    container.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;';
     document.body.appendChild(container);
 
-    let mediaEl;
-    let thumb = null;
+    let mediaEl, thumb;
 
     function createMedia(file, startTime = 0) {
         const ext = file.split('.').pop().toLowerCase();
         const isImage = ['jpg','jpeg','png','gif','webp'].includes(ext);
         const isAudio = ['mp3','wav','ogg'].includes(ext);
 
-        // If we are reusing the same element, just reattach it
         if (mediaEl && lastFullscreen.file === file) {
             container.innerHTML = '';
             if (thumb) container.appendChild(thumb);
             container.appendChild(mediaEl);
-            return; // continue playing naturally
+            return;
         }
 
         container.innerHTML = '';
@@ -755,14 +599,7 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
         if (isImage) {
             mediaEl = document.createElement('img');
             mediaEl.src = file;
-            mediaEl.style.cssText = `
-                max-width:95vw;
-                max-height:92vh;
-                object-fit:contain;
-                border-radius:8px;
-                box-shadow:0 0 40px rgba(0,0,0,0.6);
-                cursor:pointer;
-            `;
+            mediaEl.style.cssText = 'max-width:95vw;max-height:92vh;object-fit:contain;border-radius:8px;box-shadow:0 0 40px rgba(0,0,0,0.6);cursor:pointer;';
             mediaEl.ondblclick = close;
             container.appendChild(mediaEl);
         } else {
@@ -778,63 +615,38 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
                 mediaEl.style.cssText = 'width:100%;height:40px;margin-bottom:6px;border-radius:6px;';
                 thumb = document.createElement('img');
                 thumb.src = audioThumbs[file] || 'cache/no-cover.jpg';
-                thumb.style.cssText = `
-                    max-width:95vw;
-                    max-height:80vh;
-                    object-fit:contain;
-                    margin-bottom:6px;
-                    border-radius:8px;
-                    cursor:pointer;
-                `;
+                thumb.style.cssText = 'max-width:95vw;max-height:80vh;object-fit:contain;margin-bottom:6px;border-radius:8px;cursor:pointer;';
                 thumb.ondblclick = close;
                 container.appendChild(thumb);
-                container.appendChild(mediaEl);
             } else {
-                mediaEl.style.cssText = `
-                    max-width:95vw;
-                    max-height:92vh;
-                    object-fit:contain;
-                    border-radius:8px;
-                    box-shadow:0 0 40px rgba(0,0,0,0.6);
-                    cursor:pointer;
-                `;
+                mediaEl.style.cssText = 'max-width:95vw;max-height:92vh;object-fit:contain;border-radius:8px;box-shadow:0 0 40px rgba(0,0,0,0.6);cursor:pointer;';
                 mediaEl.ondblclick = close;
-                container.appendChild(mediaEl);
             }
+
+            container.appendChild(mediaEl);
 
             mediaEl.addEventListener('loadedmetadata', () => {
                 if (!isAudio) {
                     const aspect = mediaEl.videoWidth / mediaEl.videoHeight;
-                    if (aspect >= 1) {
-                        mediaEl.style.width = '95vw';
-                        mediaEl.style.height = 'auto';
-                    } else {
-                        mediaEl.style.width = 'auto';
-                        mediaEl.style.height = '92vh';
-                    }
+                    mediaEl.style.width = aspect >= 1 ? '95vw' : 'auto';
+                    mediaEl.style.height = aspect < 1 ? '92vh' : 'auto';
                     mediaEl.play().catch(() => {});
                 }
             }, { once: true });
         }
 
-        // Attach loop/onended after element is in DOM
-        const isSingleTileFullscreen = fullscreenMode === 'tile';
-        mediaEl.loop = isSingleTileFullscreen && !isImage;
-        if (!mediaEl.loop && !isImage) {
-            mediaEl.onended = () => play(i + 1);
-        }
+        const isSingleTile = fullscreenMode === 'tile';
+        mediaEl.loop = isSingleTile && !isImage;
+        if (!mediaEl.loop && !isImage) mediaEl.onended = () => play(i + 1);
 
-        // Track the current file only if not reusing
         lastFullscreen.file = file;
         if (!isImage && !isAudio) lastFullscreen.time = startTime;
     }
 
     function play(idx) {
         i = (idx + playlist.length) % playlist.length;
-
         const file = playlist[i];
 
-        // If same element, just reattach and return
         if (mediaEl && lastFullscreen.file === file) {
             container.innerHTML = '';
             if (thumb) container.appendChild(thumb);
@@ -842,18 +654,17 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
             return;
         }
 
-        // Save state before removing
         if (mediaEl) {
             if (mediaEl.tagName === 'AUDIO' || mediaEl.tagName === 'VIDEO') {
                 lastFullscreen.time = mediaEl.currentTime;
             }
-            if (thumb) { thumb.remove(); thumb = null; }
+            if (thumb) thumb.remove();
             mediaEl.remove();
             mediaEl = null;
+            thumb = null;
         }
 
-        const startTime = (lastFullscreen.file === file && lastFullscreen.time) ? lastFullscreen.time : 0;
-        createMedia(file, startTime);
+        createMedia(file, lastFullscreen.file === file ? lastFullscreen.time : 0);
     }
 
     function close() {
@@ -862,16 +673,14 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
         } else {
             lastFullscreen.time = 0;
         }
+        lastFullscreen.file = playlist[i];
 
-        lastFullscreen.file = playlist[i]; // track current file for reuse
-
-        // Update grid to show current file
         startIndex = Math.floor(allVideos.indexOf(playlist[i]) / totalCells) * totalCells;
         renderGrid();
 
-        if (thumb) { thumb.remove(); thumb = null; }
-        if (mediaEl) { mediaEl.remove(); mediaEl = null; }
-        container?.remove();
+        if (thumb) thumb.remove();
+        if (mediaEl) mediaEl.remove();
+        container.remove();
         document.removeEventListener('keydown', keyHandler);
     }
 
@@ -894,63 +703,33 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
 
     const keyHandler = async e => {
         if (e.key === 'Escape') return close();
-
-        // Fire TV close fullscreen mode
-        if (e.keyCode === 38 || e.keyCode === 40) {
-            e.preventDefault();
-            return close();
-        }
-
-        // Fire TV previous / next in fullscreen
-        if (e.keyCode === 37) { // Left arrow → previous
-            e.preventDefault();
-            play(i - 1);
-            return;
-        }
-        if (e.keyCode === 39) { // Right arrow → next
-            e.preventDefault();
-            play(i + 1);
-            return;
-        }
+        if ([38, 40].includes(e.keyCode)) { e.preventDefault(); return close(); }
+        if (e.keyCode === 37) { e.preventDefault(); play(i - 1); return; }
+        if (e.keyCode === 39) { e.preventDefault(); play(i + 1); return; }
 
         if (e.key === 'Delete') {
             if (!confirm('Delete this file?')) return;
-
             const del = playlist[i];
-
             try {
-                // Use POST JSON API instead of old GET
                 const resp = await fetch('index.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ action: 'delete', files: [del] })
                 });
                 const data = await resp.json();
+                if (data.error) throw new Error(data.error);
 
-                if (data.error) {
-                    alert('Error deleting file: ' + data.error);
-                    console.error(data);
-                    return;
-                }
-
-                // Remove from playlist and allVideos
                 playlist.splice(i, 1);
-                const globalIdx = allVideos.indexOf(del);
-                if (globalIdx !== -1) allVideos.splice(globalIdx, 1);
-
-                // Update grid
+                const idx = allVideos.indexOf(del);
+                if (idx !== -1) allVideos.splice(idx, 1);
                 renderGrid();
 
-                // If playlist is empty, close fullscreen
                 if (!playlist.length) return close();
-
-                // Play next video in place of deleted one
                 i = i % playlist.length;
                 play(i);
-
             } catch (err) {
-                console.error('Delete request failed', err);
-                alert('Failed to delete file. See console.');
+                console.error(err);
+                alert('Delete failed');
             }
         }
     };
@@ -961,115 +740,108 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
     });
 }
 
-function playAll(){ fullscreenMode='playlist'; document.querySelectorAll('#grid audio, #grid video').forEach(m=>m.pause()); startFullscreenPlayer(allVideos,startIndex); }
-function shufflePlay(){ fullscreenMode='playlist'; document.querySelectorAll('#grid audio, #grid video').forEach(m=>m.pause()); startFullscreenPlayer([...allVideos].sort(()=>Math.random()-0.5),0); }
+function playAll() {
+    fullscreenMode = 'playlist';
+    document.querySelectorAll('#grid audio, #grid video').forEach(m => m.pause());
+    startFullscreenPlayer(allVideos, startIndex);
+}
 
+function shufflePlay() {
+    fullscreenMode = 'playlist';
+    document.querySelectorAll('#grid audio, #grid video').forEach(m => m.pause());
+    startFullscreenPlayer([...allVideos].sort(() => Math.random() - 0.5), 0);
+}
+
+// ================================
+// AUDIT
+// ================================
 function runAudit(count) {
     fetch('index.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             action: 'audit',
-            path: <?= json_encode($selected_path ? $root_directory.'/'.$selected_path : $root_directory) ?>,
-            count: count
+            path: <?= json_encode($selected_path ? $root_directory . '/' . $selected_path : $root_directory) ?>,
+            count
         })
     })
     .then(r => r.json())
     .then(data => {
-        if (data.error) {
-            alert('Audit failed: ' + data.error);
-            return;
-        }
-
-        document.getElementById('audit-text').innerText = `[ ${data.text} ]`;
+        document.getElementById('audit-text').innerText = data.error ? `[ Error: ${data.error} ]` : `[ ${data.text} ]`;
     })
-    .catch(err => {
-        console.error('Audit request failed', err);
-        alert('Audit request failed');
-    });
+    .catch(() => alert('Audit failed'));
 }
 
-const grid=document.getElementById('grid'); let scrollDebounce=false;
-grid.addEventListener('wheel',e=>{ e.preventDefault(); if(scrollDebounce) return; scrollDebounce=true; setTimeout(()=>scrollDebounce=false,200); e.deltaY<0?prevGrid():nextGrid(); },{passive:false});
-let touchStartY=0;
-grid.addEventListener('touchstart',e=>{ if(e.touches.length===1) touchStartY=e.touches[0].clientY; },{passive:true});
-grid.addEventListener('touchend',e=>{ const delta=e.changedTouches[0].clientY-touchStartY; if(Math.abs(delta)>50) delta<0?nextGrid():prevGrid(); },{passive:true});
+// ================================
+// GRID GESTURES & UTILS
+// ================================
+const grid = document.getElementById('grid');
+let scrollDebounce = false;
 
-function setVhUnit(){ document.documentElement.style.setProperty('--vh',`${window.innerHeight*0.01}px`); }
-setVhUnit(); window.addEventListener('resize',setVhUnit); window.addEventListener('orientationchange',setVhUnit);
+grid.addEventListener('wheel', e => {
+    e.preventDefault();
+    if (scrollDebounce) return;
+    scrollDebounce = true;
+    setTimeout(() => scrollDebounce = false, 200);
+    e.deltaY < 0 ? prevGrid() : nextGrid();
+}, { passive: false });
 
-// Temporary debugging for Fire TV remote keys
-// document.addEventListener('keydown', e => {
-//    alert(`Key pressed!\nkey: "${e.key}"\nkeyCode: ${e.keyCode}`);
-// });
+let touchStartY = 0;
+grid.addEventListener('touchstart', e => {
+    if (e.touches.length === 1) touchStartY = e.touches[0].clientY;
+}, { passive: true });
 
-// =============================================
+grid.addEventListener('touchend', e => {
+    const delta = e.changedTouches[0].clientY - touchStartY;
+    if (Math.abs(delta) > 50) delta < 0 ? nextGrid() : prevGrid();
+}, { passive: true });
+
+function setVhUnit() {
+    document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`);
+}
+setVhUnit();
+window.addEventListener('resize', setVhUnit);
+window.addEventListener('orientationchange', setVhUnit);
+
+// ================================
 // SEARCH FEATURE
-// =============================================
-
-// Apply search filter
+// ================================
 function applySearch(term) {
     term = (term || '').trim().toLowerCase();
     currentSearch = term;
-
-    if (!term) {
-        allVideos = [...originalVideos];
-    } else {
-        allVideos = originalVideos.filter(file => 
-            file.toLowerCase().includes(term)
-        );
-    }
-
+    allVideos = term ? originalVideos.filter(f => f.toLowerCase().includes(term)) : [...originalVideos];
     startIndex = 0;
     renderGrid();
     document.getElementById('search-overlay').style.display = 'none';
 }
 
-// Show search overlay
 function showSearch() {
     const overlay = document.getElementById('search-overlay');
     const input = document.getElementById('search-input');
-    
     if (!overlay || !input) return;
-    
     overlay.style.display = 'flex';
     input.value = currentSearch;
     input.focus();
     input.select();
 }
 
-// Close search without applying
 function closeSearch() {
-    const overlay = document.getElementById('search-overlay');
-    if (overlay) {
-        overlay.style.display = 'none';
-    }
-    const input = document.getElementById('search-input');
-    if (input) input.blur();
+    document.getElementById('search-overlay').style.display = 'none';
+    document.getElementById('search-input')?.blur();
 }
 
-// =============================================
-// Attach all search event listeners AFTER DOM is ready
-// =============================================
 document.addEventListener('DOMContentLoaded', () => {
     const overlay = document.getElementById('search-overlay');
     const input = document.getElementById('search-input');
     const clearBtn = document.getElementById('search-clear');
 
-    if (!input || !overlay) {
-        console.warn('Search elements not found in DOM');
-        return;
-    }
+    if (!input || !overlay) return;
 
-    // Clear button
-    if (clearBtn) {
-        clearBtn.addEventListener('click', () => {
-            input.value = '';
-            applySearch('');
-        });
-    }
+    clearBtn?.addEventListener('click', () => {
+        input.value = '';
+        applySearch('');
+    });
 
-    // Input: Enter / ESC
     input.addEventListener('keydown', e => {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -1080,37 +852,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Global keyboard handler
     document.addEventListener('keydown', e => {
-        // If user is typing in any input, only allow ESC to close
-        if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
-            if (e.key === 'Escape') {
-                closeSearch();
-                e.preventDefault();
-            }
+        if (document.activeElement.matches('input, textarea')) {
+            if (e.key === 'Escape') closeSearch();
             return;
         }
-
-        // Global shortcuts
         if (e.key === '/') {
             e.preventDefault();
             showSearch();
-        }
-        else if (e.key === 'Escape' && overlay.style.display === 'flex') {
+        } else if (e.key === 'Escape' && overlay.style.display === 'flex') {
             closeSearch();
-            e.preventDefault();
         }
     });
 });
-
-// Optional: live preview (uncomment if you want it — can be slow with many files)
-// let searchTimeout;
-// document.getElementById('search-input')?.addEventListener('input', e => {
-//     clearTimeout(searchTimeout);
-//     searchTimeout = setTimeout(() => {
-//         applySearch(e.target.value);
-//     }, 400);
-// });
 
 renderGrid();
 </script>
