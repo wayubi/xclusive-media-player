@@ -182,10 +182,20 @@ $muted = !isset($_GET['muted']) || $_GET['muted'] === 'true';
 // ================================
 // FILESYSTEM HELPERS
 // ================================
+function getExcludedFolders(): array {
+    return ['.metadata', '.trash'];
+}
+
 function getSubfolders(string $path): array {
     if (!is_dir($path)) return [];
+
     $folders = scandir($path);
-    $filtered = array_filter($folders, fn($d) => $d !== '.' && $d !== '..' && is_dir("$path/$d"));
+    $excluded = getExcludedFolders();
+
+    $filtered = array_filter($folders, function($d) use ($path, $excluded) {
+        return $d !== '.' && $d !== '..' && !in_array($d, $excluded) && is_dir("$path/$d");
+    });
+
     usort($filtered, 'strcasecmp');
     return array_values($filtered);
 }
@@ -197,9 +207,19 @@ function getFiles(string $path): array {
         new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS),
         RecursiveIteratorIterator::SELF_FIRST
     );
+
+    $excluded = getExcludedFolders();
+
     foreach ($it as $file) {
         if (!$file->isFile() || $file->getFilename() === '.audited') continue;
         $pathname = $file->getPathname();
+
+        foreach ($excluded as $folder) {
+            if (strpos($pathname, "/$folder/") !== false) {
+                continue 2; // Skip this file if any excluded folder is in the path
+            }
+        }
+
         if (!mb_check_encoding($pathname, 'UTF-8')) {
             $pathname = iconv('UTF-8', 'UTF-8//IGNORE', $pathname);
         }
@@ -208,8 +228,9 @@ function getFiles(string $path): array {
         }
         $files[] = $pathname;
     }
+
     usort($files, fn($a, $b) => @filemtime($b) <=> @filemtime($a));
-    return $files;
+    return array_values($files);
 }
 
 function filesystemToWebPath(string $fsPath, string $rootFs, string $rootWeb): string {
@@ -227,7 +248,7 @@ function getCurrentPath(string $root, string $selected_path): string {
 
 function renderSingleFolderSelect(array $selected_parts, string $current_abs_path): void {
     $is_root = empty($selected_parts);
-    $subfolders = getSubfolders($current_abs_path);
+    $subfolders = getSubfolders(path: $current_abs_path);
     $has_children = !empty($subfolders);
     ?>
     <select name="goto_folder" id="folder-select"
