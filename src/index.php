@@ -196,36 +196,344 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Xclusive Media Player</title>
 <style>
-html, body { margin:0; padding:0; height:100%; overflow:hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#121212; color:#f0f0f0; }
-#form { padding:12px 20px; background:#1f1f1f; display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:10px; border-bottom:1px solid #333; }
-#options-form select, #options-form button { padding:6px 10px; border-radius:6px; border:none; background:#2c2c2c; color:#f0f0f0; font-size:14px; cursor:pointer; transition:0.2s; }
-#options-form select:hover, #options-form button:hover { background:#3a3a3a; }
-#file-count, #audit-text { font-weight:bold; margin:0 10px; }
-#folder-select-container { display: inline-flex; gap: 6px; align-items: center; }
-#folder-select-container select { max-width: 180px; min-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#grid { display:grid; grid-template-columns: repeat(<?php echo $selected_columns; ?>,1fr); grid-template-rows: repeat(<?php echo $selected_rows; ?>,1fr); gap:8px; padding:10px; height:calc(100% - 72px); }
-.video-container { position:relative; width:100%; height:100%; overflow:hidden; border-radius:8px; background:black; }
-.video-container video, .video-container img { width:100%; height:100%; object-fit:contain; display:block; border-radius:8px; transition: transform 0.2s, box-shadow 0.2s; }
-.video-container:hover video, .video-container:hover img { transform:scale(1.03); box-shadow:0 4px 20px rgba(0,0,0,0.5); }
-.video-container .overlay { position:absolute; top:4px; left:4px; right:4px; background:rgba(0,0,0,0.7); color:#fff; font-size:12px; padding:2px 6px; border-radius:4px; opacity:0; display:flex; justify-content:space-between; align-items:center; pointer-events:none; transition:opacity 0.2s; z-index:10; }
-.video-container:hover .overlay { opacity:1; pointer-events:auto; }
-.overlay button { background:#ff4d4f; border:none; border-radius:4px; color:#fff; font-size:10px; padding:2px 6px; cursor:pointer; margin-left:6px; }
-.overlay button:hover { background:#d9363e; }
-#search-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:10000; display:flex; align-items:center; justify-content:center; }
-.search-container { position:relative; width:90%; max-width:700px; }
-#search-input { width:100%; padding:18px 60px 18px 20px; font-size:20px; border:none; border-radius:12px; background:#1f1f1f; color:white; outline:none; box-shadow:0 0 0 2px #444; }
-#search-input:focus { box-shadow:0 0 0 3px #0066ff; }
-#search-clear { position:absolute; right:12px; top:50%; transform:translateY(-50%); background:transparent; border:none; color:#888; font-size:28px; cursor:pointer; padding:8px; }
-#search-clear:hover { color:#ff4d4f; }
-@media (max-width:768px) {
-  #form { flex-direction:row; justify-content:space-between; gap:6px; padding:6px 10px; }
-  #form span[id="file-count"], #form select[name="columns"], #form select[name="rows"], #form button[id="refresh"], #form button[id="clear"], #form button[id="audit"], #form button[id="previous"], #form button[id="next"], #form span[id="audit-text"] { display:none; }
+/* ==========================================================================
+   SEXY MODERN DARK THEME - MERGED 2026 EDITION
+   ========================================================================== */
+
+:root {
+  --bg: #0f0f11;
+  --surface: #17171c;
+  --surface-hover: #22222a;
+  --accent: #7c3aed;
+  --accent-glow: #a78bfa;
+  --text: #f1f1f3;
+  --text-secondary: #a0a0b0;
+  --border: #33333a;
+  --radius-sm: 10px;
+  --radius: 16px;
+  --shadow-sm: 0 4px 16px rgba(0,0,0,0.38);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.55);
+  --transition: all 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  --grid-gap: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-weight: 500;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
+
+/* ========================================================================== 
+   HEADER / CONTROLS BAR
+   ========================================================================== */
+#options-form {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+
+  background: linear-gradient(to bottom, rgba(20,20,28,0.92), rgba(15,15,22,0.88));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+
+  position: sticky;
+  top: 0;
+  z-index: 100;
+
+  -webkit-overflow-scrolling: touch;
+}
+
+#folder-select-container {
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+#options-form span {
+    white-space: nowrap;
+}
+
+#options-form select,
+#options-form button {
+  padding: 6px 12px;
+  font-size: 0.95rem;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  min-width: 36px;
+  white-space: nowrap;
+}
+
+#options-form select:hover,
+#options-form button:hover {
+  background: var(--surface-hover);
+  transform: translateY(-1px);
+}
+
+#options-form button {
+  background: linear-gradient(145deg, #2a2a35, #22222c);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+}
+
+#options-form button:hover {
+  box-shadow: 0 4px 18px rgba(124,58,237,0.28);
+}
+
+#mute-button,
+#refresh,
+#clear,
+#audit,
+#previous,
+#next {
+  font-size: 1.2rem;
+  padding: 6px;
+  height: 36px;
+  min-width: 36px;
+}
+
+#mute-button.active {
+  color: var(--accent-glow);
+}
+
+/* Folder selects specific styling */
+#folder-select-container select {
+  max-width: 220px;
+  min-width: 140px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+/* ========================================================================== 
+   MAIN GRID
+   ========================================================================== */
+#grid {
+  display: grid;
+  gap: var(--grid-gap);
+  padding: 16px;
+  height: calc(100% - 64px);
+  grid-auto-rows: minmax(0, 1fr);
+}
+
+/* ========================================================================== 
+   VIDEO / IMAGE TILES
+   ========================================================================== */
+.video-container {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: #0a0a0c;
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition);
+  backdrop-filter: blur(2px);
+}
+
+.video-container:hover {
+  transform: scale(1.03);
+  box-shadow: 0 16px 48px rgba(0,0,0,0.65),
+              0 0 0 1px rgba(124,58,237,0.18);
+  z-index: 5;
+}
+
+.video-container video,
+.video-container img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.45s ease;
+}
+
+.video-container:hover video,
+.video-container:hover img {
+  transform: scale(1.06);
+}
+
+/* ========================================================================== 
+   FILE INFO OVERLAY
+   ========================================================================== */
+.overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 60%);
+  color: white;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 16px;
+  pointer-events: none;
+  backdrop-filter: blur(6px);
+  border-radius: var(--radius);
+}
+
+.video-container:hover .overlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.overlay > div:first-child {
+  font-weight: 600;
+  font-size: 1.05rem;
+  margin-bottom: 4px;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.7);
+}
+
+.overlay > div:last-child {
+  font-size: 0.82rem;
+  opacity: 0.85;
+  letter-spacing: 0.3px;
+}
+
+/* ========================================================================== 
+   CENTRAL FLOATING CONTROLS
+   ========================================================================== */
+.central-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  gap: 16px;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.video-container:hover .central-overlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.central-overlay button {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(30,30,40,0.75);
+  backdrop-filter: blur(8px);
+  color: white;
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+
+.central-overlay button:hover {
+  background: rgba(124,58,237,0.65);
+  transform: scale(1.15);
+  box-shadow: 0 8px 30px rgba(124,58,237,0.45);
+}
+
+/* ========================================================================== 
+   SEARCH OVERLAY
+   ========================================================================== */
+#search-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(12,12,18,0.94);
+  backdrop-filter: blur(16px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10000;
+}
+
+.search-container {
+  position: relative;
+  width: min(92%, 760px);
+}
+
+#search-input {
+  width: 100%;
+  padding: 22px 70px 22px 24px;
+  font-size: 1.4rem;
+  background: rgba(30,30,40,0.75);
+  border: none;
+  border-radius: 18px;
+  color: white;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(124,58,237,0.3);
+  transition: all 0.35s ease;
+}
+
+#search-input:focus {
+  box-shadow: 0 0 0 3px var(--accent),
+              0 0 30px rgba(124,58,237,0.4);
+  background: rgba(40,40,55,0.8);
+}
+
+#search-clear {
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 2rem;
+  cursor: pointer;
+  transition: color 0.3s;
+}
+
+#search-clear:hover {
+  color: var(--accent-glow);
+}
+
+/* ========================================================================== 
+   MOBILE ADJUSTMENTS
+   ========================================================================== */
+@media (max-width: 768px) {
+  #grid {
+    gap: 8px;
+    padding: 10px;
+  }
+  
+  #options-form {
+    padding: 10px 12px;
+    gap: 6px;
+  }
+  
+  #folder-select-container select {
+    max-width: 160px;
+    min-width: 120px;
+  }
+  
+  #options-form select[name="columns"],
+  #options-form select[name="rows"] {
+    min-width: 60px;
+  }
 }
 </style>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
 
-<div id="form">
 <form id="options-form" method="get" action="index.php">
   <span id="file-count">1 / <?php echo count($allFiles); ?></span>
   <div id="folder-select-container"><?php renderFolderSelects($selected_path_parts_final, $root_directory_absolute); ?></div>
@@ -242,7 +550,6 @@ html, body { margin:0; padding:0; height:100%; overflow:hidden; font-family: 'Se
   <button type="button" id="next" onclick="nextGrid()">▶</button>
   <span id="audit-text">[ <?= htmlspecialchars($auditedText) ?> ]</span>
 </form>
-</div>
 
 <div id="grid"></div>
 
@@ -497,6 +804,19 @@ function createMediaContainer(file) {
 // ================================
 function renderGrid() {
     const grid = document.getElementById('grid');
+
+    const visibleCount = Math.min(
+        totalCells,
+        Math.max(0, allVideos.length - startIndex)
+    );
+
+    const maxCols = <?= $selected_columns ?>;
+    const cols = autoColumns(visibleCount, maxCols);
+    const rows = Math.ceil(visibleCount / cols);
+
+    grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+    grid.style.gridAutoRows = `${100 / rows}%`;
+
     grid.querySelectorAll('video, audio').forEach(m => { m.pause(); m.src = ''; m.load(); });
     grid.innerHTML = '';
 
@@ -550,6 +870,24 @@ function nextGrid() {
 function prevGrid() {
     startIndex = (startIndex - totalCells + allVideos.length) % allVideos.length;
     renderGrid();
+}
+
+function computeGridDimensions(count, maxCols) {
+    if (count <= maxCols) {
+        return { cols: count, rows: 1 };
+    }
+
+    const cols = maxCols;
+    const rows = Math.ceil(count / cols);
+    return { cols, rows };
+}
+
+function autoColumns(count, maxCols) {
+    if (count <= 1) return 1;
+    if (count === 2) return 2;
+    if (count <= 4) return Math.min(2, maxCols);
+    if (count <= 6) return Math.min(3, maxCols);
+    return maxCols;
 }
 
 // ================================
