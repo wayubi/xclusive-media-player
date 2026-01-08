@@ -448,16 +448,18 @@ function addCentralOverlay(container, mediaEl, file) {
     if (mediaEl && (mediaEl.tagName === 'VIDEO' || mediaEl.tagName === 'AUDIO')) {
         // ===== Right: Mute/unmute button =====
         const muteBtn = document.createElement('button');
+        muteBtn.className = 'mute-btn';
         muteBtn.innerHTML = mediaEl.muted ? '🔇' : '🔊';
         muteBtn.style.cssText = buttonStyle;
         muteBtn.onclick = e => {
             e.stopPropagation();
-            document.querySelectorAll('#grid audio, #grid video').forEach(m => m !== mediaEl && (m.muted = true));
-            document.querySelectorAll('#grid .video-container button:nth-child(3)').forEach(b => b.innerHTML = '🔇');
+            document.querySelectorAll('#grid audio, #grid video').forEach(m => {
+                m.muted = true;
+            });
             mediaEl.muted = false;
-            muteBtn.innerHTML = '🔊';
             lastFullscreen = { file: null, time: 0 };
             mediaEl.play().catch(() => {});
+            syncMuteIcons();
         };
         overlay.appendChild(muteBtn);
     }
@@ -491,15 +493,17 @@ function createMediaContainer(file) {
         // Priority: recent fullscreen (if visible) → wins
         const isRecentFullscreen = (lastFullscreen.file === file) && isFileVisible(file);
 
-        // Base state: respect global muted flag
-        let shouldBeUnmuted = isRecentFullscreen;
-
-        // If global is unmuted AND no fullscreen priority → default to first visible media
-        if (!shouldBeUnmuted && !muted) {
-            const visibleMedia = allVideos.slice(startIndex, startIndex + totalCells)
-                .filter(f => /\.(mp4|webm|mkv|mp3|wav|ogg)$/i.test(f));
-            if (visibleMedia[0] === file) {
+        // Base state: muted unless conditions met and global not muted
+        let shouldBeUnmuted = false;
+        if (!muted) {
+            if (isRecentFullscreen) {
                 shouldBeUnmuted = true;
+            } else {
+                const visibleMedia = allVideos.slice(startIndex, startIndex + totalCells)
+                    .filter(f => /\.(mp4|webm|mkv|mp3|wav|ogg)$/i.test(f));
+                if (visibleMedia[0] === file) {
+                    shouldBeUnmuted = true;
+                }
             }
         }
 
@@ -572,22 +576,15 @@ function renderGrid() {
 
         if (recentMedia) {
             recentMedia.currentTime = lastFullscreen.time || 0;
-            recentMedia.muted = false;
             recentMedia.play().catch(() => {});
-            return;
         }
 
-        // If global unmuted → make sure first media plays
-        if (!muted) {
-            const firstMedia = grid.querySelector('audio, video');
-            if (firstMedia) {
-                firstMedia.muted = false;
-                firstMedia.play().catch(() => {});
-            }
-        }
+        enforceSingleUnmuted();
+        syncMuteIcons();
     }, 150);
 
     enforceSingleUnmuted();
+    syncMuteIcons();
 
     document.getElementById('file-count').innerText = `${startIndex+1} / ${allVideos.length}`;
 }
@@ -608,45 +605,36 @@ function toggleMute() {
 }
 
 function enforceSingleUnmuted() {
-    const videos = Array.from(document.querySelectorAll('#grid video'));
-    if (!videos.length) return;
+    const media = Array.from(document.querySelectorAll('#grid video, #grid audio'));
+    if (!media.length) return;
 
-    // Find which one should be unmuted
-    let targetVideo = null;
+    let target = null;
 
-    // Priority 1: recent fullscreen video (if visible)
-    if (lastFullscreen.file) {
-        targetVideo = videos.find(v => v.dataset.file === lastFullscreen.file);
-    }
-
-    // Priority 2: if no fullscreen priority → first visible (when global unmuted)
-    if (!targetVideo && !muted) {
-        targetVideo = videos[0];
-    }
-
-    if (targetVideo) {
-        // Mute all, unmute only the target
-        videos.forEach(v => v.muted = true);
-        targetVideo.muted = false;
-        targetVideo.play().catch(() => {});
-
-        // Sync overlay emojis
-        document.querySelectorAll('#grid .video-container button:nth-child(3)').forEach(b => {
-            b.innerHTML = '🔇';
-        });
-        // Find the button for the target video and set 🔊
-        const targetContainer = targetVideo.closest('.video-container');
-        if (targetContainer) {
-            const muteBtn = targetContainer.querySelector('button:nth-child(3)');
-            if (muteBtn) muteBtn.innerHTML = '🔊';
+    if (!muted) {
+        if (lastFullscreen.file) {
+            target = media.find(m => m.dataset.file === lastFullscreen.file);
         }
-    } else {
-        // No target → mute everything
-        videos.forEach(v => v.muted = true);
-        document.querySelectorAll('#grid .video-container button:nth-child(3)').forEach(b => {
-            b.innerHTML = '🔇';
-        });
+
+        if (!target) {
+            target = media[0];
+        }
     }
+
+    media.forEach(m => m.muted = true);
+
+    if (target) {
+        target.muted = false;
+        target.play().catch(() => {});
+    }
+}
+
+function syncMuteIcons() {
+    document.querySelectorAll('#grid .video-container').forEach(container => {
+        const media = container.querySelector('video, audio');
+        const btn   = container.querySelector('.mute-btn');
+        if (!media || !btn) return;
+        btn.innerHTML = media.muted ? '🔇' : '🔊';
+    });
 }
 
 function startFullscreenFrom(file,startTime=0){ fullscreenMode='tile'; document.querySelectorAll('#grid video, #grid audio').forEach(m=>m.pause()); lastFullscreen={file,time:startTime}; startFullscreenPlayer(allVideos,allVideos.indexOf(file),startTime); }
@@ -720,7 +708,7 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
             mediaEl.autoplay = true;
             mediaEl.controls = !isAudio;
             mediaEl.playsInline = !isAudio;
-            mediaEl.muted = !isAudio ? muted : false;
+            mediaEl.muted = muted;
 
             if (isAudio) {
                 mediaEl.style.cssText = 'width:100%;height:40px;margin-bottom:6px;border-radius:6px;';
