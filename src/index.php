@@ -842,7 +842,7 @@ function createMediaContainer(file) {
     container.className = 'video-container';
     const ext = file.split('.').pop().toLowerCase();
     const isAudio = ['mp3','wav','ogg'].includes(ext);
-    const isVideo = ['mp4','webm','mkv'].includes(ext);
+    const isVideo = ['mp4', 'webm', 'mkv', 'mov', 'm4v', '3gp'].includes(ext);
     const isImage = ['jpg','jpeg','png','gif','webp'].includes(ext);
 
     let mediaEl = null;
