@@ -135,7 +135,8 @@ function filesystemToWebPath(string $fsPath, string $rootFs, string $rootWeb): s
     $fsPath = str_replace('\\', '/', realpath($fsPath));
     $rootFs = str_replace('\\', '/', realpath($rootFs));
     $relative = str_starts_with($fsPath, $rootFs) ? substr($fsPath, strlen($rootFs)) : $fsPath;
-    return $rootWeb . '/' . ltrim($relative, '/');
+    $segments = array_map('rawurlencode', explode('/', ltrim($relative, '/')));
+    return rtrim($rootWeb, '/') . '/' . implode('/', $segments);
 }
 
 function getCurrentPath(string $root, string $selected_path): string {
