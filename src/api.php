@@ -1,68 +1,70 @@
 <?php
-// api.php — simple internal-only API with debugging
 
 header('Content-Type: application/json');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
-    echo json_encode(['error' => 'POST only']);
+    echo json_encode(['error' => 'Method not allowed - POST required']);
     exit;
 }
 
-$data = json_decode(file_get_contents('php://input'), true);
+$data = json_decode(file_get_contents('php://input'), true) ?? [];
 $action = $data['action'] ?? null;
-$files = $data['file'] ?? $data['files'] ?? null;
-
-error_log("API request received: " . print_r($data, true));
 
 if (!$action) {
     http_response_code(400);
-    echo json_encode(['error' => 'Missing action']);
+    echo json_encode(['error' => 'Missing action parameter']);
     exit;
 }
 
-// normalize $files to array
-if (!is_array($files)) $files = [$files];
+// Normalize files to array
+$files = $data['files'] ?? $data['file'] ?? [];
+if (!is_array($files)) {
+    $files = $files ? [$files] : [];
+}
+
+$root = realpath(__DIR__ . '/volumes');
 
 switch ($action) {
     case 'delete':
-        $results = [];
-        $trash = __DIR__ . '/volumes/.trash';
+        if (empty($files)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'No files provided']);
+            exit;
+        }
 
-        if (!is_dir($trash) && !mkdir($trash, 0777, true) && !is_dir($trash)) {
-            error_log("Failed to create trash directory: $trash");
+        $trash = $root . '/.trash';
+        if (!is_dir($trash) && !mkdir($trash, 0777, true)) {
             http_response_code(500);
             echo json_encode(['error' => 'Failed to create trash directory']);
             exit;
         }
 
+        $results = [];
+
         foreach ($files as $file) {
-            $fsPath = __DIR__ . '/' . ltrim($file, '/');
-
-            error_log("Attempting to delete: $fsPath");
-
-            if (!file_exists($fsPath)) {
-                error_log("File not found or inaccessible: $fsPath");
+            // Strip /volumes prefix
+            $cleanFile = ltrim(preg_replace('#^/volumes/#i', '', $file), '/');
+            $fsPath = realpath($root . '/' . $cleanFile);
+            
+            if (!$fsPath || !str_starts_with($fsPath, $root) || !file_exists($fsPath)) {
                 $results[$file] = 'not_found';
                 continue;
             }
 
             $newName = $trash . '/' . uniqid() . '_' . basename($fsPath);
-            if (!rename($fsPath, $newName)) {
-                error_log("Failed to move $fsPath -> $newName");
+            if (rename($fsPath, $newName)) {
+                $results[$file] = 'moved';
+            } else {
                 $results[$file] = 'failed';
-                continue;
             }
-
-            error_log("Successfully moved $fsPath -> $newName");
-            $results[$file] = $newName;
         }
 
         echo json_encode(['status' => 'ok', 'results' => $results]);
         break;
 
     case 'audit':
-        $path  = $data['path'] ?? null;
+        $path = $data['path'] ?? null;
         $count = (int)($data['count'] ?? 0);
 
         if (!$path) {
@@ -71,8 +73,11 @@ switch ($action) {
             exit;
         }
 
-        $fsPath = realpath(__DIR__ . '/' . ltrim($path, '/'));
-        if (!$fsPath || !is_dir($fsPath)) {
+        // Audit paths don't have /volumes prefix usually, but clean anyway
+        $cleanPath = ltrim(preg_replace('#^/volumes/#i', '', $path), '/');
+        $fsPath = realpath($root . '/' . $cleanPath);
+        
+        if (!$fsPath || !str_starts_with($fsPath, $root) || !is_dir($fsPath)) {
             http_response_code(400);
             echo json_encode(['error' => 'Invalid path']);
             exit;
@@ -102,13 +107,13 @@ switch ($action) {
             exit;
         }
 
-        // Resolve filesystem path safely
-        $root = realpath(__DIR__ . '/volumes');
-        $fsPath = realpath(__DIR__ . '/' . ltrim($file, '/'));
-
+        // Strip /volumes prefix - frontend sends web paths
+        $cleanFile = ltrim(preg_replace('#^/volumes/#i', '', $file), '/');
+        $fsPath = realpath($root . '/' . $cleanFile);
+        
         if (!$fsPath || !str_starts_with($fsPath, $root) || !is_file($fsPath)) {
             http_response_code(400);
-            echo json_encode(['error' => 'Invalid file path']);
+            echo json_encode(['error' => "Invalid file path: $file (resolved: $fsPath)"]);
             exit;
         }
 
@@ -118,7 +123,7 @@ switch ($action) {
         }
 
         $hash = sha1($fsPath);
-        $cacheFile = "$cacheDir/$hash.json";
+        $cacheFile = $cacheDir . '/' . $hash . '.json';
 
         if (!file_exists($cacheFile)) {
             $cmd = sprintf(
@@ -127,30 +132,32 @@ switch ($action) {
             );
 
             $raw = shell_exec($cmd);
-            if (!$raw) {
+            if ($raw === null || $raw === '') {
                 http_response_code(500);
-                echo json_encode(['error' => 'ffprobe failed']);
+                echo json_encode(['error' => 'ffprobe execution failed']);
                 exit;
             }
 
-            $meta = json_decode($raw, true);
+            $meta = json_decode($raw, true) ?? [];
 
-            // ---- Normalize useful fields ----
             $video = null;
             $audio = null;
 
-            foreach ($meta['streams'] ?? [] as $s) {
-                if ($s['codec_type'] === 'video' && !$video) $video = $s;
-                if ($s['codec_type'] === 'audio' && !$audio) $audio = $s;
+            foreach ($meta['streams'] ?? [] as $stream) {
+                if ($stream['codec_type'] === 'video' && !$video) {
+                    $video = $stream;
+                }
+                if ($stream['codec_type'] === 'audio' && !$audio) {
+                    $audio = $stream;
+                }
             }
 
-            $out = [
-                'file'      => basename($fsPath),
-                'filesize'  => filesize($fsPath),
-                'duration'  => isset($meta['format']['duration']) ? (float)$meta['format']['duration'] : null,
-                'bitrate'   => isset($meta['format']['bit_rate']) ? (int)$meta['format']['bit_rate'] : null,
-
-                'video' => $video ? [
+            $output = [
+                'file'     => basename($fsPath),
+                'filesize' => filesize($fsPath),
+                'duration' => $meta['format']['duration'] ?? null,
+                'bitrate'  => isset($meta['format']['bit_rate']) ? (int)$meta['format']['bit_rate'] : null,
+                'video'    => $video ? [
                     'codec'   => $video['codec_name'] ?? null,
                     'width'   => $video['width'] ?? null,
                     'height'  => $video['height'] ?? null,
@@ -159,15 +166,14 @@ switch ($action) {
                         : null,
                     'pix_fmt' => $video['pix_fmt'] ?? null,
                 ] : null,
-
-                'audio' => $audio ? [
-                    'codec'     => $audio['codec_name'] ?? null,
-                    'channels'  => $audio['channels'] ?? null,
+                'audio'    => $audio ? [
+                    'codec'       => $audio['codec_name'] ?? null,
+                    'channels'    => $audio['channels'] ?? null,
                     'sample_rate' => $audio['sample_rate'] ?? null,
                 ] : null,
             ];
 
-            file_put_contents($cacheFile, json_encode($out, JSON_PRETTY_PRINT));
+            file_put_contents($cacheFile, json_encode($output, JSON_PRETTY_PRINT));
         }
 
         echo file_get_contents($cacheFile);
