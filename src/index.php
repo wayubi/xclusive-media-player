@@ -1246,7 +1246,7 @@ function runAudit(count) {
 const grid = document.getElementById('grid');
 let scrollDebounce = false;
 
-document.addEventListener('wheel', (e) => {
+grid.addEventListener('wheel', (e) => {
     e.preventDefault();
     if (scrollDebounce) return;
     scrollDebounce = true;
