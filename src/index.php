@@ -1240,19 +1240,16 @@ function runAudit(count) {
     .catch(() => alert('Audit failed'));
 }
 
+const optionsForm = document.getElementById('options-form');
+addWheelListener(optionsForm);
+
 // ================================
 // GRID GESTURES & UTILS
 // ================================
 const grid = document.getElementById('grid');
 let scrollDebounce = false;
 
-grid.addEventListener('wheel', (e) => {
-    e.preventDefault();
-    if (scrollDebounce) return;
-    scrollDebounce = true;
-    setTimeout(() => scrollDebounce = false, 200);
-    e.deltaY < 0 ? prevGrid() : nextGrid();
-}, { passive: false });
+addWheelListener(grid);
 
 let touchStartY = 0;
 grid.addEventListener('touchstart', e => {
@@ -1270,6 +1267,19 @@ function setVhUnit() {
 setVhUnit();
 window.addEventListener('resize', setVhUnit);
 window.addEventListener('orientationchange', setVhUnit);
+
+// ================================
+// HELPER FUNCTION FOR WHEEL EVENT HANDLING
+// ================================
+function addWheelListener(element) {
+    element.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        if (scrollDebounce) return;
+        scrollDebounce = true;
+        setTimeout(() => scrollDebounce = false, 200);
+        e.deltaY < 0 ? prevGrid() : nextGrid();
+    }, { passive: false });
+}
 
 // ================================
 // SEARCH FEATURE
