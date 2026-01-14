@@ -860,7 +860,7 @@ function createMediaContainer(file) {
         mediaEl.loop = true;
         mediaEl.playsInline = true;
         mediaEl.preload = 'none';
-        mediaEl.controls = true;
+        mediaEl.controls = false;
         mediaEl.dataset.src = file;
         mediaEl.dataset.file = file;
 
