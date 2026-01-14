@@ -118,7 +118,7 @@ switch ($action) {
             exit;
         }
 
-        $cacheDir = $root . '/.metadata';
+        $cacheDir = '/tmp/.metadata';
         if (!is_dir($cacheDir)) {
             mkdir($cacheDir, 0777, true);
         }

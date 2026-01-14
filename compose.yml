@@ -22,7 +22,9 @@ services:
       - app_network
 
   php-fpm:
-    image: php:8.4-fpm
+    build:
+      context: ./docker/php-fpm
+      dockerfile: Dockerfile
     volumes:
       # - ./data/www.conf:/usr/local/etc/php-fpm.d/www.conf
       - ./src:/var/www/html

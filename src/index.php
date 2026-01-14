@@ -48,27 +48,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         curl_close($ch);
         exit;
     }
-
-    if (($data['action'] ?? null) === 'metadata' && !empty($data['file'])) {
-        $ch = curl_init('http://php-cli:8080/api.php');
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST           => true,
-            CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
-            CURLOPT_POSTFIELDS     => json_encode([
-                'action' => 'metadata',
-                'file'   => $data['file']
-            ])
-        ]);
-        $response = curl_exec($ch);
-        if (curl_errno($ch)) {
-            echo json_encode(['error' => curl_error($ch)]);
-        } else {
-            echo $response;
-        }
-        curl_close($ch);
-        exit;
-    }
 }
 
 // ================================
@@ -438,11 +417,6 @@ html, body {
   transition: transform 0.45s ease;
 }
 
-.video-container:hover video,
-.video-container:hover img {
-  transform: scale(1.06);
-}
-
 /* ========================================================================== 
    FILE INFO OVERLAY
    ========================================================================== */
@@ -732,7 +706,7 @@ async function addFileInfoOverlay(container, file) {
     container.appendChild(overlay);
 
     try {
-        const res = await fetch('index.php', {
+        const res = await fetch('api.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
