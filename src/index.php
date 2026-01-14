@@ -660,6 +660,29 @@ const MAX_CONCURRENT_VIDEO = 4;
 const buttonStyle = 'font-size:20px;padding:6px 10px;border:none;border-radius:6px;background:rgba(0,0,0,0.6);color:white;cursor:pointer;pointer-events:auto;';
 const centralOverlayStyle = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;gap:10px;z-index:10;opacity:0;transition:opacity 0.2s;pointer-events:none;';
 
+// === Media Element Pools for Reuse ===
+// Create a fixed number of reusable <video> and <audio> elements
+const MAX_POOL_SIZE = 36; // Adjust if you use larger grids (e.g. 6×6 = 36)
+
+const videoPool = [];
+const audioPool = [];
+
+// Pre-create reusable elements
+for (let i = 0; i < MAX_POOL_SIZE; i++) {
+    const video = document.createElement('video');
+    video.preload = 'none';
+    video.playsInline = true;
+    video.loop = true;
+    video.controls = false;
+    videoPool.push(video);
+
+    const audio = document.createElement('audio');
+    audio.preload = 'none';
+    audio.playsInline = true;
+    audio.loop = true;
+    audioPool.push(audio);
+}
+
 // ================================
 // MEDIA HELPERS
 // ================================
@@ -845,6 +868,7 @@ function addCentralOverlay(container, mediaEl, file) {
 function createMediaContainer(file) {
     const container = document.createElement('div');
     container.className = 'video-container';
+
     const ext = file.split('.').pop().toLowerCase();
     const isAudio = ['mp3','wav','ogg'].includes(ext);
     const isVideo = ['mp4', 'webm', 'mkv', 'mov', 'm4v', '3gp', 'flv', 'wmv'].includes(ext);
@@ -853,14 +877,25 @@ function createMediaContainer(file) {
     let mediaEl = null;
 
     if (isVideo || isAudio) {
-        mediaEl = isVideo ? document.createElement('video') : document.createElement('audio');
-        mediaEl.loop = true;
-        mediaEl.playsInline = true;
-        mediaEl.preload = 'none';
-        mediaEl.controls = false;
+        // Reuse from pool if available, otherwise create new
+        mediaEl = isVideo 
+            ? (videoPool.pop() || document.createElement('video'))
+            : (audioPool.pop() || document.createElement('audio'));
+
+        // IMPORTANT: Reset the reused element completely
+        mediaEl.pause();
+        mediaEl.src = '';                    // Must clear old source first
+        mediaEl.currentTime = 0;
         mediaEl.dataset.src = file;
         mediaEl.dataset.file = file;
 
+        // Re-apply common properties (in case they were changed)
+        mediaEl.loop = true;
+        mediaEl.playsInline = true;
+        mediaEl.controls = false;
+        mediaEl.preload = 'none';
+
+        // Mute / unmute logic (same as before)
         const isRecentFullscreen = lastFullscreen.file === file && isFileVisible(file);
         let shouldBeUnmuted = false;
         if (!muted) {
@@ -880,23 +915,29 @@ function createMediaContainer(file) {
             img.dataset.src = audioThumbs[file] || 'cache/no-cover.jpg';
             img.onclick = () => startFullscreenFrom(file, mediaEl.currentTime);
             container.appendChild(img);
+
+            // Queue the (reused) audio element
             audioQueue.push(mediaEl);
         }
 
         container.appendChild(mediaEl);
-    } else if (isImage) {
+    } 
+    else if (isImage) {
         const img = document.createElement('img');
         img.loading = 'lazy';
         img.decoding = 'async';
         img.dataset.src = file;
         container.appendChild(img);
-    } else {
+    } 
+    else {
         container.innerHTML = `<div style="color:red;padding:4px;">Unsupported: ${file}</div>`;
     }
 
+    // Add overlays and event handlers (unchanged)
     addCentralOverlay(container, mediaEl, file);
     addFileInfoOverlay(container, file);
 
+    // Restore time if this was the last fullscreen item
     if ((isVideo || isAudio) && lastFullscreen.file === file && lastFullscreen.time > 0) {
         mediaEl.addEventListener('loadedmetadata', () => {
             mediaEl.currentTime = lastFullscreen.time;
@@ -911,6 +952,23 @@ function createMediaContainer(file) {
 // ================================
 function renderGrid() {
     const grid = document.getElementById('grid');
+
+    // Recycle existing media elements back into the pool
+    grid.querySelectorAll('video, audio').forEach(el => {
+        el.pause();
+        el.src = '';
+        el.currentTime = 0;
+        // Remove any one-time listeners if you added more
+        el.replaceWith(el.cloneNode(true)); // Optional: cleanest way to remove listeners
+        if (el.tagName === 'VIDEO') {
+            videoPool.push(el);
+        } else if (el.tagName === 'AUDIO') {
+            audioPool.push(el);
+        }
+    });
+
+    // Now clear the grid safely
+    grid.innerHTML = '';
 
     const visibleCount = Math.min(
         totalCells,
