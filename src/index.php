@@ -726,6 +726,7 @@ async function addFileInfoOverlay(container, file) {
     overlay.appendChild(metaElem);
     container.appendChild(overlay);
 
+    /* -- deprecated in favor of metadata batch --
     try {
         const res = await fetch('api.php', {
             method: 'POST',
@@ -769,6 +770,7 @@ async function addFileInfoOverlay(container, file) {
         metaElem.textContent = '';
         filenameElem.textContent = file;
     }
+    */
 }
 
 function addCentralOverlay(container, mediaEl, file) {
@@ -928,6 +930,52 @@ function renderGrid() {
 
     const fragment = document.createDocumentFragment();
     visible.forEach(file => fragment.appendChild(createMediaContainer(file)));
+
+    // After creating containers...
+    const visibleFiles = visible.map(f => decodeURIComponent(f)); // your web paths
+
+    fetch('api.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            action: 'metadata_batch', 
+            files: visibleFiles 
+        })
+    })
+    .then(r => r.json())
+    .then(metas => {
+        Array.from(grid.children).forEach((container, idx) => {
+            const file = visible[idx];  // encoded web path
+            const meta = metas[file] || {};
+
+            const filenameElem = container.querySelector('.overlay > div:first-child');
+            const metaElem = container.querySelector('.overlay > div:last-child');
+
+            filenameElem.textContent = meta.file || decodeURIComponent(file.split('/').pop());
+
+            const parts = [];
+            if (meta.folder) parts.push(meta.folder);
+            if (meta.video?.width && meta.video?.height) parts.push(`${meta.video.width}×${meta.video.height}`);
+            if (meta.duration) {
+                let sec = Math.floor(meta.duration);
+                const h = Math.floor(sec / 3600); sec %= 3600;
+                const m = Math.floor(sec / 60); sec %= 60;
+                parts.push(`${h ? h + 'h ' : ''}${m ? m + 'm ' : ''}${sec}s`);
+            }
+            if (meta.filesize) parts.push((meta.filesize / 1024 / 1024).toFixed(2) + ' MB');
+            if (meta.video) {
+                if (meta.video.codec) parts.push(meta.video.codec);
+                if (meta.video.fps) parts.push(`${meta.video.fps} FPS`);
+            }
+            if (meta.bitrate) parts.push(Math.round(meta.bitrate / 1000) + ' kbps');
+
+            metaElem.textContent = parts.join(' • ');
+        });
+    })
+    .catch(() => {
+        // Fallback: show filenames only, or retry single fetches
+    });
+
     grid.appendChild(fragment);
 
     processAudioQueue();

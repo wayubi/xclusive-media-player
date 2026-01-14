@@ -24,6 +24,79 @@ if (!is_array($files)) {
 }
 
 $root = realpath(__DIR__ . '/volumes');
+$cacheDir = '/tmp/.metadata';
+
+if (!is_dir($cacheDir)) {
+    mkdir($cacheDir, 0777, true);
+}
+
+function getMetadataForFile(string $webPath, string $root, string $cacheDir): ?array
+{
+    $cleanFile = ltrim(preg_replace('#^/volumes/#i', '', $webPath), '/');
+    $fsPath = realpath($root . '/' . $cleanFile);
+
+    if (!$fsPath || !str_starts_with($fsPath, $root) || !is_file($fsPath)) {
+        return null;
+    }
+
+    $hash = sha1($fsPath);
+    $cacheFile = $cacheDir . '/' . $hash . '.json';
+
+    if (file_exists($cacheFile)) {
+        $json = file_get_contents($cacheFile);
+        return json_decode($json, true) ?: null;
+    }
+
+    $cmd = sprintf(
+        'ffprobe -v quiet -print_format json -show_format -show_streams %s',
+        escapeshellarg($fsPath)
+    );
+
+    $raw = shell_exec($cmd);
+    if ($raw === null || $raw === '') {
+        return null;
+    }
+
+    $meta = json_decode($raw, true) ?? [];
+
+    $video = null;
+    $audio = null;
+
+    foreach ($meta['streams'] ?? [] as $stream) {
+        if ($stream['codec_type'] === 'video' && !$video) {
+            $video = $stream;
+        }
+        if ($stream['codec_type'] === 'audio' && !$audio) {
+            $audio = $stream;
+        }
+    }
+
+    $output = [
+        'file'     => basename($fsPath),
+        'folder'   => basename(dirname($fsPath)),
+        'filesize' => filesize($fsPath),
+        'duration' => $meta['format']['duration'] ?? null,
+        'bitrate'  => isset($meta['format']['bit_rate']) ? (int)$meta['format']['bit_rate'] : null,
+        'video'    => $video ? [
+            'codec'   => $video['codec_name'] ?? null,
+            'width'   => $video['width'] ?? null,
+            'height'  => $video['height'] ?? null,
+            'fps'     => isset($video['avg_frame_rate']) && $video['avg_frame_rate'] !== '0/0'
+                ? eval('return ' . $video['avg_frame_rate'] . ';')
+                : null,
+            'pix_fmt' => $video['pix_fmt'] ?? null,
+        ] : null,
+        'audio'    => $audio ? [
+            'codec'       => $audio['codec_name'] ?? null,
+            'channels'    => $audio['channels'] ?? null,
+            'sample_rate' => $audio['sample_rate'] ?? null,
+        ] : null,
+    ];
+
+    file_put_contents($cacheFile, json_encode($output, JSON_PRETTY_PRINT));
+
+    return $output;
+}
 
 switch ($action) {
     case 'delete':
@@ -108,77 +181,36 @@ switch ($action) {
             exit;
         }
 
-        // Strip /volumes prefix - frontend sends web paths
-        $cleanFile = ltrim(preg_replace('#^/volumes/#i', '', $file), '/');
-        $fsPath = realpath($root . '/' . $cleanFile);
-        
-        if (!$fsPath || !str_starts_with($fsPath, $root) || !is_file($fsPath)) {
+        $meta = getMetadataForFile($file, $root, $cacheDir);
+
+        if ($meta === null) {
             http_response_code(400);
-            echo json_encode(['error' => "Invalid file path: $file (resolved: $fsPath)"]);
+            echo json_encode(['error' => "Invalid file path: $file"]);
             exit;
         }
 
-        $cacheDir = '/tmp/.metadata';
-        if (!is_dir($cacheDir)) {
-            mkdir($cacheDir, 0777, true);
+        echo json_encode($meta);
+        break;
+
+    case 'metadata_batch':
+        if (empty($files)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'No files provided']);
+            exit;
         }
 
-        $hash = sha1($fsPath);
-        $cacheFile = $cacheDir . '/' . $hash . '.json';
+        // Safety limit - prevent someone sending 1000+ files at once
+        $maxBatch = 36;
+        $files = array_slice($files, 0, $maxBatch);
 
-        if (!file_exists($cacheFile)) {
-            $cmd = sprintf(
-                'ffprobe -v quiet -print_format json -show_format -show_streams %s',
-                escapeshellarg($fsPath)
-            );
+        $results = [];
 
-            $raw = shell_exec($cmd);
-            if ($raw === null || $raw === '') {
-                http_response_code(500);
-                echo json_encode(['error' => 'ffprobe execution failed']);
-                exit;
-            }
-
-            $meta = json_decode($raw, true) ?? [];
-
-            $video = null;
-            $audio = null;
-
-            foreach ($meta['streams'] ?? [] as $stream) {
-                if ($stream['codec_type'] === 'video' && !$video) {
-                    $video = $stream;
-                }
-                if ($stream['codec_type'] === 'audio' && !$audio) {
-                    $audio = $stream;
-                }
-            }
-
-            $output = [
-                'file'     => basename($fsPath),
-                'folder'   => basename(dirname($fsPath)),
-                'filesize' => filesize($fsPath),
-                'duration' => $meta['format']['duration'] ?? null,
-                'bitrate'  => isset($meta['format']['bit_rate']) ? (int)$meta['format']['bit_rate'] : null,
-                'video'    => $video ? [
-                    'codec'   => $video['codec_name'] ?? null,
-                    'width'   => $video['width'] ?? null,
-                    'height'  => $video['height'] ?? null,
-                    'fps'     => isset($video['avg_frame_rate']) && $video['avg_frame_rate'] !== '0/0'
-                        ? eval('return ' . $video['avg_frame_rate'] . ';')
-                        : null,
-                    'pix_fmt' => $video['pix_fmt'] ?? null,
-                ] : null,
-                'audio'    => $audio ? [
-                    'codec'       => $audio['codec_name'] ?? null,
-                    'channels'    => $audio['channels'] ?? null,
-                    'sample_rate' => $audio['sample_rate'] ?? null,
-                ] : null,
-            ];
-
-            file_put_contents($cacheFile, json_encode($output, JSON_PRETTY_PRINT));
+        foreach ($files as $file) {
+            $meta = getMetadataForFile($file, $root, $cacheDir);
+            $results[$file] = $meta;  // null if failed/invalid
         }
 
-        echo file_get_contents($cacheFile);
+        echo json_encode($results);
         break;
 
     default:
