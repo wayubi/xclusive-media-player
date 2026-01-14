@@ -653,6 +653,10 @@ const audioQueue = [];
 let activeAudioLoads = 0;
 const MAX_CONCURRENT_AUDIO = 36;
 
+const videoQueue = [];
+let activeVideoLoads = 0;
+const MAX_CONCURRENT_VIDEO = 4;
+
 const buttonStyle = 'font-size:20px;padding:6px 10px;border:none;border-radius:6px;background:rgba(0,0,0,0.6);color:white;cursor:pointer;pointer-events:auto;';
 const centralOverlayStyle = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;gap:10px;z-index:10;opacity:0;transition:opacity 0.2s;pointer-events:none;';
 
@@ -670,6 +674,23 @@ function processAudioQueue() {
         const done = () => { activeAudioLoads = Math.max(0, activeAudioLoads - 1); processAudioQueue(); };
         audio.addEventListener('loadedmetadata', done, { once: true });
         audio.addEventListener('error', done, { once: true });
+    }
+}
+
+function processVideoQueue() {
+    while (activeVideoLoads < MAX_CONCURRENT_VIDEO && videoQueue.length) {
+        const video = videoQueue.shift();
+        if (!video?.dataset?.src) continue;
+        activeVideoLoads++;
+        video.src = video.dataset.src;
+        delete video.dataset.src;
+        video.load();
+        const done = () => { activeVideoLoads = Math.max(0, activeVideoLoads - 1); processVideoQueue(); };
+        video.addEventListener('loadedmetadata', () => {
+            video.play().catch(() => {});
+            done();
+        }, { once: true });
+        video.addEventListener('error', done, { once: true });
     }
 }
 
@@ -914,9 +935,13 @@ function renderGrid() {
     const observer = new IntersectionObserver(entries => {
         entries.forEach(entry => {
             if (entry.isIntersecting && entry.target.dataset.src) {
-                entry.target.src = entry.target.dataset.src;
-                delete entry.target.dataset.src;
-                if (entry.target.tagName === 'VIDEO') entry.target.play().catch(() => {});
+                if (entry.target.tagName === 'VIDEO') {
+                    videoQueue.push(entry.target);  // Queue videos
+                    processVideoQueue();
+                } else {
+                    entry.target.src = entry.target.dataset.src;  // Images load immediately
+                    delete entry.target.dataset.src;
+                }
                 observer.unobserve(entry.target);
             }
         });
