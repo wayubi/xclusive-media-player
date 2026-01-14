@@ -399,11 +399,11 @@ html, body {
   background: #0a0a0c;
   box-shadow: var(--shadow-sm);
   transition: var(--transition);
-  backdrop-filter: blur(2px);
+  /* backdrop-filter: blur(2px); */
 }
 
 .video-container:hover {
-  transform: scale(1.03);
+  /* transform: scale(1.03); */
   box-shadow: 0 16px 48px rgba(0,0,0,0.65),
               0 0 0 1px rgba(124,58,237,0.18);
   z-index: 5;
@@ -414,7 +414,7 @@ html, body {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 0.45s ease;
+  /* transition: transform 0.45s ease; */
 }
 
 /* ========================================================================== 
@@ -432,7 +432,7 @@ html, body {
   justify-content: flex-end;
   padding: 16px;
   pointer-events: none;
-  backdrop-filter: blur(6px);
+  /* backdrop-filter: blur(6px); */
   border-radius: var(--radius);
 }
 
