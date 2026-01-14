@@ -1484,6 +1484,37 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+// Track cover mode
+let coverEnabled = true;
+
+// Create a CSS class that disables object-fit
+const style = document.createElement('style');
+style.textContent = `
+  .no-object-fit img,
+  .no-object-fit video {
+    object-fit: contain;
+  }
+`;
+document.head.appendChild(style);
+
+// Toggle function
+function toggleObjectFit() {
+  coverEnabled = !coverEnabled;
+  const grid = document.getElementById('grid');
+  if (coverEnabled) {
+    grid.classList.remove('no-object-fit');
+  } else {
+    grid.classList.add('no-object-fit');
+  }
+}
+
+// Listen for "c" key press
+document.addEventListener('keydown', (e) => {
+  if (e.key.toLowerCase() === 'c') {
+    toggleObjectFit();
+  }
+});
+
 renderGrid();
 </script>
 </body>
