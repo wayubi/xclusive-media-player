@@ -651,18 +651,17 @@ let currentSearch = '';
 // Audio loading queue
 const audioQueue = [];
 let activeAudioLoads = 0;
-const MAX_CONCURRENT_AUDIO = 36;
+const MAX_CONCURRENT_VIDEO = totalCells;
 
 const videoQueue = [];
 let activeVideoLoads = 0;
-const MAX_CONCURRENT_VIDEO = 4;
+const MAX_CONCURRENT_AUDIO = totalCells;
 
 const buttonStyle = 'font-size:20px;padding:6px 10px;border:none;border-radius:6px;background:rgba(0,0,0,0.6);color:white;cursor:pointer;pointer-events:auto;';
 const centralOverlayStyle = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;gap:10px;z-index:10;opacity:0;transition:opacity 0.2s;pointer-events:none;';
 
-// === Media Element Pools for Reuse ===
 // Create a fixed number of reusable <video> and <audio> elements
-const MAX_POOL_SIZE = 36; // Adjust if you use larger grids (e.g. 6×6 = 36)
+const MAX_POOL_SIZE = 48;
 
 const videoPool = [];
 const audioPool = [];
@@ -670,14 +669,14 @@ const audioPool = [];
 // Pre-create reusable elements
 for (let i = 0; i < MAX_POOL_SIZE; i++) {
     const video = document.createElement('video');
-    video.preload = 'none';
+    video.preload = 'auto';
     video.playsInline = true;
     video.loop = true;
     video.controls = false;
     videoPool.push(video);
 
     const audio = document.createElement('audio');
-    audio.preload = 'none';
+    audio.preload = 'auto';
     audio.playsInline = true;
     audio.loop = true;
     audioPool.push(audio);
@@ -882,20 +881,24 @@ function createMediaContainer(file) {
             ? (videoPool.pop() || document.createElement('video'))
             : (audioPool.pop() || document.createElement('audio'));
 
-        // IMPORTANT: Reset the reused element completely
+        // Reset the reused element completely
         mediaEl.pause();
-        mediaEl.src = '';                    // Must clear old source first
+        mediaEl.src = '';
         mediaEl.currentTime = 0;
         mediaEl.dataset.src = file;
         mediaEl.dataset.file = file;
 
-        // Re-apply common properties (in case they were changed)
+        // Re-apply common properties
         mediaEl.loop = true;
         mediaEl.playsInline = true;
         mediaEl.controls = false;
-        mediaEl.preload = 'none';
+        mediaEl.preload = 'auto';
 
-        // Mute / unmute logic (same as before)
+        if (isVideo) {
+            mediaEl.poster = audioThumbs[file] || 'cache/no-cover.jpg';
+        }
+
+        // Mute / unmute logic
         const isRecentFullscreen = lastFullscreen.file === file && isFileVisible(file);
         let shouldBeUnmuted = false;
         if (!muted) {
@@ -912,16 +915,16 @@ function createMediaContainer(file) {
             container.style.cssText = 'display:flex;flex-direction:column;justify-content:center;align-items:center;';
             const img = document.createElement('img');
             img.style.cssText = 'width:100%;height:100%;object-fit:cover;cursor:pointer;border-radius:8px;';
-            img.dataset.src = audioThumbs[file] || 'cache/no-cover.jpg';
+            img.src = audioThumbs[file] || 'cache/no-cover.jpg'; // Use src directly (no lazy for covers)
             img.onclick = () => startFullscreenFrom(file, mediaEl.currentTime);
             container.appendChild(img);
-
-            // Queue the (reused) audio element
-            audioQueue.push(mediaEl);
         }
 
+        if (isVideo) videoQueue.push(mediaEl);
+        if (isAudio) audioQueue.push(mediaEl);
+
         container.appendChild(mediaEl);
-    } 
+    }
     else if (isImage) {
         const img = document.createElement('img');
         img.loading = 'lazy';
@@ -1037,35 +1040,14 @@ function renderGrid() {
     grid.appendChild(fragment);
 
     processAudioQueue();
+    processVideoQueue();
 
-    const observer = new IntersectionObserver(entries => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting && entry.target.dataset.src) {
-                if (entry.target.tagName === 'VIDEO') {
-                    videoQueue.push(entry.target);  // Queue videos
-                    processVideoQueue();
-                } else {
-                    entry.target.src = entry.target.dataset.src;  // Images load immediately
-                    delete entry.target.dataset.src;
-                }
-                observer.unobserve(entry.target);
-            }
-        });
-    }, { threshold: 0.01 });
-
-    grid.querySelectorAll('video, img[data-src]').forEach(el => observer.observe(el));
-
-    setTimeout(() => {
-        const recentMedia = [...grid.querySelectorAll('audio, video')]
-            .find(m => m.dataset.file === lastFullscreen.file);
-        if (recentMedia) {
-            recentMedia.currentTime = lastFullscreen.time || 0;
-            recentMedia.play().catch(() => {});
-        }
-        enforceSingleUnmuted();
-        syncMuteIcons();
-    }, 150);
-
+    const recentMedia = [...grid.querySelectorAll('audio, video')]
+        .find(m => m.dataset.file === lastFullscreen.file);
+    if (recentMedia) {
+        recentMedia.currentTime = lastFullscreen.time || 0;
+        recentMedia.play().catch(() => {});
+    }
     enforceSingleUnmuted();
     syncMuteIcons();
 
