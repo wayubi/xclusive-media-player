@@ -195,7 +195,11 @@ function getFiles(string $path): array {
         $files[] = $pathname;
     }
 
-    usort($files, fn($a, $b) => @filemtime($b) <=> @filemtime($a));
+    $mtimes = array_map(function($file) {
+        $realPath = htmlspecialchars_decode($file, ENT_QUOTES | ENT_HTML5);
+        return @filemtime($realPath) ?: 0;
+    }, $files);
+    array_multisort($mtimes, SORT_DESC, $files);
     return array_values($files);
 }
 
