@@ -265,7 +265,7 @@ function createMediaContainer(file) {
         mediaEl.preload = 'auto';
 
         if (isVideo) {
-            mediaEl.poster = audioThumbs[file] || 'cache/no-cover.jpg';
+            mediaEl.poster = audioThumbs[file] || 'cache/no-cover-vid.jpg';
         }
 
         // Mute / unmute logic
