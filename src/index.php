@@ -220,8 +220,16 @@ function filesystemToWebPath(string $fsPath, string $rootFs, string $rootWeb): s
 }
 
 function getCurrentPath(string $root, string $selected_path): string {
-    $real = realpath($root . ($selected_path ? '/' . $selected_path : '')) ?: $root;
-    return str_starts_with($real, $root) ? $real : $root;
+    static $cachedRoot = null;
+    if ($cachedRoot === null) {
+        $cachedRoot = realpath($root) ?: $root;
+    }
+    if (str_contains($selected_path, '..')) {
+        return $cachedRoot;
+    }
+    $fullPath = $cachedRoot . DIRECTORY_SEPARATOR . ltrim($selected_path, '/\\');
+    $real = realpath($fullPath);
+    return ($real && str_starts_with($real, $cachedRoot)) ? $real : $cachedRoot;
 }
 
 function renderSingleFolderSelect(array $selected_parts, string $current_abs_path): void {
