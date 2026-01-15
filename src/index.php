@@ -69,16 +69,15 @@ $path_segments = array_filter(
     fn($v) => is_string($v) && strlen(trim($v)) > 0 && $v !== '..'
 );
 
+// If no navigation action → use incoming path[] as-is
+$selected_path_parts_final = $path_segments;
+$selected_path = implode('/', $selected_path_parts_final);
+
 // 2. Compute current absolute path from incoming segments (base for goto)
 $current_abs_path = $root_directory_absolute;
-foreach ($path_segments as $seg) {
-    $next = $current_abs_path . '/' . $seg;
-    if (is_dir($next)) {
-        $current_abs_path = $next;
-    } else {
-        // Safety: stop if invalid segment
-        break;
-    }
+$segments = explode('/', trim($selected_path, '/'));
+foreach ($segments as $seg) {
+    $current_abs_path = $current_abs_path . '/' . $seg;
 }
 
 // 3. Handle navigation actions (both Go Back and folder selection)
@@ -96,14 +95,9 @@ if (isset($_GET['goto']) && $_GET['goto'] === '..') {
 if ($nav_action !== null) {
     // Build current absolute path from incoming path[] segments (safe base)
     $current_abs_path = $root_directory_absolute;
-    foreach ($path_segments as $seg) {
-        $next = $current_abs_path . '/' . $seg;
-        if (is_dir($next)) {
-            $current_abs_path = $next;
-        } else {
-            // Stop on invalid segment to prevent errors
-            break;
-        }
+    $segments = explode('/', trim(implode('/', $path_segments), '/'));
+    foreach ($segments as $seg) {
+        $current_abs_path = $current_abs_path . '/' . $seg;
     }
 
     // Apply the navigation
@@ -115,10 +109,7 @@ if ($nav_action !== null) {
         }
     } elseif ($nav_action === 'down') {
         $next = $current_abs_path . '/' . $nav_value;
-        if (is_dir($next)) {
-            $current_abs_path = $next;
-        }
-        // If not a dir → silently stay (you can add feedback later)
+        $current_abs_path = $next;
     }
 
     // Rebuild clean path segments from the final physical path
@@ -147,10 +138,6 @@ if ($nav_action !== null) {
     header("Location: $redirect");
     exit;
 }
-
-// If no navigation action → use incoming path[] as-is
-$selected_path_parts_final = $path_segments;
-$selected_path = implode('/', $selected_path_parts_final);
 
 $selected_columns = $is_mobile ? 1 : max(1, min(6, (int)($_GET['columns'] ?? 3)));
 $selected_rows    = $is_mobile ? 1 : max(1, min(6, (int)($_GET['rows'] ?? 2)));
@@ -213,9 +200,17 @@ function getFiles(string $path): array {
 }
 
 function filesystemToWebPath(string $fsPath, string $rootFs, string $rootWeb): string {
-    $fsPath = str_replace('\\', '/', realpath($fsPath));
-    $rootFs = str_replace('\\', '/', realpath($rootFs));
-    $relative = str_starts_with($fsPath, $rootFs) ? substr($fsPath, strlen($rootFs)) : $fsPath;
+    static $rootFsReal = null;
+    
+    if ($rootFsReal === null) {
+        $rootFsReal = realpath($rootFs);
+    }
+
+    $fsPath = str_replace('\\', '/', $fsPath);
+    $relative = str_starts_with($fsPath, $rootFsReal) 
+        ? substr($fsPath, strlen($rootFsReal)) 
+        : $fsPath;
+    
     $segments = array_map('rawurlencode', explode('/', ltrim($relative, '/')));
     return rtrim($rootWeb, '/') . '/' . implode('/', $segments);
 }
