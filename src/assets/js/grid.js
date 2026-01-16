@@ -23,7 +23,7 @@ export function renderGrid() {
   const cols = Math.min(visibleCount, state.selectedColumns);
   const rows = Math.ceil(visibleCount / cols);
   grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-  grid.style.gridAutoRows = `${100 / rows}%`;
+  grid.style.gridTemplateRows = `repeat(${rows}, minmax(0, 1fr))`;
 
   const visible = state.getVisibleFiles();
   

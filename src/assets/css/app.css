@@ -30,6 +30,12 @@ html, body {
   overflow: hidden;
 }
 
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
 #options-form {
   display: flex;
   flex-wrap: nowrap;
@@ -68,6 +74,10 @@ html, body {
   box-shadow: 0 2px 10px rgba(124,58,237,0.2);
 }
 
+#options-form {
+  flex-shrink: 0;
+}
+
 #options-form select,
 #options-form button {
   padding: 6px 12px;
@@ -102,7 +112,8 @@ html, body {
   display: grid;
   gap: var(--grid-gap);
   padding: 16px;
-  height: calc(100% - 64px);
+  flex: 1;
+  min-height: 0;
   grid-auto-rows: minmax(0, 1fr);
 }
 
