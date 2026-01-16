@@ -13,7 +13,3 @@ android-app/*.iml
 
 # Local SDK / machine config
 android-app/local.properties
-
-##### OS junk #####
-.DS_Store
-Thumbs.db
