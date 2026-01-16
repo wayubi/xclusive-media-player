@@ -310,7 +310,7 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
                 ) ?>
             };
         </script>
-        <script src="/assets/js/app.min.js" defer></script>
+        <script type="module" src="/assets/js/main.js"></script>
 
     </body>
 </html>
