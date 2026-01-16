@@ -230,86 +230,87 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
 ?>
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Xclusive Media Player</title>
-    <link rel="stylesheet" href="/assets/css/app.min.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-</head>
-<body>
 
-<form id="options-form" method="get" action="index.php">
-  <span id="file-count">1 / <?php echo count($allFiles); ?></span>
-  <?php foreach ($selected_path_parts_final as $part): ?>
-      <input type="hidden" name="path[]" value="<?= htmlspecialchars($part) ?>">
-  <?php endforeach; ?> 
-  <div id="folder-select-container" style="display: flex; align-items: center; gap: 10px;">
-      <?php if (!empty($selected_path_parts_final)): ?>
-          <button type="submit" name="goto" value=".." 
-                  onclick="this.form.action = 'index.php?t=' + Date.now();"
-                  style="padding: 8px 14px; background: var(--surface-hover); 
-                        border: 1px solid var(--border); border-radius: var(--radius);
-                        color: var(--text); font-weight: 500; cursor: pointer;">
-              ↑ Go Back
-          </button>
-      <?php endif; ?>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Xclusive Media Player</title>
+        <link rel="stylesheet" href="/assets/css/app.min.css">
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    </head>
 
-      <?php renderSingleFolderSelect($selected_path_parts_final, $current_path); ?>
-  </div>
+    <body>
 
-  <select name="columns" onchange="this.form.submit()">
-    <?php for ($c=1;$c<=6;$c++): ?>
-      <option value="<?= $c ?>" <?= $c==$selected_columns?'selected':'' ?>><?= $c ?></option>
-    <?php endfor; ?>
-  </select>
+        <form id="options-form" method="get" action="index.php">
+            <span id="file-count">1 / <?php echo count($allFiles); ?></span>
+            <?php foreach ($selected_path_parts_final as $part): ?>
+                <input type="hidden" name="path[]" value="<?= htmlspecialchars($part) ?>">
+            <?php endforeach; ?>
+            <div id="folder-select-container" style="display: flex; align-items: center; gap: 10px;">
+                <?php if (!empty($selected_path_parts_final)): ?>
+                    <button type="submit" name="goto" value=".." 
+                    onclick="this.form.action = 'index.php?t=' + Date.now();"
+                    style="padding: 8px 14px; background: var(--surface-hover); 
+                    border: 1px solid var(--border); border-radius: var(--radius);
+                    color: var(--text); font-weight: 500; cursor: pointer;">
+                    ↑ Go Back
+                    </button>
+                <?php endif; ?>
+                <?php renderSingleFolderSelect($selected_path_parts_final, $current_path); ?>
+            </div>
 
-  <select name="rows" onchange="this.form.submit()">
-    <?php for ($r=1;$r<=6;$r++): ?>
-      <option value="<?= $r ?>" <?= $r==$selected_rows?'selected':'' ?>><?= $r ?></option>
-    <?php endfor; ?>
-  </select>
+            <select name="columns" onchange="this.form.submit()">
+                <?php for ($c=1;$c<=6;$c++): ?>
+                    <option value="<?= $c ?>" <?= $c==$selected_columns?'selected':'' ?>><?= $c ?></option>
+                <?php endfor; ?>
+            </select>
 
-  <input type="hidden" name="muted" value="<?= $muted?'true':'false' ?>">
-  
-  <button type="button" id="mute-button" onclick="toggleMute()"><?= $muted?'🔇':'🔊' ?></button>
-  <button type="button" onclick="playAll()">▶</button>
-  <button type="button" onclick="shufflePlay()">🔀</button>
-  <!-- <button type="button" id="refresh" onclick="window.location.reload()">🔄</button>
-  <button type="button" id="clear" onclick="window.location.href='index.php'">🧹</button> -->
-  <button type="button" id="audit" onclick="runAudit(<?= count($allFiles) ?>)">📝</button>
-  <button type="button" id="previous" onclick="prevGrid()">◀</button>
-  <button type="button" id="next" onclick="nextGrid()">▶</button>
-  <span id="audit-text">[ <?= htmlspecialchars($auditedText) ?> ]</span>
-</form>
+            <select name="rows" onchange="this.form.submit()">
+                <?php for ($r=1;$r<=6;$r++): ?>
+                    <option value="<?= $r ?>" <?= $r==$selected_rows?'selected':'' ?>><?= $r ?></option>
+                <?php endfor; ?>
+            </select>
 
-<div id="grid"></div>
+        <input type="hidden" name="muted" value="<?= $muted?'true':'false' ?>">
+        
+        <button type="button" id="mute-button" onclick="toggleMute()"><?= $muted?'🔇':'🔊' ?></button>
+        <button type="button" onclick="playAll()">▶</button>
+        <button type="button" onclick="shufflePlay()">🔀</button>
+        <!-- <button type="button" id="refresh" onclick="window.location.reload()">🔄</button>
+        <button type="button" id="clear" onclick="window.location.href='index.php'">🧹</button> -->
+        <button type="button" id="audit" onclick="runAudit(<?= count($allFiles) ?>)">📝</button>
+        <button type="button" id="previous" onclick="prevGrid()">◀</button>
+        <button type="button" id="next" onclick="nextGrid()">▶</button>
+        <span id="audit-text">[ <?= htmlspecialchars($auditedText) ?> ]</span>
+        </form>
 
-<div id="search-overlay" style="display:none;">
-  <div class="search-container">
-    <input type="text" id="search-input" placeholder="Search filenames… (Enter to filter, ESC to cancel)" autocomplete="off" />
-    <button id="search-clear" title="Clear search">✕</button>
-  </div>
-</div>
+        <div id="grid"></div>
 
-<script>
-  window.APP = {
-    allVideos: <?= json_encode($allFiles, JSON_UNESCAPED_SLASHES) ?>,
-    allFilesWithPaths: <?= json_encode($allFilesRaw, JSON_UNESCAPED_SLASHES) ?>,
-    audioThumbs: <?= json_encode($audioThumbs, JSON_UNESCAPED_SLASHES) ?>,
-    muted: <?= $muted ? 'true' : 'false' ?>,
-    totalCells: <?= $total_cells ?>,
-    selectedColumns: <?= $selected_columns ?>,
-    webRoot: <?= json_encode($webRoot) ?>,
-    rootDirAbs: <?= json_encode($root_directory_absolute) ?>,
-    auditPath: <?= json_encode(
-      $selected_path ? $root_directory . '/' . $selected_path : $root_directory
-    ) ?>
-  };
-</script>
-<script src="/assets/js/app.min.js" defer></script>
+        <div id="search-overlay" style="display:none;">
+            <div class="search-container">
+                <input type="text" id="search-input" placeholder="Search filenames… (Enter to filter, ESC to cancel)" autocomplete="off" />
+                <button id="search-clear" title="Clear search">✕</button>
+            </div>
+        </div>
 
-</body>
+        <script>
+            window.APP = {
+                allVideos: <?= json_encode($allFiles, JSON_UNESCAPED_SLASHES) ?>,
+                allFilesWithPaths: <?= json_encode($allFilesRaw, JSON_UNESCAPED_SLASHES) ?>,
+                audioThumbs: <?= json_encode($audioThumbs, JSON_UNESCAPED_SLASHES) ?>,
+                muted: <?= $muted ? 'true' : 'false' ?>,
+                totalCells: <?= $total_cells ?>,
+                selectedColumns: <?= $selected_columns ?>,
+                webRoot: <?= json_encode($webRoot) ?>,
+                rootDirAbs: <?= json_encode($root_directory_absolute) ?>,
+                auditPath: <?= json_encode(
+                    $selected_path ? $root_directory . '/' . $selected_path : $root_directory
+                ) ?>
+            };
+        </script>
+        <script src="/assets/js/app.min.js" defer></script>
+
+    </body>
 </html>
