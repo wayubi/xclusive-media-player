@@ -3,13 +3,14 @@ const {
   allVideos,
   allFilesWithPaths,
   audioThumbs,
-  muted,
   totalCells,
   selectedColumns,
   webRoot,
   rootDirAbs,
   auditPath
 } = window.APP;
+
+let { muted } = window.APP;
 
 // Core state
 let startIndex = 0;

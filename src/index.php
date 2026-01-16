@@ -231,13 +231,13 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Xclusive Media Player</title>
-<link rel="stylesheet" href="/assets/css/app.min.css">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xclusive Media Player</title>
+    <link rel="stylesheet" href="/assets/css/app.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
 
@@ -277,6 +277,8 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
   <button type="button" id="mute-button" onclick="toggleMute()"><?= $muted?'🔇':'🔊' ?></button>
   <button type="button" onclick="playAll()">▶</button>
   <button type="button" onclick="shufflePlay()">🔀</button>
+  <!-- <button type="button" id="refresh" onclick="window.location.reload()">🔄</button>
+  <button type="button" id="clear" onclick="window.location.href='index.php'">🧹</button> -->
   <button type="button" id="audit" onclick="runAudit(<?= count($allFiles) ?>)">📝</button>
   <button type="button" id="previous" onclick="prevGrid()">◀</button>
   <button type="button" id="next" onclick="nextGrid()">▶</button>
@@ -307,7 +309,7 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
     ) ?>
   };
 </script>
-<script src="/assets/js/app.js" defer></script>
+<script src="/assets/js/app.min.js" defer></script>
 
 </body>
 </html>
