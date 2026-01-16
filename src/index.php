@@ -1,54 +1,6 @@
 <?php
 
-// ================================
-// POST HANDLERS
-// ================================
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $data = json_decode(file_get_contents('php://input'), true);
-
-    if (($data['action'] ?? null) === 'delete' && !empty($data['files'])) {
-        $ch = curl_init('http://php-cli:8080/api.php');
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST           => true,
-            CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
-            CURLOPT_POSTFIELDS     => json_encode([
-                'action' => 'delete',
-                'files'  => $data['files']
-            ])
-        ]);
-        $response = curl_exec($ch);
-        if (curl_errno($ch)) {
-            echo json_encode(['error' => curl_error($ch)]);
-        } else {
-            echo $response;
-        }
-        curl_close($ch);
-        exit;
-    }
-
-    if (($data['action'] ?? null) === 'audit' && !empty($data['path'])) {
-        $ch = curl_init('http://php-cli:8080/api.php');
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST           => true,
-            CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
-            CURLOPT_POSTFIELDS     => json_encode([
-                'action' => 'audit',
-                'path'   => $data['path'],
-                'count'  => (int)($data['count'] ?? 0)
-            ])
-        ]);
-        $response = curl_exec($ch);
-        if (curl_errno($ch)) {
-            echo json_encode(['error' => curl_error($ch)]);
-        } else {
-            echo $response;
-        }
-        curl_close($ch);
-        exit;
-    }
-}
+require_once __DIR__ . '/post-handler.php';
 
 // ================================
 // CONFIG & PATH HANDLING
@@ -325,8 +277,6 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
   <button type="button" id="mute-button" onclick="toggleMute()"><?= $muted?'🔇':'🔊' ?></button>
   <button type="button" onclick="playAll()">▶</button>
   <button type="button" onclick="shufflePlay()">🔀</button>
-  <button type="button" id="refresh" onclick="window.location.reload()">🔄</button>
-  <button type="button" id="clear" onclick="window.location.href='index.php'">🧹</button>
   <button type="button" id="audit" onclick="runAudit(<?= count($allFiles) ?>)">📝</button>
   <button type="button" id="previous" onclick="prevGrid()">◀</button>
   <button type="button" id="next" onclick="nextGrid()">▶</button>

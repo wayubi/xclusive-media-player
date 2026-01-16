@@ -183,7 +183,7 @@ function addCentralOverlay(container, mediaEl, file) {
             const selected = Array.from(document.querySelectorAll('#grid .video-container button[data-selected="true"]'));
             const filesToDelete = selected.map(b => b.dataset.file);
             if (!filesToDelete.length || !confirm(`Delete ${filesToDelete.length} file(s)?`)) return;
-            fetch('index.php', {
+            fetch('post-handler.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'delete', files: filesToDelete })
@@ -636,7 +636,7 @@ function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
             if (!confirm('Delete this file?')) return;
             const del = playlist[i];
             try {
-                const resp = await fetch('index.php', {
+                const resp = await fetch('post-handler.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ action: 'delete', files: [del] })
@@ -681,7 +681,7 @@ function shufflePlay() {
 // AUDIT
 // ================================
 function runAudit(count) {
-    fetch('index.php', {
+    fetch('post-handler.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
