@@ -94,7 +94,7 @@ function createImageElement(file, container) {
   const img = document.createElement('img');
   img.loading = 'lazy';
   img.decoding = 'async';
-  img.dataset.src = file;
+  img.src = file;
   container.appendChild(img);
   return img;
 }
