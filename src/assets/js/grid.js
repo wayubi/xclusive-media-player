@@ -73,7 +73,8 @@ function fetchMetadataBatch(grid, visible) {
   .then(metas => {
     Array.from(grid.children).forEach((container, idx) => {
       const file = visible[idx];
-      const meta = metas[file] || {};
+      const decodedFile = decodeURIComponent(file);
+      const meta = metas[decodedFile] || {};
 
       const filenameElem = container.querySelector('.overlay > div:first-child');
       const metaElem = container.querySelector('.overlay > div:last-child');
