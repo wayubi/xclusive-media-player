@@ -191,15 +191,14 @@ function renderSingleFolderSelect(array $selected_parts, string $current_abs_pat
     ?>
     <select name="goto_folder" id="folder-select"
             onchange="this.form.submit()"
-            style="min-width:220px; max-width:360px; font-size:1.05rem;"
             autofocus>
         <option value="" disabled selected>
-            — <?= $has_children ? 'Select subfolder' : ($is_root ? 'No folders found' : 'No subfolders') ?> —
+            <?= $has_children ? '📁 Select folder' : ($is_root ? '📂 No folders' : '📂 No subfolders') ?>
         </option>
 
         <?php foreach ($subfolders as $folder): ?>
             <option value="<?= htmlspecialchars($folder) ?>">
-                <?= htmlspecialchars($folder) ?>
+                📁 <?= htmlspecialchars($folder) ?>
             </option>
         <?php endforeach; ?>
     </select>
@@ -251,66 +250,98 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
 
     <head>
         <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+        <meta name="theme-color" content="#0a0a0f">
         <title>Xclusive Media Player</title>
         <link rel="stylesheet" href="/assets/css/app.css">
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     </head>
 
     <body>
 
         <form id="options-form" method="get" action="index.php">
-            <span id="file-count">1 / <?= $allFilesCount ?></span>
+            <!-- File counter -->
+            <span id="file-count" style="min-width: 100px;">1 / <?= $allFilesCount ?></span>
+            
             <?php foreach ($selected_path_parts_final as $part): ?>
                 <input type="hidden" name="path[]" value="<?= htmlspecialchars($part) ?>">
             <?php endforeach; ?>
+            
+            <!-- Navigation controls -->
             <div id="folder-select-container" style="display: flex; align-items: center; gap: 10px;">
                 <?php if (!empty($selected_path_parts_final)): ?>
                     <button type="submit" name="goto" value=".." 
-                    onclick="this.form.action = 'index.php?t=' + Date.now();"
-                    style="padding: 8px 14px; background: var(--surface-hover); 
-                    border: 1px solid var(--border); border-radius: var(--radius);
-                    color: var(--text); font-weight: 500; cursor: pointer;">
-                    ← Go Back
+                            onclick="this.form.action = 'index.php?t=' + Date.now();"
+                            title="Go back to parent folder">
+                        ← Back
                     </button>
                 <?php endif; ?>
                 <?php renderSingleFolderSelect($selected_path_parts_final, $current_path); ?>
             </div>
 
-            <select name="columns" onchange="this.form.submit()">
+            <!-- Grid controls -->
+            <select name="columns" onchange="this.form.submit()" title="Columns">
                 <?php for ($c=1;$c<=6;$c++): ?>
-                    <option value="<?= $c ?>" <?= $c==$selected_columns?'selected':'' ?>><?= $c ?></option>
+                    <option value="<?= $c ?>" <?= $c==$selected_columns?'selected':'' ?>><?= $c ?> col</option>
                 <?php endfor; ?>
             </select>
 
-            <select name="rows" onchange="this.form.submit()">
+            <select name="rows" onchange="this.form.submit()" title="Rows">
                 <?php for ($r=1;$r<=6;$r++): ?>
-                    <option value="<?= $r ?>" <?= $r==$selected_rows?'selected':'' ?>><?= $r ?></option>
+                    <option value="<?= $r ?>" <?= $r==$selected_rows?'selected':'' ?>><?= $r ?> row</option>
                 <?php endfor; ?>
             </select>
 
-        <input type="hidden" name="muted" value="<?= $muted?'true':'false' ?>">
-        
-        <button type="button" id="mute-button" onclick="toggleMute()"><?= $muted?'🔇':'🔊' ?></button>
-        <button type="button" onclick="playAll()">▶</button>
-        <button type="button" onclick="shufflePlay()">🔀</button>
-        <button type="button" id="audit" onclick="runAudit()">📝</button>
-        <button type="button" id="previous" onclick="prevGrid()">◀</button>
-        <button type="button" id="next" onclick="nextGrid()">▶</button>
-        <span id="audit-text">[ <?= htmlspecialchars($auditedDate) ?> / <?= $auditedCount ?> / <?= $unAuditedCount ?> ]</span>
+            <!-- Hidden state -->
+            <input type="hidden" name="muted" value="<?= $muted?'true':'false' ?>">
+            
+            <!-- Action buttons -->
+            <button type="button" id="mute-button" onclick="toggleMute()" title="Toggle mute">
+                <?= $muted?'🔇':'🔊' ?>
+            </button>
+            <button type="button" onclick="playAll()" title="Play all">▶️</button>
+            <button type="button" onclick="shufflePlay()" title="Shuffle play">🔀</button>
+            <button type="button" id="audit" onclick="runAudit()" title="Audit files">📋</button>
+            <button type="button" id="previous" onclick="prevGrid()" title="Previous">◀</button>
+            <button type="button" id="next" onclick="nextGrid()" title="Next">▶</button>
+            
+            <!-- Audit status with better styling -->
+            <span id="audit-text" style="
+                background: rgba(168, 85, 247, 0.1);
+                border: 1px solid rgba(168, 85, 247, 0.2);
+                padding: 6px 12px;
+                border-radius: 12px;
+                font-size: 0.8rem;
+                font-weight: 600;
+                color: var(--text-secondary);
+                white-space: nowrap;
+            ">
+                <?php if ($auditedDate): ?>
+                    📅 <?= htmlspecialchars($auditedDate) ?> • ✅ <?= $auditedCount ?> • ⚠️ <?= $unAuditedCount ?>
+                <?php else: ?>
+                    ⚠️ Not audited
+                <?php endif; ?>
+            </span>
         </form>
 
+        <!-- Main grid -->
         <div id="grid"></div>
 
+        <!-- Search overlay -->
         <div id="search-overlay" style="display:none;">
             <div class="search-container">
-                <input type="text" id="search-input" placeholder="Search filenames… (Enter to filter, ESC to cancel)" autocomplete="off" />
+                <input type="text" 
+                       id="search-input" 
+                       placeholder="🔍 Search files and folders... (Press Enter)" 
+                       autocomplete="off" 
+                       spellcheck="false" />
                 <button id="search-clear" title="Clear search">✕</button>
             </div>
         </div>
 
+        <!-- App bootstrap data -->
         <script>
             window.APP = {
                 allVideos: <?= json_encode($allFiles, JSON_UNESCAPED_SLASHES) ?>,
