@@ -6,7 +6,7 @@ import { renderGrid } from './grid.js';
 const buttonStyle = 'font-size:20px;padding:6px 10px;border:none;border-radius:6px;background:rgba(0,0,0,0.6);color:white;cursor:pointer;pointer-events:auto;';
 const centralOverlayStyle = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;gap:10px;z-index:10;opacity:0;transition:opacity 0.2s;pointer-events:none;';
 
-export function addFileInfoOverlay(container, file) {
+export function addFileInfoOverlay(container, file, isAudited) {
   container.style.position ||= 'relative';
 
   const overlay = document.createElement('div');
@@ -29,7 +29,17 @@ export function addFileInfoOverlay(container, file) {
   metaElem.style.fontSize = '12px';
   metaElem.style.marginTop = '2px';
 
-  overlay.appendChild(filenameElem);
+  // Add audit status indicator
+  if (!isAudited) {
+    const auditStatus = document.createElement('div');
+    auditStatus.textContent = '⚠️ NEW';
+    auditStatus.style.cssText = 'color: #ffcc00; font-weight: bold; font-size: 11px; margin-top: 2px;';
+    overlay.appendChild(filenameElem);
+    overlay.appendChild(auditStatus);
+  } else {
+    overlay.appendChild(filenameElem);
+  }
+
   overlay.appendChild(metaElem);
   container.appendChild(overlay);
 }

@@ -126,6 +126,27 @@ body {
   transition: var(--transition);
 }
 
+.video-container.unaudited {
+  border: 3px solid #ffcc00;
+  box-shadow: 0 0 15px rgba(255, 204, 0, 0.6);
+  position: relative;
+}
+
+.video-container.unaudited::before {
+  content: 'NEW';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: #ffcc00;
+  color: #000;
+  font-weight: bold;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  z-index: 5;
+  pointer-events: none;
+}
+
 .video-container:hover {
   box-shadow: 0 16px 48px rgba(0,0,0,0.65),
               0 0 0 1px rgba(124,58,237,0.18);

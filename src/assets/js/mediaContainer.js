@@ -9,6 +9,12 @@ export function createMediaContainer(file) {
   const container = document.createElement('div');
   container.className = 'video-container';
 
+  // Check if file is audited
+  const isAudited = state.isFileAudited(file);
+  if (!isAudited) {
+    container.classList.add('unaudited');
+  }
+
   const ext = file.split('.').pop().toLowerCase();
   const isAudio = ['mp3','wav','ogg'].includes(ext);
   const isVideo = ['mp4', 'webm', 'mkv', 'mov', 'm4v', '3gp', 'flv', 'wmv'].includes(ext);
@@ -25,7 +31,7 @@ export function createMediaContainer(file) {
   }
 
   addCentralOverlay(container, mediaEl, file);
-  addFileInfoOverlay(container, file);
+  addFileInfoOverlay(container, file, isAudited);
 
   // Restore time if this was the last fullscreen item
   if ((isVideo || isAudio) && state.lastFullscreen.file === file && state.lastFullscreen.time > 0) {

@@ -13,3 +13,6 @@ android-app/*.iml
 
 # Local SDK / machine config
 android-app/local.properties
+
+# volumes
+src/volumes/

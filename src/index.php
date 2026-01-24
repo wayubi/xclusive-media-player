@@ -211,11 +211,29 @@ function renderSingleFolderSelect(array $selected_parts, string $current_abs_pat
 // ================================
 $current_path = getCurrentPath($root_directory_absolute, $selected_path);
 $auditFile = $current_path . '/.audited';
-$auditedText = is_file($auditFile) ? trim(file_get_contents($auditFile)) : '';
+
+// Read audited filenames
+$auditedFilenames = [];
+$auditedDate = '';
+if (is_file($auditFile)) {
+    $lines = file($auditFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    if (!empty($lines)) {
+        // First line is the date
+        $auditedDate = trim($lines[0]);
+        // Rest are filenames
+        $auditedFilenames = array_slice($lines, 1);
+    }
+}
 
 $allFilesRaw = getFiles($current_path);
 $webRoot = '/' . trim($root_directory, './');
 $allFiles = array_map(fn($f) => filesystemToWebPath($f, $root_directory_absolute, $webRoot), $allFilesRaw);
+$allFilesCount = count($allFiles);
+
+// Count audited files - extract just filenames from full paths
+$currentFilenames = array_map(fn($path) => basename($path), $allFilesRaw);
+$auditedCount = count(array_intersect($currentFilenames, $auditedFilenames));
+$unAuditedCount = $allFilesCount - $auditedCount;
 
 require_once __DIR__ . '/lib/audioCovers.php';
 $audioThumbsRaw = generateAudioCovers($allFilesRaw);
@@ -244,7 +262,7 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
     <body>
 
         <form id="options-form" method="get" action="index.php">
-            <span id="file-count">1 / <?php echo count($allFiles); ?></span>
+            <span id="file-count">1 / <?= $allFilesCount ?></span>
             <?php foreach ($selected_path_parts_final as $part): ?>
                 <input type="hidden" name="path[]" value="<?= htmlspecialchars($part) ?>">
             <?php endforeach; ?>
@@ -255,7 +273,7 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
                     style="padding: 8px 14px; background: var(--surface-hover); 
                     border: 1px solid var(--border); border-radius: var(--radius);
                     color: var(--text); font-weight: 500; cursor: pointer;">
-                    ↑ Go Back
+                    ← Go Back
                     </button>
                 <?php endif; ?>
                 <?php renderSingleFolderSelect($selected_path_parts_final, $current_path); ?>
@@ -278,12 +296,10 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
         <button type="button" id="mute-button" onclick="toggleMute()"><?= $muted?'🔇':'🔊' ?></button>
         <button type="button" onclick="playAll()">▶</button>
         <button type="button" onclick="shufflePlay()">🔀</button>
-        <!-- <button type="button" id="refresh" onclick="window.location.reload()">🔄</button>
-        <button type="button" id="clear" onclick="window.location.href='index.php'">🧹</button> -->
-        <button type="button" id="audit" onclick="runAudit(<?= count($allFiles) ?>)">📝</button>
+        <button type="button" id="audit" onclick="runAudit()">📝</button>
         <button type="button" id="previous" onclick="prevGrid()">◀</button>
         <button type="button" id="next" onclick="nextGrid()">▶</button>
-        <span id="audit-text">[ <?= htmlspecialchars($auditedText) ?> ]</span>
+        <span id="audit-text">[ <?= htmlspecialchars($auditedDate) ?> / <?= $auditedCount ?> / <?= $unAuditedCount ?> ]</span>
         </form>
 
         <div id="grid"></div>
@@ -300,6 +316,7 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
                 allVideos: <?= json_encode($allFiles, JSON_UNESCAPED_SLASHES) ?>,
                 allFilesWithPaths: <?= json_encode($allFilesRaw, JSON_UNESCAPED_SLASHES) ?>,
                 audioThumbs: <?= json_encode($audioThumbs, JSON_UNESCAPED_SLASHES) ?>,
+                auditedFilenames: <?= json_encode($auditedFilenames, JSON_UNESCAPED_SLASHES) ?>,
                 muted: <?= $muted ? 'true' : 'false' ?>,
                 totalCells: <?= $total_cells ?>,
                 selectedColumns: <?= $selected_columns ?>,

@@ -139,11 +139,17 @@ switch ($action) {
 
     case 'audit':
         $path = $data['path'] ?? null;
-        $count = (int)($data['count'] ?? 0);
+        $filenames = $data['filenames'] ?? [];
 
         if (!$path) {
             http_response_code(400);
             echo json_encode(['error' => 'Missing path']);
+            exit;
+        }
+
+        if (!is_array($filenames)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid filenames']);
             exit;
         }
 
@@ -153,23 +159,47 @@ switch ($action) {
         
         if (!$fsPath || !str_starts_with($fsPath, $root) || !is_dir($fsPath)) {
             http_response_code(400);
-            echo json_encode(['error' => 'Invalid path']);
+            echo json_encode(['error' => 'Invalid path: ' . $cleanPath]);
             exit;
         }
 
         $auditFile = $fsPath . '/.audited';
         $timestamp = date('ymd');
-        $line = "$timestamp / $count";
+        
+        // Write timestamp on first line, then all filenames
+        $content = $timestamp . PHP_EOL;
+        foreach ($filenames as $filename) {
+            $content .= $filename . PHP_EOL;
+        }
 
-        if (file_put_contents($auditFile, $line . PHP_EOL) === false) {
+        $writeResult = file_put_contents($auditFile, $content);
+        
+        if ($writeResult === false) {
             http_response_code(500);
-            echo json_encode(['error' => 'Failed to write audit file']);
+            echo json_encode([
+                'error' => 'Failed to write audit file',
+                'path' => $auditFile,
+                'writable' => is_writable(dirname($auditFile))
+            ]);
+            exit;
+        }
+
+        // Verify the file was created
+        if (!file_exists($auditFile)) {
+            http_response_code(500);
+            echo json_encode([
+                'error' => 'File created but does not exist',
+                'path' => $auditFile
+            ]);
             exit;
         }
 
         echo json_encode([
             'status' => 'ok',
-            'text'   => $line
+            'date'   => $timestamp,
+            'count'  => count($filenames),
+            'path'   => $auditFile,
+            'written' => $writeResult
         ]);
         break;
 

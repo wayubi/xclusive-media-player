@@ -34,7 +34,7 @@ switch ($data['action']) {
         $payload = [
             'action' => 'audit',
             'path'   => $data['path'],
-            'count'  => (int)($data['count'] ?? 0),
+            'filenames' => $data['filenames'] ?? [],
         ];
         break;
 
