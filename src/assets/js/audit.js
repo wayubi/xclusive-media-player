@@ -2,25 +2,33 @@
 import { state } from './state.js';
 
 export function runAudit() {
-  // Extract filenames from all current files
-  // allFilesWithPaths contains filesystem paths like: /full/path/to/volumes/folder/file.mp4
-  // We need just the filename
-  const filenames = state.allFilesWithPaths.map(path => {
-    // Handle both forward and back slashes
+  // Get files up to current viewing position (startIndex + currently visible files)
+  const endIndex = state.startIndex + state.totalCells;
+  const filesToAudit = state.allFilesWithPaths.slice(0, endIndex);
+  
+  // Extract filenames from the files we want to audit
+  const newFilenames = filesToAudit.map(path => {
     const normalized = path.replace(/\\/g, '/');
     const parts = normalized.split('/');
     return parts[parts.length - 1];
-  }).filter(f => f && f.length > 0); // Remove any empty entries
+  }).filter(f => f && f.length > 0);
+
+  // Merge with existing audited filenames (union to avoid duplicates)
+  const mergedFilenames = [...new Set([...state.auditedFilenames, ...newFilenames])];
 
   console.log('Audit request:', {
     path: state.auditPath,
-    filenameCount: filenames.length,
+    startIndex: state.startIndex,
+    totalCells: state.totalCells,
+    endIndex: endIndex,
+    newFilenameCount: newFilenames.length,
+    existingAuditedCount: state.auditedFilenames.length,
+    mergedCount: mergedFilenames.length,
     totalFiles: state.allFilesWithPaths.length,
-    firstFew: filenames.slice(0, 5),
-    samplePath: state.allFilesWithPaths[0]
+    firstFew: newFilenames.slice(0, 5)
   });
 
-  if (filenames.length === 0) {
+  if (mergedFilenames.length === 0) {
     alert('No files to audit!');
     return;
   }
@@ -31,7 +39,7 @@ export function runAudit() {
     body: JSON.stringify({
       action: 'audit',
       path: state.auditPath,
-      filenames: filenames
+      filenames: mergedFilenames
     })
   })
   .then(r => r.json())
@@ -44,9 +52,10 @@ export function runAudit() {
         auditText.innerText = `[ Error: ${data.error} ]`;
         console.error('Audit error:', data);
       } else {
-        auditText.innerText = `[ ${data.date} / ${data.count} / 0 ]`;
-        // Update state with new audited filenames
-        state.auditedFilenames = filenames;
+        const unauditedCount = state.allFilesWithPaths.length - data.count;
+        auditText.innerText = `[ ${data.date} / ${data.count} / ${unauditedCount} ]`;
+        // Update state with merged audited filenames
+        state.auditedFilenames = mergedFilenames;
       }
     }
   })
