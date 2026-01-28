@@ -106,7 +106,7 @@ switch ($action) {
             exit;
         }
 
-        $trash = $root . '/.trash';
+        $trash = '/tmp/.trash';
         if (!is_dir($trash) && !mkdir($trash, 0777, true)) {
             http_response_code(500);
             echo json_encode(['error' => 'Failed to create trash directory']);
