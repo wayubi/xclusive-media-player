@@ -53,6 +53,10 @@ export function addCentralOverlay(container, mediaEl, file) {
   const selectBtn = createSelectButton(file);
   overlay.appendChild(selectBtn);
 
+  // Audit button
+  const auditBtn = createAuditButton(file, container);
+  overlay.appendChild(auditBtn);
+
   // Fullscreen button
   const fsBtn = document.createElement('button');
   fsBtn.innerHTML = '⛶';
@@ -116,6 +120,124 @@ function createSelectButton(file) {
   };
   
   return selectBtn;
+}
+
+function createAuditButton(file, container) {
+  const auditBtn = document.createElement('button');
+  auditBtn.innerHTML = '📋';
+  auditBtn.style.cssText = buttonStyle;
+  auditBtn.title = 'Audit this file';
+  
+  auditBtn.onclick = async (e) => {
+    e.stopPropagation();
+    
+    // Immediate visual feedback - change button appearance
+    auditBtn.innerHTML = '⏳';
+    auditBtn.style.background = 'rgba(168, 85, 247, 0.8)';
+    auditBtn.disabled = true;
+    
+    // Get the filesystem path for this file
+    const webPath = file;
+    const fileIndex = state.allVideos.indexOf(webPath);
+    if (fileIndex === -1) {
+      auditBtn.innerHTML = '❌';
+      auditBtn.style.background = 'rgba(239, 68, 68, 0.8)';
+      setTimeout(() => {
+        auditBtn.innerHTML = '📋';
+        auditBtn.style.background = 'rgba(0,0,0,0.6)';
+        auditBtn.disabled = false;
+      }, 1500);
+      return;
+    }
+    
+    const fsPath = state.allFilesWithPaths[fileIndex];
+    if (!fsPath) {
+      auditBtn.innerHTML = '❌';
+      auditBtn.style.background = 'rgba(239, 68, 68, 0.8)';
+      setTimeout(() => {
+        auditBtn.innerHTML = '📋';
+        auditBtn.style.background = 'rgba(0,0,0,0.6)';
+        auditBtn.disabled = false;
+      }, 1500);
+      return;
+    }
+    
+    // IMMEDIATELY update UI before API call
+    state.auditStatusMap[webPath] = true;
+    container.classList.remove('unaudited');
+    
+    // Update counter immediately
+    import('./audit.js').then(module => {
+      module.updateAuditDisplay();
+    });
+    
+    try {
+      // Now make the API call in the background
+      const response = await fetch('api.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'audit',
+          file_paths: [fsPath]
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.error) {
+        // If API fails, revert the changes
+        state.auditStatusMap[webPath] = false;
+        container.classList.add('unaudited');
+        
+        import('./audit.js').then(module => {
+          module.updateAuditDisplay();
+        });
+        
+        auditBtn.innerHTML = '❌';
+        auditBtn.style.background = 'rgba(239, 68, 68, 0.8)';
+        setTimeout(() => {
+          auditBtn.innerHTML = '📋';
+          auditBtn.style.background = 'rgba(0,0,0,0.6)';
+          auditBtn.disabled = false;
+        }, 1500);
+        
+        alert('Audit failed: ' + data.error);
+        return;
+      }
+      
+      // Success!
+      auditBtn.innerHTML = '✓';
+      auditBtn.style.background = 'rgba(34, 197, 94, 0.8)';
+      
+      setTimeout(() => {
+        auditBtn.innerHTML = '📋';
+        auditBtn.style.background = 'rgba(0,0,0,0.6)';
+        auditBtn.disabled = false;
+      }, 1500);
+      
+    } catch (err) {
+      // If request fails, revert the changes
+      state.auditStatusMap[webPath] = false;
+      container.classList.add('unaudited');
+      
+      import('./audit.js').then(module => {
+        module.updateAuditDisplay();
+      });
+      
+      console.error('Audit failed:', err);
+      auditBtn.innerHTML = '❌';
+      auditBtn.style.background = 'rgba(239, 68, 68, 0.8)';
+      setTimeout(() => {
+        auditBtn.innerHTML = '📋';
+        auditBtn.style.background = 'rgba(0,0,0,0.6)';
+        auditBtn.disabled = false;
+      }, 1500);
+      
+      alert('Audit failed: ' + err.message);
+    }
+  };
+  
+  return auditBtn;
 }
 
 function createMuteButton(mediaEl) {

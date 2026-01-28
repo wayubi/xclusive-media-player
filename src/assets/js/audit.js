@@ -1,5 +1,6 @@
 // audit.js - Audit functionality with SQLite backend
 import { state } from './state.js';
+import { renderGrid } from './grid.js';
 
 export function runAudit() {
   // Get files up to current viewing position (startIndex + currently visible files)
@@ -19,6 +20,28 @@ export function runAudit() {
     return;
   }
 
+  // IMMEDIATELY update UI before API call
+  filesToAudit.forEach((fsPath, idx) => {
+    const webPath = state.allVideos[idx];
+    if (webPath) {
+      state.auditStatusMap[webPath] = true;
+    }
+  });
+  
+  // Update display immediately
+  updateAuditDisplay();
+  
+  // Remove 'unaudited' class from all containers immediately
+  refreshGridAuditStatus();
+  
+  // Change audit button to show it's processing
+  const auditButton = document.getElementById('audit');
+  const originalText = auditButton ? auditButton.innerHTML : '';
+  if (auditButton) {
+    auditButton.innerHTML = '⏳';
+    auditButton.disabled = true;
+  }
+
   // Send absolute file paths to the API
   fetch('api.php', {
     method: 'POST',
@@ -32,40 +55,113 @@ export function runAudit() {
   .then(data => {
     console.log('Audit response:', data);
     
-    const auditText = document.getElementById('audit-text');
-    if (auditText) {
-      if (data.error) {
-        auditText.innerHTML = `<span style="color: #ff4444;">❌ Error: ${data.error}</span>`;
-        console.error('Audit error:', data);
-      } else {
-        const unauditedCount = state.allFilesWithPaths.length - data.total_audited;
-        auditText.innerHTML = `
-          📅 ${data.date} • ✅ ${data.total_audited} • 
-          <span id="unaudited-count" style="cursor: pointer; text-decoration: underline;" title="Click to filter unaudited files">
-            ⚠️ ${unauditedCount}
-          </span>
-        `;
-        
-        // Update audit status map for the audited files
-        filesToAudit.forEach((fsPath, idx) => {
-          const webPath = state.allVideos[idx];
-          if (webPath) {
-            state.auditStatusMap[webPath] = true;
-          }
-        });
-        
-        // Re-setup the unaudited filter click handler
-        import('./filter.js').then(module => {
-          module.setupUnauditedFilter();
-        });
-        
-        // Show success message
-        // alert(`Successfully audited ${data.count} files!`);
-      }
+    if (auditButton) {
+      auditButton.innerHTML = '✓';
+      setTimeout(() => {
+        auditButton.innerHTML = originalText;
+        auditButton.disabled = false;
+      }, 1500);
     }
+    
+    if (data.error) {
+      // Revert changes if API failed
+      filesToAudit.forEach((fsPath, idx) => {
+        const webPath = state.allVideos[idx];
+        if (webPath) {
+          state.auditStatusMap[webPath] = false;
+        }
+      });
+      
+      updateAuditDisplay();
+      
+      // Re-add unaudited classes
+      const containers = document.querySelectorAll('#grid .video-container');
+      containers.forEach((container, idx) => {
+        const visibleFiles = state.getVisibleFiles();
+        const file = visibleFiles[idx];
+        
+        if (file && !state.auditStatusMap[file]) {
+          container.classList.add('unaudited');
+        }
+      });
+      
+      const auditText = document.getElementById('audit-text');
+      if (auditText) {
+        auditText.innerHTML = `<span style="color: #ff4444;">❌ Error: ${data.error}</span>`;
+      }
+      console.error('Audit error:', data);
+      return;
+    }
+    
+    // Success - UI is already updated, just refresh display to be sure
+    updateAuditDisplay();
   })
   .catch(err => {
     console.error('Audit failed:', err);
+    
+    if (auditButton) {
+      auditButton.innerHTML = originalText;
+      auditButton.disabled = false;
+    }
+    
+    // Revert changes if request failed
+    filesToAudit.forEach((fsPath, idx) => {
+      const webPath = state.allVideos[idx];
+      if (webPath) {
+        state.auditStatusMap[webPath] = false;
+      }
+    });
+    
+    updateAuditDisplay();
+    
     alert('Audit failed: ' + err.message);
+  });
+}
+
+export function updateAuditDisplay() {
+  // Count total audited and unaudited from current state
+  const totalFiles = state.originalVideos.length;
+  let auditedCount = 0;
+  let latestDate = '';
+  
+  // Count audited files from the audit status map
+  state.originalVideos.forEach(webPath => {
+    if (state.auditStatusMap[webPath]) {
+      auditedCount++;
+    }
+  });
+  
+  const unauditedCount = totalFiles - auditedCount;
+  
+  // Get latest audit date (use current date as proxy since we just audited)
+  latestDate = new Date().toISOString().slice(2, 10).replace(/-/g, '');
+  
+  const auditText = document.getElementById('audit-text');
+  if (auditText) {
+    auditText.innerHTML = `
+      📅 ${latestDate} • ✅ ${auditedCount} • 
+      <span id="unaudited-count" style="cursor: pointer; text-decoration: underline;" title="Click to filter unaudited files">
+        ⚠️ ${unauditedCount}
+      </span>
+    `;
+    
+    // Re-setup the unaudited filter click handler
+    import('./filter.js').then(module => {
+      module.setupUnauditedFilter();
+    });
+  }
+}
+
+function refreshGridAuditStatus() {
+  // Update all containers in the grid to reflect current audit status
+  const containers = document.querySelectorAll('#grid .video-container');
+  
+  containers.forEach((container, idx) => {
+    const visibleFiles = state.getVisibleFiles();
+    const file = visibleFiles[idx];
+    
+    if (file && state.auditStatusMap[file]) {
+      container.classList.remove('unaudited');
+    }
   });
 }
