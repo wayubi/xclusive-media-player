@@ -218,7 +218,11 @@ function updateFileCount() {
   const countElem = document.getElementById('file-count');
   if (!countElem) return;
   
-  countElem.innerText = state.currentSearch 
-    ? `Filtered: ${state.startIndex + 1} / ${state.allVideos.length} (of ${state.originalVideos.length})`
-    : `${state.startIndex + 1} / ${state.allVideos.length}`;
+  if (state.unauditedFilter) {
+    countElem.innerText = `Unaudited: ${state.startIndex + 1} / ${state.allVideos.length} (of ${state.originalVideos.length})`;
+  } else if (state.currentSearch) {
+    countElem.innerText = `Filtered: ${state.startIndex + 1} / ${state.allVideos.length} (of ${state.originalVideos.length})`;
+  } else {
+    countElem.innerText = `${state.startIndex + 1} / ${state.allVideos.length}`;
+  }
 }

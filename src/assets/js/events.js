@@ -4,6 +4,7 @@ import { nextGrid, prevGrid, renderGrid } from './grid.js';
 import { playAll, shufflePlay } from './fullscreen.js';
 import { initSearch, setupSearchListeners } from './search.js';
 import { runAudit } from './audit.js';
+import { setupUnauditedFilter } from './filter.js';
 
 let scrollDebounce = false;
 
@@ -11,6 +12,9 @@ export function setupEventListeners() {
   // Initialize search
   initSearch();
   setupSearchListeners();
+  
+  // Setup unaudited filter
+  setupUnauditedFilter();
   
   // Grid navigation
   setupGridNavigation();

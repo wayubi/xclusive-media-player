@@ -21,6 +21,7 @@ export const state = {
   fullscreenMode: 'tile',
   currentSearch: '',
   coverEnabled: true,
+  unauditedFilter: false,
   
   // Initialize state from bootstrap data
   init(config) {

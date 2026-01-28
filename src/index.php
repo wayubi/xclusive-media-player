@@ -335,9 +335,9 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
                 white-space: nowrap;
             ">
                 <?php if ($auditedDate): ?>
-                    📅 <?= htmlspecialchars($auditedDate) ?> • ✅ <?= $auditedCount ?> • ⚠️ <?= $unAuditedCount ?>
+                    📅 <?= htmlspecialchars($auditedDate) ?> • ✅ <?= $auditedCount ?> • <span id="unaudited-count" style="cursor: pointer; text-decoration: none;" title="Click to filter unaudited files">⚠️ <?= $unAuditedCount ?></span>
                 <?php else: ?>
-                    ⚠️ Not audited
+                    <span id="unaudited-count" style="cursor: pointer; text-decoration: none;" title="Click to filter unaudited files">⚠️ Not audited</span>
                 <?php endif; ?>
             </span>
         </form>

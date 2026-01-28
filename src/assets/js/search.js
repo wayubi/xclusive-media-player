@@ -29,6 +29,7 @@ export function initSearch() {
 export function applySearch(term) {
   term = (term || '').trim().toLowerCase();
   state.currentSearch = term;
+  state.unauditedFilter = false; // Clear unaudited filter when searching
 
   if (!term) {
     state.allVideos = searchableItems.map(item => item.webPath);
