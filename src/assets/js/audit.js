@@ -6,7 +6,15 @@ export function runAudit() {
   // Get only the currently visible files (startIndex to startIndex + totalCells)
   const startIdx = state.startIndex;
   const endIdx = state.startIndex + state.totalCells;
-  const filesToAudit = state.allFilesWithPaths.slice(startIdx, endIdx);
+  
+  // Get the visible web paths (this respects filters)
+  const visibleWebPaths = state.allVideos.slice(startIdx, endIdx);
+  
+  // Convert web paths to filesystem paths for the API
+  const filesToAudit = visibleWebPaths.map(webPath => {
+    const webIndex = state.originalVideos.indexOf(webPath);
+    return state.allFilesWithPaths[webIndex];
+  }).filter(path => path); // Remove any undefined entries
   
   console.log('Audit request:', {
     startIndex: state.startIndex,
@@ -15,7 +23,8 @@ export function runAudit() {
     endIdx: endIdx,
     fileCount: filesToAudit.length,
     totalFiles: state.allFilesWithPaths.length,
-    auditingVisible: 'Only currently visible files'
+    visibleWebPaths: visibleWebPaths.length,
+    auditingVisible: 'Only currently visible files (respects filters)'
   });
 
   if (filesToAudit.length === 0) {
@@ -24,17 +33,9 @@ export function runAudit() {
   }
 
   // IMMEDIATELY update UI before API call
-  // Map filesystem paths to web paths correctly
-  filesToAudit.forEach((fsPath) => {
-    // Find the index of this filesystem path in allFilesWithPaths
-    const fsIndex = state.allFilesWithPaths.indexOf(fsPath);
-    if (fsIndex !== -1 && fsIndex < state.originalVideos.length) {
-      // Get the corresponding web path
-      const webPath = state.originalVideos[fsIndex];
-      if (webPath) {
-        state.auditStatusMap[webPath] = true;
-      }
-    }
+  // Update audit status for the visible web paths
+  visibleWebPaths.forEach((webPath) => {
+    state.auditStatusMap[webPath] = true;
   });
   
   // Update display immediately
@@ -74,14 +75,8 @@ export function runAudit() {
     
     if (data.error) {
       // Revert changes if API failed
-      filesToAudit.forEach((fsPath) => {
-        const fsIndex = state.allFilesWithPaths.indexOf(fsPath);
-        if (fsIndex !== -1 && fsIndex < state.originalVideos.length) {
-          const webPath = state.originalVideos[fsIndex];
-          if (webPath) {
-            state.auditStatusMap[webPath] = false;
-          }
-        }
+      visibleWebPaths.forEach((webPath) => {
+        state.auditStatusMap[webPath] = false;
       });
       
       updateAuditDisplay();
@@ -117,14 +112,8 @@ export function runAudit() {
     }
     
     // Revert changes if request failed
-    filesToAudit.forEach((fsPath) => {
-      const fsIndex = state.allFilesWithPaths.indexOf(fsPath);
-      if (fsIndex !== -1 && fsIndex < state.originalVideos.length) {
-        const webPath = state.originalVideos[fsIndex];
-        if (webPath) {
-          state.auditStatusMap[webPath] = false;
-        }
-      }
+    visibleWebPaths.forEach((webPath) => {
+      state.auditStatusMap[webPath] = false;
     });
     
     updateAuditDisplay();
