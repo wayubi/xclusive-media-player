@@ -155,7 +155,7 @@ export function updateAuditDisplay() {
   if (auditText) {
     auditText.innerHTML = `
       📅 ${latestDate} • ✅ ${auditedCount} • 
-      <span id="unaudited-count" style="cursor: pointer; text-decoration: underline;" title="Click to filter unaudited files">
+      <span id="unaudited-count" title="Click to filter unaudited files">
         ⚠️ ${unauditedCount}
       </span>
     `;
