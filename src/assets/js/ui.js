@@ -28,6 +28,7 @@ export function addFileInfoOverlay(container, file, isAudited) {
   const metaElem = document.createElement('div');
   metaElem.style.fontSize = '12px';
   metaElem.style.marginTop = '2px';
+  metaElem.style.pointerEvents = 'auto';
 
   // Add audit status indicator
   if (!isAudited) {

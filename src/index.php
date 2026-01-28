@@ -271,6 +271,22 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
             
             <!-- Navigation controls -->
             <div id="folder-select-container" style="display: flex; align-items: center; gap: 10px;">
+                <?php
+                // Build home URL with preserved parameters
+                $homeParams = [];
+                if (isset($_GET['columns'])) $homeParams[] = 'columns=' . (int)$_GET['columns'];
+                if (isset($_GET['rows'])) $homeParams[] = 'rows=' . (int)$_GET['rows'];
+                if (isset($_GET['muted'])) $homeParams[] = 'muted=' . urlencode($_GET['muted']);
+                $homeParams[] = 't=' . time();
+                $homeUrl = 'index.php' . (empty($homeParams) ? '' : '?' . implode('&', $homeParams));
+                ?>
+                <a href="<?= htmlspecialchars($homeUrl) ?>" 
+                   style="text-decoration: none;">
+                    <button type="button" title="Go to root folder">
+                        🏠 Home
+                    </button>
+                </a>
+                
                 <?php if (!empty($selected_path_parts_final)): ?>
                     <button type="submit" name="goto" value=".." 
                             onclick="this.form.action = 'index.php?t=' + Date.now();"

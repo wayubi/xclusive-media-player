@@ -84,8 +84,10 @@ function fetchMetadataBatch(grid, visible) {
       }
 
       if (metaElem) {
+        // Store the file path for folder navigation
+        metaElem.dataset.filePath = file;
         const parts = buildMetadataParts(meta);
-        metaElem.textContent = parts.join(' • ');
+        metaElem.innerHTML = parts.join(' • ');
       }
     });
   })
@@ -97,7 +99,11 @@ function fetchMetadataBatch(grid, visible) {
 function buildMetadataParts(meta) {
   const parts = [];
   
-  if (meta.folder) parts.push(meta.folder);
+  if (meta.folder) {
+    // Create clickable folder link with pointer-events enabled
+    const folderLink = `<span class="folder-link" style="cursor: pointer; text-decoration: underline; pointer-events: auto;">${meta.folder}</span>`;
+    parts.push(folderLink);
+  }
   if (meta.video?.width && meta.video?.height) {
     parts.push(`${meta.video.width}×${meta.video.height}`);
   }
@@ -119,6 +125,64 @@ function buildMetadataParts(meta) {
   }
   
   return parts;
+}
+
+// Add event delegation for folder clicks
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('grid')?.addEventListener('click', (e) => {
+    const folderLink = e.target.closest('.folder-link');
+    if (folderLink) {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Get the file path from the metadata element
+      const metaElem = folderLink.closest('div[data-file-path]');
+      if (metaElem && metaElem.dataset.filePath) {
+        const filePath = decodeURIComponent(metaElem.dataset.filePath);
+        
+        // Extract directory path from file URL
+        // Example: /volumes/pocket/Latif/civitai.com/alberist/file.mp4
+        // Should become: pocket/Latif/civitai.com/alberist
+        const pathParts = filePath.split('/').filter(p => p); // Remove empty strings
+        
+        // Remove 'volumes' prefix if present
+        if (pathParts[0] === 'volumes') {
+          pathParts.shift();
+        }
+        
+        // Remove filename (last part)
+        pathParts.pop();
+        
+        const folderPath = pathParts.join('/');
+        
+        if (folderPath) {
+          navigateToFolder(folderPath);
+        }
+      }
+    }
+  });
+});
+
+function navigateToFolder(folderPath) {
+  // Build the new URL with path segments
+  const pathSegments = folderPath.split('/').filter(p => p);
+  const params = new URLSearchParams();
+  
+  pathSegments.forEach(segment => {
+    params.append('path[]', segment);
+  });
+  
+  // Preserve current grid settings
+  const currentParams = new URLSearchParams(window.location.search);
+  if (currentParams.has('columns')) params.set('columns', currentParams.get('columns'));
+  if (currentParams.has('rows')) params.set('rows', currentParams.get('rows'));
+  if (currentParams.has('muted')) params.set('muted', currentParams.get('muted'));
+  
+  // Add cache buster
+  params.set('t', Date.now().toString());
+  
+  // Navigate to the folder
+  window.location.href = `index.php?${params.toString()}`;
 }
 
 export function nextGrid() {
