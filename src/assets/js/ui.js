@@ -108,11 +108,31 @@ function createSelectButton(file) {
         if (data.error) return alert('Delete error: ' + data.error);
         
         filesToDelete.forEach(f => {
+          // Remove from allVideos
           const idx = state.allVideos.indexOf(f);
           if (idx !== -1) state.allVideos.splice(idx, 1);
+          
+          // Remove from originalVideos
+          const origIdx = state.originalVideos.indexOf(f);
+          if (origIdx !== -1) state.originalVideos.splice(origIdx, 1);
+          
+          // Remove from audit status map
+          delete state.auditStatusMap[f];
+          
+          // Remove from allFilesWithPaths
+          const fileIdx = state.allVideos.indexOf(f);
+          if (fileIdx !== -1 && fileIdx < state.allFilesWithPaths.length) {
+            state.allFilesWithPaths.splice(fileIdx, 1);
+          }
         });
         
         state.startIndex = Math.min(state.startIndex, Math.max(0, state.allVideos.length - state.totalCells));
+        
+        // Update the audit display to reflect the new counts
+        import('./audit.js').then(module => {
+          module.updateAuditDisplay();
+        });
+        
         renderGrid();
       })
       .catch(() => alert('Delete failed'));

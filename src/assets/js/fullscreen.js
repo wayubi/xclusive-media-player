@@ -240,8 +240,29 @@ function setupKeyboardHandler(playlist, play, close, getIndex) {
         if (data.error) throw new Error(data.error);
 
         playlist.splice(i, 1);
+        
+        // Remove from allVideos
         const idx = state.allVideos.indexOf(del);
         if (idx !== -1) state.allVideos.splice(idx, 1);
+        
+        // Remove from originalVideos
+        const origIdx = state.originalVideos.indexOf(del);
+        if (origIdx !== -1) state.originalVideos.splice(origIdx, 1);
+        
+        // Remove from audit status map
+        delete state.auditStatusMap[del];
+        
+        // Remove from allFilesWithPaths
+        const fileIdx = state.allVideos.indexOf(del);
+        if (fileIdx !== -1 && fileIdx < state.allFilesWithPaths.length) {
+          state.allFilesWithPaths.splice(fileIdx, 1);
+        }
+        
+        // Update audit display
+        import('./audit.js').then(module => {
+          module.updateAuditDisplay();
+        });
+        
         renderGrid();
 
         if (!playlist.length) return close();
