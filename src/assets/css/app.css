@@ -130,6 +130,16 @@ body {
   padding: 0 4px;
 }
 
+#unaudited-count {
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+#unaudited-count:hover {
+  color: var(--accent-glow);
+}
+
 #folder-select {
   min-width: 240px;
   max-width: 400px;
