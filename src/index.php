@@ -209,30 +209,38 @@ function renderSingleFolderSelect(array $selected_parts, string $current_abs_pat
 // MAIN LOGIC
 // ================================
 $current_path = getCurrentPath($root_directory_absolute, $selected_path);
-$auditFile = $current_path . '/.audited';
 
-// Read audited filenames
-$auditedFilenames = [];
-$auditedDate = '';
-if (is_file($auditFile)) {
-    $lines = file($auditFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-    if (!empty($lines)) {
-        // First line is the date
-        $auditedDate = trim($lines[0]);
-        // Rest are filenames
-        $auditedFilenames = array_slice($lines, 1);
-    }
-}
+// NEW: Use SQLite for audit status
+require_once __DIR__ . '/lib/AuditDatabase.php';
+$auditDb = new AuditDatabase();
 
 $allFilesRaw = getFiles($current_path);
 $webRoot = '/' . trim($root_directory, './');
 $allFiles = array_map(fn($f) => filesystemToWebPath($f, $root_directory_absolute, $webRoot), $allFilesRaw);
 $allFilesCount = count($allFiles);
 
-// Count audited files - extract just filenames from full paths
-$currentFilenames = array_map(fn($path) => basename($path), $allFilesRaw);
-$auditedCount = count(array_intersect($currentFilenames, $auditedFilenames));
+// Get audit statuses for all files
+$auditStatuses = $auditDb->getAuditStatusBatch($allFilesRaw);
+
+// Count audited vs unaudited
+$auditedCount = 0;
+$latestAuditDate = '';
+foreach ($auditStatuses as $status) {
+    if ($status['audited']) {
+        $auditedCount++;
+        if ($status['audit_date'] > $latestAuditDate) {
+            $latestAuditDate = $status['audit_date'];
+        }
+    }
+}
 $unAuditedCount = $allFilesCount - $auditedCount;
+
+// Create a map of web path -> audit status for JS
+$auditStatusMap = [];
+foreach ($allFilesRaw as $i => $fsPath) {
+    $webPath = $allFiles[$i];
+    $auditStatusMap[$webPath] = $auditStatuses[$fsPath]['audited'] ?? false;
+}
 
 require_once __DIR__ . '/lib/audioCovers.php';
 $audioThumbsRaw = generateAudioCovers($allFilesRaw);
@@ -334,8 +342,8 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
                 color: var(--text-secondary);
                 white-space: nowrap;
             ">
-                <?php if ($auditedDate): ?>
-                    📅 <?= htmlspecialchars($auditedDate) ?> • ✅ <?= $auditedCount ?> • <span id="unaudited-count" style="cursor: pointer; text-decoration: none;" title="Click to filter unaudited files">⚠️ <?= $unAuditedCount ?></span>
+                <?php if ($latestAuditDate): ?>
+                    📅 <?= htmlspecialchars($latestAuditDate) ?> • ✅ <?= $auditedCount ?> • <span id="unaudited-count" style="cursor: pointer; text-decoration: none;" title="Click to filter unaudited files">⚠️ <?= $unAuditedCount ?></span>
                 <?php else: ?>
                     <span id="unaudited-count" style="cursor: pointer; text-decoration: none;" title="Click to filter unaudited files">⚠️ Not audited</span>
                 <?php endif; ?>
@@ -363,15 +371,13 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
                 allVideos: <?= json_encode($allFiles, JSON_UNESCAPED_SLASHES) ?>,
                 allFilesWithPaths: <?= json_encode($allFilesRaw, JSON_UNESCAPED_SLASHES) ?>,
                 audioThumbs: <?= json_encode($audioThumbs, JSON_UNESCAPED_SLASHES) ?>,
-                auditedFilenames: <?= json_encode($auditedFilenames, JSON_UNESCAPED_SLASHES) ?>,
+                auditStatusMap: <?= json_encode($auditStatusMap, JSON_UNESCAPED_SLASHES) ?>,
                 muted: <?= $muted ? 'true' : 'false' ?>,
                 totalCells: <?= $total_cells ?>,
                 selectedColumns: <?= $selected_columns ?>,
                 webRoot: <?= json_encode($webRoot) ?>,
                 rootDirAbs: <?= json_encode($root_directory_absolute) ?>,
-                auditPath: <?= json_encode(
-                    $selected_path ? $root_directory . '/' . $selected_path : $root_directory
-                ) ?>
+                currentPath: <?= json_encode($current_path) ?>
             };
         </script>
         <script type="module" src="/assets/js/main.js"></script>

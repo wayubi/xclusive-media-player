@@ -13,3 +13,4 @@ android-app/*.iml
 
 # Local SDK / machine config
 android-app/local.properties
+data/db/

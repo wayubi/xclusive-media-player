@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/lib/AuditDatabase.php';
+
 header('Content-Type: application/json');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -138,69 +140,68 @@ switch ($action) {
         break;
 
     case 'audit':
-        $path = $data['path'] ?? null;
-        $filenames = $data['filenames'] ?? [];
-
-        if (!$path) {
+        // NEW: Global audit using SQLite
+        $filePaths = $data['file_paths'] ?? [];
+        
+        if (!is_array($filePaths) || empty($filePaths)) {
             http_response_code(400);
-            echo json_encode(['error' => 'Missing path']);
+            echo json_encode(['error' => 'Invalid or missing file_paths']);
             exit;
         }
-
-        if (!is_array($filenames)) {
-            http_response_code(400);
-            echo json_encode(['error' => 'Invalid filenames']);
-            exit;
-        }
-
-        // Audit paths don't have /volumes prefix usually, but clean anyway
-        $cleanPath = ltrim(preg_replace('#^./volumes/#i', '', $path), '/');
-        $fsPath = realpath($root . '/' . $cleanPath);
         
-        if (!$fsPath || !str_starts_with($fsPath, $root) || !is_dir($fsPath)) {
-            http_response_code(400);
-            echo json_encode(['error' => 'Invalid path: ' . $cleanPath]);
-            exit;
-        }
-
-        $auditFile = $fsPath . '/.audited';
-        $timestamp = date('ymd');
-        
-        // Write timestamp on first line, then all filenames
-        $content = $timestamp . PHP_EOL;
-        foreach ($filenames as $filename) {
-            $content .= $filename . PHP_EOL;
-        }
-
-        $writeResult = file_put_contents($auditFile, $content);
-        
-        if ($writeResult === false) {
+        try {
+            $auditDb = new AuditDatabase();
+            
+            // Convert web paths to absolute paths and audit them
+            $absolutePaths = [];
+            foreach ($filePaths as $fsPath) {
+                if (file_exists($fsPath)) {
+                    $absolutePaths[] = $fsPath;
+                }
+            }
+            
+            $auditedCount = $auditDb->auditBatch($absolutePaths);
+            $stats = $auditDb->getStats();
+            
+            echo json_encode([
+                'status' => 'ok',
+                'date' => date('ymd'),
+                'count' => $auditedCount,
+                'total_audited' => $stats['audited_files'],
+                'total_files' => $stats['total_files']
+            ]);
+        } catch (Exception $e) {
             http_response_code(500);
             echo json_encode([
-                'error' => 'Failed to write audit file',
-                'path' => $auditFile,
-                'writable' => is_writable(dirname($auditFile))
+                'error' => 'Audit failed: ' . $e->getMessage()
             ]);
+        }
+        break;
+
+    case 'audit_status_batch':
+        // NEW: Get audit status for multiple files
+        $filePaths = $data['file_paths'] ?? [];
+        
+        if (!is_array($filePaths)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid file_paths']);
             exit;
         }
-
-        // Verify the file was created
-        if (!file_exists($auditFile)) {
+        
+        try {
+            $auditDb = new AuditDatabase();
+            $statuses = $auditDb->getAuditStatusBatch($filePaths);
+            
+            echo json_encode([
+                'status' => 'ok',
+                'audit_statuses' => $statuses
+            ]);
+        } catch (Exception $e) {
             http_response_code(500);
             echo json_encode([
-                'error' => 'File created but does not exist',
-                'path' => $auditFile
+                'error' => 'Failed to get audit status: ' . $e->getMessage()
             ]);
-            exit;
         }
-
-        echo json_encode([
-            'status' => 'ok',
-            'date'   => $timestamp,
-            'count'  => count($filenames),
-            'path'   => $auditFile,
-            'written' => $writeResult
-        ]);
         break;
 
     case 'metadata':

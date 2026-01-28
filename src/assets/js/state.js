@@ -5,7 +5,7 @@ export const state = {
   originalVideos: [],
   allFilesWithPaths: [],
   audioThumbs: {},
-  auditedFilenames: [],
+  auditStatusMap: {},
   
   // Configuration
   muted: false,
@@ -13,7 +13,7 @@ export const state = {
   selectedColumns: 0,
   webRoot: '',
   rootDirAbs: '',
-  auditPath: '',
+  currentPath: '',
   
   // UI state
   startIndex: 0,
@@ -29,13 +29,13 @@ export const state = {
     this.originalVideos = [...config.allVideos];
     this.allFilesWithPaths = config.allFilesWithPaths;
     this.audioThumbs = config.audioThumbs;
-    this.auditedFilenames = config.auditedFilenames || [];
+    this.auditStatusMap = config.auditStatusMap;
     this.muted = config.muted;
     this.totalCells = config.totalCells;
     this.selectedColumns = config.selectedColumns;
     this.webRoot = config.webRoot;
     this.rootDirAbs = config.rootDirAbs;
-    this.auditPath = config.auditPath;
+    this.currentPath = config.currentPath;
   },
   
   // Helper methods
@@ -52,9 +52,7 @@ export const state = {
   },
   
   isFileAudited(file) {
-    // Extract filename from web path or full path
-    const filename = file.split('/').pop();
-    const decodedFilename = decodeURIComponent(filename);
-    return this.auditedFilenames.includes(decodedFilename);
+    // Use the audit status map - file is the web path
+    return this.auditStatusMap[file] === true;
   }
 };

@@ -9,13 +9,13 @@ const {
   allVideos,
   allFilesWithPaths,
   audioThumbs,
-  auditedFilenames,
+  auditStatusMap,
   muted,
   totalCells,
   selectedColumns,
   webRoot,
   rootDirAbs,
-  auditPath
+  currentPath
 } = window.APP;
 
 // Initialize state
@@ -23,13 +23,13 @@ state.init({
   allVideos,
   allFilesWithPaths,
   audioThumbs,
-  auditedFilenames,
+  auditStatusMap,
   muted,
   totalCells,
   selectedColumns,
   webRoot,
   rootDirAbs,
-  auditPath
+  currentPath
 });
 
 // Initialize
