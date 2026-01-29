@@ -188,12 +188,15 @@ function renderSingleFolderSelect(array $selected_parts, string $current_abs_pat
     $is_root = empty($selected_parts);
     $subfolders = getSubfolders(path: $current_abs_path);
     $has_children = !empty($subfolders);
+    
+    // Get current folder name
+    $current_folder_name = $is_root ? '🏠 Root' : '📂 ' . basename($current_abs_path);
     ?>
     <select name="goto_folder" id="folder-select"
             onchange="this.form.submit()"
             autofocus>
         <option value="" disabled selected>
-            <?= $has_children ? '📁 Select folder' : ($is_root ? '📂 No folders' : '📂 No subfolders') ?>
+            <?= $current_folder_name ?><?= $has_children ? ' ▾' : '' ?>
         </option>
 
         <?php foreach ($subfolders as $folder): ?>
