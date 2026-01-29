@@ -239,7 +239,7 @@ function renderSingleFolderSelect(array $selected_parts, string $current_abs_pat
     
     // Get current folder name and check if it has unaudited files
     $current_has_unaudited = hasUnauditedFiles($current_abs_path, $auditDb);
-    $current_icon = $is_root ? '🏠' : ($current_has_unaudited ? '⚠️' : '📂');
+    $current_icon = $is_root ? '🏠' : ($current_has_unaudited ? '📂' : '📂');
     $current_folder_name = $current_icon . ' ' . ($is_root ? 'Root' : basename($current_abs_path));
     ?>
     <select name="goto_folder" id="folder-select"
@@ -253,7 +253,7 @@ function renderSingleFolderSelect(array $selected_parts, string $current_abs_pat
             <?php
                 $subfolderPath = $current_abs_path . DIRECTORY_SEPARATOR . $folder;
                 $subfolder_has_unaudited = hasUnauditedFiles($subfolderPath, $auditDb);
-                $subfolder_icon = $subfolder_has_unaudited ? '⚠️' : '📁';
+                $subfolder_icon = $subfolder_has_unaudited ? '⚠️' : '✅';
             ?>
             <option value="<?= htmlspecialchars($folder) ?>">
                 <?= $subfolder_icon ?> <?= htmlspecialchars($folder) ?>
