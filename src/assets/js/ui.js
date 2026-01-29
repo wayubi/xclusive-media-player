@@ -3,9 +3,6 @@ import { state } from './state.js';
 import { startFullscreenFrom } from './fullscreen.js';
 import { renderGrid } from './grid.js';
 
-const buttonStyle = 'font-size:20px;padding:6px 10px;border:none;border-radius:6px;background:rgba(0,0,0,0.6);color:white;cursor:pointer;pointer-events:auto;';
-const centralOverlayStyle = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;gap:10px;z-index:10;opacity:0;transition:opacity 0.2s;pointer-events:none;';
-
 export function addFileInfoOverlay(container, file, isAudited) {
   container.style.position ||= 'relative';
 
@@ -34,7 +31,7 @@ export function addFileInfoOverlay(container, file, isAudited) {
 
 export function addCentralOverlay(container, mediaEl, file) {
   const overlay = document.createElement('div');
-  overlay.style.cssText = centralOverlayStyle + 'display:flex;justify-content:space-between;';
+  overlay.className = 'central-overlay';
 
   // Select/Delete button
   const selectBtn = createSelectButton(file);
@@ -47,7 +44,7 @@ export function addCentralOverlay(container, mediaEl, file) {
   // Fullscreen button
   const fsBtn = document.createElement('button');
   fsBtn.innerHTML = '⛶';
-  fsBtn.style.cssText = buttonStyle;
+  fsBtn.title = 'Fullscreen';
   fsBtn.onclick = e => {
     e.stopPropagation();
     const time = mediaEl && typeof mediaEl.currentTime === 'number' ? mediaEl.currentTime : 0;
@@ -62,14 +59,12 @@ export function addCentralOverlay(container, mediaEl, file) {
   }
 
   container.appendChild(overlay);
-  container.addEventListener('mouseenter', () => overlay.style.opacity = '1');
-  container.addEventListener('mouseleave', () => overlay.style.opacity = '0');
 }
 
 function createSelectButton(file) {
   const selectBtn = document.createElement('button');
   selectBtn.innerHTML = '🗙';
-  selectBtn.style.cssText = buttonStyle + 'background:gray;';
+  selectBtn.title = 'Select/Delete';
   selectBtn.dataset.file = file;
   selectBtn.dataset.selected = 'false';
   
@@ -78,12 +73,14 @@ function createSelectButton(file) {
     
     if (selectBtn.dataset.selected === 'false') {
       selectBtn.dataset.selected = 'true';
-      selectBtn.style.background = 'red';
-    } else {
-      const selected = Array.from(document.querySelectorAll('#grid .video-container button[data-selected="true"]'));
-      const filesToDelete = selected.map(b => b.dataset.file);
-      
-      if (!filesToDelete.length || !confirm(`Delete ${filesToDelete.length} file(s)?`)) return;
+      return; // Stop here on first click
+    }
+    
+    // Second click - show delete dialog
+    const selected = Array.from(document.querySelectorAll('#grid .video-container button[data-selected="true"]'));
+    const filesToDelete = selected.map(b => b.dataset.file);
+    
+    if (!filesToDelete.length || !confirm(`Delete ${filesToDelete.length} file(s)?`)) return;
       
       fetch('post-handler.php', {
         method: 'POST',
@@ -123,7 +120,6 @@ function createSelectButton(file) {
         renderGrid();
       })
       .catch(() => alert('Delete failed'));
-    }
   };
   
   return selectBtn;
@@ -132,7 +128,6 @@ function createSelectButton(file) {
 function createAuditButton(file, container) {
   const auditBtn = document.createElement('button');
   auditBtn.innerHTML = '📋';
-  auditBtn.style.cssText = buttonStyle;
   auditBtn.title = 'Audit this file';
   
   auditBtn.onclick = async (e) => {
@@ -140,7 +135,6 @@ function createAuditButton(file, container) {
     
     // Immediate visual feedback - change button appearance
     auditBtn.innerHTML = '⏳';
-    auditBtn.style.background = 'rgba(168, 85, 247, 0.8)';
     auditBtn.disabled = true;
     
     // Get the filesystem path for this file
@@ -148,10 +142,8 @@ function createAuditButton(file, container) {
     const fileIndex = state.allVideos.indexOf(webPath);
     if (fileIndex === -1) {
       auditBtn.innerHTML = '❌';
-      auditBtn.style.background = 'rgba(239, 68, 68, 0.8)';
       setTimeout(() => {
         auditBtn.innerHTML = '📋';
-        auditBtn.style.background = 'rgba(0,0,0,0.6)';
         auditBtn.disabled = false;
       }, 1500);
       return;
@@ -160,10 +152,8 @@ function createAuditButton(file, container) {
     const fsPath = state.allFilesWithPaths[fileIndex];
     if (!fsPath) {
       auditBtn.innerHTML = '❌';
-      auditBtn.style.background = 'rgba(239, 68, 68, 0.8)';
       setTimeout(() => {
         auditBtn.innerHTML = '📋';
-        auditBtn.style.background = 'rgba(0,0,0,0.6)';
         auditBtn.disabled = false;
       }, 1500);
       return;
@@ -201,10 +191,8 @@ function createAuditButton(file, container) {
         });
         
         auditBtn.innerHTML = '❌';
-        auditBtn.style.background = 'rgba(239, 68, 68, 0.8)';
         setTimeout(() => {
           auditBtn.innerHTML = '📋';
-          auditBtn.style.background = 'rgba(0,0,0,0.6)';
           auditBtn.disabled = false;
         }, 1500);
         
@@ -214,11 +202,9 @@ function createAuditButton(file, container) {
       
       // Success!
       auditBtn.innerHTML = '✓';
-      auditBtn.style.background = 'rgba(34, 197, 94, 0.8)';
       
       setTimeout(() => {
         auditBtn.innerHTML = '📋';
-        auditBtn.style.background = 'rgba(0,0,0,0.6)';
         auditBtn.disabled = false;
       }, 1500);
       
@@ -233,10 +219,8 @@ function createAuditButton(file, container) {
       
       console.error('Audit failed:', err);
       auditBtn.innerHTML = '❌';
-      auditBtn.style.background = 'rgba(239, 68, 68, 0.8)';
       setTimeout(() => {
         auditBtn.innerHTML = '📋';
-        auditBtn.style.background = 'rgba(0,0,0,0.6)';
         auditBtn.disabled = false;
       }, 1500);
       
@@ -251,7 +235,7 @@ function createMuteButton(mediaEl) {
   const muteBtn = document.createElement('button');
   muteBtn.className = 'mute-btn';
   muteBtn.innerHTML = mediaEl.muted ? '🔇' : '🔊';
-  muteBtn.style.cssText = buttonStyle;
+  muteBtn.title = 'Toggle mute';
   
   muteBtn.onclick = e => {
     e.stopPropagation();
