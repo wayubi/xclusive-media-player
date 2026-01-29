@@ -184,13 +184,63 @@ function getCurrentPath(string $root, string $selected_path): string {
     return ($real && str_starts_with($real, $cachedRoot)) ? $real : $cachedRoot;
 }
 
-function renderSingleFolderSelect(array $selected_parts, string $current_abs_path): void {
+function hasUnauditedFiles(string $folderPath, $auditDb): bool {
+    if (!is_dir($folderPath)) return false;
+    
+    $files = [];
+    $it = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($folderPath, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::SELF_FIRST
+    );
+    
+    $excluded = getExcludedFolders();
+    
+    foreach ($it as $file) {
+        if (!$file->isFile() || $file->getFilename() === '.audited') continue;
+        $pathname = $file->getPathname();
+        
+        foreach ($excluded as $folder) {
+            if (strpos($pathname, "/$folder/") !== false) {
+                continue 2;
+            }
+        }
+        
+        $files[] = $pathname;
+        
+        // Early exit optimization: check every 10 files
+        if (count($files) >= 10) {
+            $statuses = $auditDb->getAuditStatusBatch($files);
+            foreach ($statuses as $status) {
+                if (!$status['audited']) {
+                    return true; // Found an unaudited file
+                }
+            }
+            $files = []; // Clear the batch
+        }
+    }
+    
+    // Check remaining files
+    if (!empty($files)) {
+        $statuses = $auditDb->getAuditStatusBatch($files);
+        foreach ($statuses as $status) {
+            if (!$status['audited']) {
+                return true;
+            }
+        }
+    }
+    
+    return false;
+}
+
+function renderSingleFolderSelect(array $selected_parts, string $current_abs_path, $auditDb): void {
     $is_root = empty($selected_parts);
     $subfolders = getSubfolders(path: $current_abs_path);
     $has_children = !empty($subfolders);
     
-    // Get current folder name
-    $current_folder_name = $is_root ? '🏠 Root' : '📂 ' . basename($current_abs_path);
+    // Get current folder name and check if it has unaudited files
+    $current_has_unaudited = hasUnauditedFiles($current_abs_path, $auditDb);
+    $current_icon = $is_root ? '🏠' : ($current_has_unaudited ? '📂 ' : '📂');
+    $current_folder_name = $current_icon . ' ' . ($is_root ? 'Root' : basename($current_abs_path));
     ?>
     <select name="goto_folder" id="folder-select"
             onchange="this.form.submit()"
@@ -200,8 +250,13 @@ function renderSingleFolderSelect(array $selected_parts, string $current_abs_pat
         </option>
 
         <?php foreach ($subfolders as $folder): ?>
+            <?php
+                $subfolderPath = $current_abs_path . DIRECTORY_SEPARATOR . $folder;
+                $subfolder_has_unaudited = hasUnauditedFiles($subfolderPath, $auditDb);
+                $subfolder_icon = $subfolder_has_unaudited ? '⚠️' : '✅';
+            ?>
             <option value="<?= htmlspecialchars($folder) ?>">
-                📁 <?= htmlspecialchars($folder) ?>
+                <?= $subfolder_icon ?> <?= htmlspecialchars($folder) ?>
             </option>
         <?php endforeach; ?>
     </select>
@@ -305,7 +360,7 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
                         ← Back
                     </button>
                 <?php endif; ?>
-                <?php renderSingleFolderSelect($selected_path_parts_final, $current_path); ?>
+                <?php renderSingleFolderSelect($selected_path_parts_final, $current_path, $auditDb); ?>
             </div>
 
             <!-- Grid controls -->
