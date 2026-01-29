@@ -2,7 +2,36 @@
 import { state } from './state.js';
 import { renderGrid } from './grid.js';
 
+let lastAuditClickTime = 0;
+let auditTimeout = null;
+const DOUBLE_CLICK_THRESHOLD = 400; // ms - casual double-click window
+
 export function runAudit() {
+  const now = Date.now();
+  const timeSinceLastClick = now - lastAuditClickTime;
+  const isDoubleClick = timeSinceLastClick < DOUBLE_CLICK_THRESHOLD && timeSinceLastClick > 0;
+  
+  // Clear any pending single-click timeout
+  if (auditTimeout) {
+    clearTimeout(auditTimeout);
+    auditTimeout = null;
+  }
+  
+  if (isDoubleClick) {
+    // Double-click detected: audit ALL files in the folder
+    lastAuditClickTime = 0; // Reset to prevent triple-clicks
+    auditAllFiles();
+  } else {
+    // First click: wait to see if there's a second click
+    lastAuditClickTime = now;
+    auditTimeout = setTimeout(() => {
+      auditCurrentView();
+      auditTimeout = null;
+    }, DOUBLE_CLICK_THRESHOLD);
+  }
+}
+
+function auditCurrentView() {
   // Get only the currently visible files (startIndex to startIndex + totalCells)
   const startIdx = state.startIndex;
   const endIdx = state.startIndex + state.totalCells;
@@ -16,7 +45,7 @@ export function runAudit() {
     return state.allFilesWithPaths[webIndex];
   }).filter(path => path); // Remove any undefined entries
   
-  console.log('Audit request:', {
+  console.log('Audit request (current view):', {
     startIndex: state.startIndex,
     totalCells: state.totalCells,
     startIdx: startIdx,
@@ -31,10 +60,42 @@ export function runAudit() {
     alert('No files to audit!');
     return;
   }
+  
+  performAudit(filesToAudit, visibleWebPaths, 'current view');
+}
 
+function auditAllFiles() {
+  // Audit ALL files in the current folder (all original videos)
+  const allWebPaths = state.originalVideos;
+  
+  // Convert all web paths to filesystem paths
+  const filesToAudit = allWebPaths.map(webPath => {
+    const webIndex = state.originalVideos.indexOf(webPath);
+    return state.allFilesWithPaths[webIndex];
+  }).filter(path => path);
+  
+  console.log('Audit request (ALL FILES):', {
+    fileCount: filesToAudit.length,
+    totalFiles: state.allFilesWithPaths.length,
+    auditingAll: 'Auditing entire folder'
+  });
+  
+  if (filesToAudit.length === 0) {
+    alert('No files to audit!');
+    return;
+  }
+  
+  if (!confirm(`Audit ALL ${filesToAudit.length} files in this folder?`)) {
+    return;
+  }
+  
+  performAudit(filesToAudit, allWebPaths, 'all files');
+}
+
+function performAudit(filesToAudit, webPaths, mode) {
   // IMMEDIATELY update UI before API call
-  // Update audit status for the visible web paths
-  visibleWebPaths.forEach((webPath) => {
+  // Update audit status for the web paths
+  webPaths.forEach((webPath) => {
     state.auditStatusMap[webPath] = true;
   });
   
@@ -48,7 +109,7 @@ export function runAudit() {
   const auditButton = document.getElementById('audit');
   const originalText = auditButton ? auditButton.innerHTML : '';
   if (auditButton) {
-    auditButton.innerHTML = '⏳';
+    auditButton.innerHTML = mode === 'all files' ? '⏳ ALL' : '⏳';
     auditButton.disabled = true;
   }
 
@@ -63,7 +124,7 @@ export function runAudit() {
   })
   .then(r => r.json())
   .then(data => {
-    console.log('Audit response:', data);
+    console.log(`Audit response (${mode}):`, data);
     
     if (auditButton) {
       auditButton.innerHTML = '✓';
@@ -75,7 +136,7 @@ export function runAudit() {
     
     if (data.error) {
       // Revert changes if API failed
-      visibleWebPaths.forEach((webPath) => {
+      webPaths.forEach((webPath) => {
         state.auditStatusMap[webPath] = false;
       });
       
@@ -112,7 +173,7 @@ export function runAudit() {
     }
     
     // Revert changes if request failed
-    visibleWebPaths.forEach((webPath) => {
+    webPaths.forEach((webPath) => {
       state.auditStatusMap[webPath] = false;
     });
     
