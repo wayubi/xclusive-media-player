@@ -239,7 +239,7 @@ function renderSingleFolderSelect(array $selected_parts, string $current_abs_pat
     
     // Get current folder name and check if it has unaudited files
     $current_has_unaudited = hasUnauditedFiles($current_abs_path, $auditDb);
-    $current_icon = $is_root ? '🏠' : ($current_has_unaudited ? '📂' : '📂');
+    $current_icon = $is_root ? '🏠' : ($current_has_unaudited ? '⚠️' : '📂');
     $current_folder_name = $current_icon . ' ' . ($is_root ? 'Root' : basename($current_abs_path));
     ?>
     <select name="goto_folder" id="folder-select"
@@ -253,7 +253,7 @@ function renderSingleFolderSelect(array $selected_parts, string $current_abs_pat
             <?php
                 $subfolderPath = $current_abs_path . DIRECTORY_SEPARATOR . $folder;
                 $subfolder_has_unaudited = hasUnauditedFiles($subfolderPath, $auditDb);
-                $subfolder_icon = $subfolder_has_unaudited ? '⚠️' : '✅';
+                $subfolder_icon = $subfolder_has_unaudited ? '⚠️' : '📁';
             ?>
             <option value="<?= htmlspecialchars($folder) ?>">
                 <?= $subfolder_icon ?> <?= htmlspecialchars($folder) ?>
@@ -336,6 +336,11 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
         <meta name="theme-color" content="#0a0a0f">
         <title>Xclusive Media Player</title>
+        
+        <!-- Favicon -->
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+        <link rel="shortcut icon" href="/favicon.svg">
+        
         <link rel="stylesheet" href="/assets/css/app.css">
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
