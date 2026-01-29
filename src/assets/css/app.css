@@ -222,7 +222,7 @@ body {
   left: 12px;
   font-size: 24px;
   cursor: pointer;
-  z-index: 10;
+  z-index: 20;
   transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
   filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.6));
   pointer-events: auto;
@@ -302,7 +302,6 @@ body {
 
 .video-container:hover .overlay {
   opacity: 1;
-  pointer-events: auto;
 }
 
 .overlay > div:first-child {
@@ -311,6 +310,7 @@ body {
   margin-bottom: 6px;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
   letter-spacing: -0.01em;
+  pointer-events: auto;
 }
 
 .overlay > div:last-child {
@@ -319,6 +319,7 @@ body {
   letter-spacing: 0.2px;
   font-weight: 500;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+  pointer-events: auto;
 }
 
 .central-overlay {

@@ -11,24 +11,11 @@ export function addFileInfoOverlay(container, file, isAudited) {
 
   const overlay = document.createElement('div');
   overlay.className = 'overlay';
-  overlay.style.cssText = `
-    background: rgba(0,0,0,0.6);
-    color: white;
-    padding: 4px 6px;
-    font-size: 14px;
-    border-radius: 4px;
-    pointer-events: none;
-    display: inline-block;
-  `;
 
   const filenameElem = document.createElement('div');
   filenameElem.textContent = file;
-  filenameElem.style.fontWeight = 'bold';
 
   const metaElem = document.createElement('div');
-  metaElem.style.fontSize = '12px';
-  metaElem.style.marginTop = '2px';
-  metaElem.style.pointerEvents = 'auto';
 
   // Add audit status indicator
   if (!isAudited) {
