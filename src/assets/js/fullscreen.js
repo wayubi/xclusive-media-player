@@ -21,7 +21,7 @@ export function shufflePlay() {
   startFullscreenPlayer([...state.allVideos].sort(() => Math.random() - 0.5), 0);
 }
 
-function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
+export function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
   if (!playlist.length) return;
   let i = index;
 

@@ -6,6 +6,7 @@ export const state = {
   allFilesWithPaths: [],
   audioThumbs: {},
   auditStatusMap: {},
+  favoritesMap: {}, // NEW: Track favorited files
   
   // Configuration
   muted: false,
@@ -22,6 +23,7 @@ export const state = {
   currentSearch: '',
   coverEnabled: true,
   unauditedFilter: false,
+  favoritesFilter: false, // NEW: Track favorites filter state
   
   // Initialize state from bootstrap data
   init(config) {
@@ -30,6 +32,7 @@ export const state = {
     this.allFilesWithPaths = config.allFilesWithPaths;
     this.audioThumbs = config.audioThumbs;
     this.auditStatusMap = config.auditStatusMap;
+    this.favoritesMap = config.favoritesMap || {};
     this.muted = config.muted;
     this.totalCells = config.totalCells;
     this.selectedColumns = config.selectedColumns;
@@ -54,5 +57,56 @@ export const state = {
   isFileAudited(file) {
     // Use the audit status map - file is the web path
     return this.auditStatusMap[file] === true;
+  },
+  
+  // Favorites methods (database-backed)
+  async toggleFavorite(file) {
+    const webIndex = this.originalVideos.indexOf(file);
+    const fsPath = this.allFilesWithPaths[webIndex];
+    
+    if (!fsPath) {
+      console.error('Could not find filesystem path for:', file);
+      return null;
+    }
+    
+    try {
+      const response = await fetch('api.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'toggle_favorite',
+          file: file
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.error) {
+        console.error('Toggle favorite error:', data.error);
+        return null;
+      }
+      
+      // Update local state
+      this.favoritesMap[file] = data.favorited;
+      
+      return data.favorited;
+    } catch (err) {
+      console.error('Failed to toggle favorite:', err);
+      return null;
+    }
+  },
+  
+  isFavorited(file) {
+    return this.favoritesMap[file] === true;
+  },
+  
+  getFavoriteFiles() {
+    return this.originalVideos.filter(file => this.isFavorited(file));
+  },
+  
+  getFavoritesCount() {
+    return Object.keys(this.favoritesMap).filter(file => 
+      this.favoritesMap[file] && this.originalVideos.includes(file)
+    ).length;
   }
 };

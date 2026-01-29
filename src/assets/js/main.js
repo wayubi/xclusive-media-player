@@ -10,6 +10,7 @@ const {
   allFilesWithPaths,
   audioThumbs,
   auditStatusMap,
+  favoritesMap,
   muted,
   totalCells,
   selectedColumns,
@@ -24,6 +25,7 @@ state.init({
   allFilesWithPaths,
   audioThumbs,
   auditStatusMap,
+  favoritesMap,
   muted,
   totalCells,
   selectedColumns,
@@ -37,6 +39,12 @@ document.addEventListener('DOMContentLoaded', () => {
   setVhUnit();
   setupEventListeners();
   renderGrid();
+  
+  // Initialize favorites display
+  import('./favorites.js').then(module => {
+    module.updateFavoritesDisplay();
+    module.setupFavoritesFilter();
+  });
 });
 
 window.addEventListener('resize', setVhUnit);

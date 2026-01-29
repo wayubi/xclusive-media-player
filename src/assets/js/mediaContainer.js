@@ -15,6 +15,22 @@ export function createMediaContainer(file) {
     container.classList.add('unaudited');
   }
 
+  // Add favorite heart icon
+  const heart = document.createElement('div');
+  heart.className = 'favorite-heart';
+  const isFavorited = state.isFavorited(file);
+  heart.textContent = isFavorited ? '❤️' : '🤍';
+  if (isFavorited) {
+    heart.classList.add('favorited');
+  }
+  heart.onclick = (e) => {
+    e.stopPropagation();
+    import('./favorites.js').then(module => {
+      module.toggleFavorite(file, heart);
+    });
+  };
+  container.appendChild(heart);
+
   const ext = file.split('.').pop().toLowerCase();
   const isAudio = ['mp3','wav','ogg'].includes(ext);
   const isVideo = ['mp4', 'webm', 'mkv', 'mov', 'm4v', '3gp', 'flv', 'wmv'].includes(ext);

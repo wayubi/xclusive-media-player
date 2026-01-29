@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/lib/AuditDatabase.php';
+require_once __DIR__ . '/lib/FavoritesDatabase.php';
 
 header('Content-Type: application/json');
 
@@ -242,6 +243,91 @@ switch ($action) {
         }
 
         echo json_encode($results);
+        break;
+
+    case 'toggle_favorite':
+        $file = $files[0] ?? null;
+        if (!$file) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Missing file']);
+            exit;
+        }
+        
+        // Convert web path to filesystem path
+        $cleanFile = ltrim(preg_replace('#^/volumes/#i', '', urldecode($file)), '/');
+        $fsPath = realpath($root . '/' . $cleanFile);
+        
+        if (!$fsPath || !str_starts_with($fsPath, $root) || !file_exists($fsPath)) {
+            http_response_code(400);
+            echo json_encode(['error' => "Invalid file path: $file"]);
+            exit;
+        }
+        
+        try {
+            $favDb = new FavoritesDatabase();
+            $isFavorited = $favDb->toggleFavorite($fsPath);
+            
+            echo json_encode([
+                'status' => 'ok',
+                'favorited' => $isFavorited,
+                'file' => $file
+            ]);
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode(['error' => 'Failed to toggle favorite: ' . $e->getMessage()]);
+        }
+        break;
+
+    case 'favorites_status_batch':
+        // Get favorite status for multiple files
+        $filePaths = $data['file_paths'] ?? [];
+        
+        if (!is_array($filePaths)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid file_paths']);
+            exit;
+        }
+        
+        try {
+            $favDb = new FavoritesDatabase();
+            $statuses = $favDb->getFavoriteStatusBatch($filePaths);
+            
+            echo json_encode([
+                'status' => 'ok',
+                'favorite_statuses' => $statuses
+            ]);
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode([
+                'error' => 'Failed to get favorite status: ' . $e->getMessage()
+            ]);
+        }
+        break;
+
+    case 'get_favorites_count':
+        // Get count of favorites in current folder
+        $folderPath = $data['folder_path'] ?? null;
+        
+        if (!$folderPath) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Missing folder_path']);
+            exit;
+        }
+        
+        try {
+            $favDb = new FavoritesDatabase();
+            $count = $favDb->getFavoritesCountInFolder($folderPath);
+            
+            echo json_encode([
+                'status' => 'ok',
+                'count' => $count
+            ]);
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode([
+                'error' => 'Failed to get favorites count: ' . $e->getMessage()
+            ]);
+        }
         break;
 
     default:

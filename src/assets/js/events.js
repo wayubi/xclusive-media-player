@@ -66,6 +66,13 @@ function setupGlobalControls() {
   window.shufflePlay = shufflePlay;
   window.toggleMute = toggleMute;
   window.runAudit = runAudit;
+  
+  // NEW: Add playFavorites
+  window.playFavorites = () => {
+    import('./favorites.js').then(module => {
+      module.playFavorites();
+    });
+  };
 }
 
 function toggleMute() {

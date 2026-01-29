@@ -239,7 +239,7 @@ function renderSingleFolderSelect(array $selected_parts, string $current_abs_pat
     
     // Get current folder name and check if it has unaudited files
     $current_has_unaudited = hasUnauditedFiles($current_abs_path, $auditDb);
-    $current_icon = $is_root ? '🏠' : ($current_has_unaudited ? '📂 ' : '📂');
+    $current_icon = $is_root ? '🏠' : ($current_has_unaudited ? '📂' : '📂');
     $current_folder_name = $current_icon . ' ' . ($is_root ? 'Root' : basename($current_abs_path));
     ?>
     <select name="goto_folder" id="folder-select"
@@ -272,6 +272,10 @@ $current_path = getCurrentPath($root_directory_absolute, $selected_path);
 require_once __DIR__ . '/lib/AuditDatabase.php';
 $auditDb = new AuditDatabase();
 
+// NEW: Use SQLite for favorites
+require_once __DIR__ . '/lib/FavoritesDatabase.php';
+$favDb = new FavoritesDatabase();
+
 $allFilesRaw = getFiles($current_path);
 $webRoot = '/' . trim($root_directory, './');
 $allFiles = array_map(fn($f) => filesystemToWebPath($f, $root_directory_absolute, $webRoot), $allFilesRaw);
@@ -299,6 +303,19 @@ foreach ($allFilesRaw as $i => $fsPath) {
     $webPath = $allFiles[$i];
     $auditStatusMap[$webPath] = $auditStatuses[$fsPath]['audited'] ?? false;
 }
+
+// Get favorites statuses for all files
+$favoritesStatuses = $favDb->getFavoriteStatusBatch($allFilesRaw);
+
+// Create a map of web path -> favorite status for JS
+$favoritesMap = [];
+foreach ($allFilesRaw as $i => $fsPath) {
+    $webPath = $allFiles[$i];
+    $favoritesMap[$webPath] = $favoritesStatuses[$fsPath]['favorited'] ?? false;
+}
+
+// Get total favorites count in this folder
+$favoritesCount = $favDb->getFavoritesCountInFolder($current_path);
 
 require_once __DIR__ . '/lib/audioCovers.php';
 $audioThumbsRaw = generateAudioCovers($allFilesRaw);
@@ -385,9 +402,24 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
             </button>
             <button type="button" onclick="playAll()" title="Play all">▶️</button>
             <button type="button" onclick="shufflePlay()" title="Shuffle play">🔀</button>
+            <button type="button" onclick="playFavorites()" title="Play favorites">❤️</button>
             <button type="button" id="audit" onclick="runAudit()" title="Audit files">📋</button>
             <button type="button" id="previous" onclick="prevGrid()" title="Previous">◀</button>
             <button type="button" id="next" onclick="nextGrid()" title="Next">▶</button>
+            
+            <!-- Favorites status -->
+            <span id="favorites-text" style="
+                background: rgba(236, 72, 153, 0.1);
+                border: 1px solid rgba(236, 72, 153, 0.2);
+                padding: 6px 12px;
+                border-radius: 12px;
+                font-size: 0.8rem;
+                font-weight: 600;
+                color: var(--text-secondary);
+                white-space: nowrap;
+            ">
+                <span id="favorites-count" title="Click to filter favorites">❤️ <?= $favoritesCount ?></span>
+            </span>
             
             <!-- Audit status with better styling -->
             <span id="audit-text" style="
@@ -430,6 +462,8 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
                 allFilesWithPaths: <?= json_encode($allFilesRaw, JSON_UNESCAPED_SLASHES) ?>,
                 audioThumbs: <?= json_encode($audioThumbs, JSON_UNESCAPED_SLASHES) ?>,
                 auditStatusMap: <?= json_encode($auditStatusMap, JSON_UNESCAPED_SLASHES) ?>,
+                favoritesMap: <?= json_encode($favoritesMap, JSON_UNESCAPED_SLASHES) ?>,
+                favoritesCount: <?= $favoritesCount ?>,
                 muted: <?= $muted ? 'true' : 'false' ?>,
                 totalCells: <?= $total_cells ?>,
                 selectedColumns: <?= $selected_columns ?>,
