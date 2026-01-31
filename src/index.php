@@ -184,8 +184,8 @@ function getCurrentPath(string $root, string $selected_path): string {
     return ($real && str_starts_with($real, $cachedRoot)) ? $real : $cachedRoot;
 }
 
-function hasUnauditedFiles(string $folderPath, $auditDb): bool {
-    if (!is_dir($folderPath)) return false;
+function getFolderAuditStatus(string $folderPath, $auditDb): string {
+    if (!is_dir($folderPath)) return 'all_audited';
     
     $files = [];
     $it = new RecursiveIteratorIterator(
@@ -206,30 +206,33 @@ function hasUnauditedFiles(string $folderPath, $auditDb): bool {
         }
         
         $files[] = $pathname;
-        
-        // Early exit optimization: check every 10 files
-        if (count($files) >= 10) {
-            $statuses = $auditDb->getAuditStatusBatch($files);
-            foreach ($statuses as $status) {
-                if (!$status['audited']) {
-                    return true; // Found an unaudited file
-                }
-            }
-            $files = []; // Clear the batch
+    }
+    
+    // If no files found, consider it all audited
+    if (empty($files)) {
+        return 'all_audited';
+    }
+    
+    // Check all files at once
+    $statuses = $auditDb->getAuditStatusBatch($files);
+    
+    $totalFiles = count($statuses);
+    $auditedCount = 0;
+    
+    foreach ($statuses as $status) {
+        if ($status['audited']) {
+            $auditedCount++;
         }
     }
     
-    // Check remaining files
-    if (!empty($files)) {
-        $statuses = $auditDb->getAuditStatusBatch($files);
-        foreach ($statuses as $status) {
-            if (!$status['audited']) {
-                return true;
-            }
-        }
+    // Determine status
+    if ($auditedCount === $totalFiles) {
+        return 'all_audited';  // All files are audited
+    } elseif ($auditedCount === 0) {
+        return 'none_audited'; // No files are audited
+    } else {
+        return 'some_audited'; // Some files are audited
     }
-    
-    return false;
 }
 
 function renderSingleFolderSelect(array $selected_parts, string $current_abs_path, $auditDb): void {
@@ -237,9 +240,9 @@ function renderSingleFolderSelect(array $selected_parts, string $current_abs_pat
     $subfolders = getSubfolders(path: $current_abs_path);
     $has_children = !empty($subfolders);
     
-    // Get current folder name and check if it has unaudited files
-    $current_has_unaudited = hasUnauditedFiles($current_abs_path, $auditDb);
-    $current_icon = $is_root ? '🏠' : ($current_has_unaudited ? '📂' : '📂');
+    // Get current folder name and check audit status
+    $current_status = getFolderAuditStatus($current_abs_path, $auditDb);
+    $current_icon = $is_root ? '🏠' : '📂';
     $current_folder_name = $current_icon . ' ' . ($is_root ? 'Root' : basename($current_abs_path));
     ?>
     <select name="goto_folder" id="folder-select"
@@ -252,8 +255,22 @@ function renderSingleFolderSelect(array $selected_parts, string $current_abs_pat
         <?php foreach ($subfolders as $folder): ?>
             <?php
                 $subfolderPath = $current_abs_path . DIRECTORY_SEPARATOR . $folder;
-                $subfolder_has_unaudited = hasUnauditedFiles($subfolderPath, $auditDb);
-                $subfolder_icon = $subfolder_has_unaudited ? '⚠️' : '✅';
+                $subfolder_status = getFolderAuditStatus($subfolderPath, $auditDb);
+                
+                // Choose icon based on audit status
+                switch ($subfolder_status) {
+                    case 'all_audited':
+                        $subfolder_icon = '✅';  // All files audited
+                        break;
+                    case 'some_audited':
+                        $subfolder_icon = '⚠️';  // Some files audited (yellow warning)
+                        break;
+                    case 'none_audited':
+                        $subfolder_icon = '🆕';  // No files audited (new/unaudited)
+                        break;
+                    default:
+                        $subfolder_icon = '📁';
+                }
             ?>
             <option value="<?= htmlspecialchars($folder) ?>">
                 <?= $subfolder_icon ?> <?= htmlspecialchars($folder) ?>
