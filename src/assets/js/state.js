@@ -16,6 +16,7 @@ export const state = {
   webRoot: '',
   rootDirAbs: '',
   currentPath: '',
+  deleteEnabled: false, // NEW: Track if deletes are enabled
   
   // UI state
   startIndex: 0,
@@ -47,6 +48,7 @@ export const state = {
     this.webRoot = config.webRoot;
     this.rootDirAbs = config.rootDirAbs;
     this.currentPath = config.currentPath;
+    this.deleteEnabled = config.deleteEnabled || false;
   },
   
   // Helper methods

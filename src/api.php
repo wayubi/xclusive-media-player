@@ -20,6 +20,17 @@ if (!$action) {
     exit;
 }
 
+// Check delete authorization for delete actions
+if ($action === 'delete') {
+    $deleteEnabled = isset($_COOKIE['delete_enabled']) && $_COOKIE['delete_enabled'] === '1';
+    
+    if (!$deleteEnabled) {
+        http_response_code(403);
+        echo json_encode(['error' => 'Delete functionality is disabled. Authorization required.']);
+        exit;
+    }
+}
+
 // Normalize files to array
 $files = $data['files'] ?? $data['file'] ?? [];
 if (!is_array($files)) {

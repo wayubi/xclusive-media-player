@@ -49,6 +49,7 @@ curl_setopt_array($ch, [
     CURLOPT_POST           => true,
     CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
     CURLOPT_POSTFIELDS     => json_encode($payload),
+    CURLOPT_COOKIE         => http_build_query($_COOKIE, '', '; '),
 ]);
 
 $response = curl_exec($ch);

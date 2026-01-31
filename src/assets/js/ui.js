@@ -33,9 +33,11 @@ export function addCentralOverlay(container, mediaEl, file) {
   const overlay = document.createElement('div');
   overlay.className = 'central-overlay';
 
-  // Select/Delete button
-  const selectBtn = createSelectButton(file);
-  overlay.appendChild(selectBtn);
+  // Select/Delete button - only show if deletes are enabled
+  if (state.deleteEnabled) {
+    const selectBtn = createSelectButton(file);
+    overlay.appendChild(selectBtn);
+  }
 
   // Audit button
   const auditBtn = createAuditButton(file, container);

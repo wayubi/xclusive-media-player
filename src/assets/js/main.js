@@ -16,7 +16,8 @@ const {
   selectedColumns,
   webRoot,
   rootDirAbs,
-  currentPath
+  currentPath,
+  deleteEnabled
 } = window.APP;
 
 // Initialize state
@@ -31,7 +32,8 @@ state.init({
   selectedColumns,
   webRoot,
   rootDirAbs,
-  currentPath
+  currentPath,
+  deleteEnabled
 });
 
 // Initialize

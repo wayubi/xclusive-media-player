@@ -226,6 +226,12 @@ function setupKeyboardHandler(playlist, play, close, getIndex) {
     }
 
     if (e.key === 'Delete') {
+      // Check if deletes are enabled
+      if (!state.deleteEnabled) {
+        alert('Delete functionality is disabled. Contact administrator to enable.');
+        return;
+      }
+      
       if (!confirm('Delete this file?')) return;
       
       const del = playlist[i];
