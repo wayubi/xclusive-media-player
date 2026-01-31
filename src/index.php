@@ -235,15 +235,43 @@ function getFolderAuditStatus(string $folderPath, $auditDb): string {
     }
 }
 
+function countFilesInFolder(string $folderPath): int {
+    if (!is_dir($folderPath)) return 0;
+    
+    $count = 0;
+    $it = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($folderPath, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::SELF_FIRST
+    );
+    
+    $excluded = getExcludedFolders();
+    
+    foreach ($it as $file) {
+        if (!$file->isFile() || $file->getFilename() === '.audited') continue;
+        $pathname = $file->getPathname();
+        
+        foreach ($excluded as $folder) {
+            if (strpos($pathname, "/$folder/") !== false) {
+                continue 2;
+            }
+        }
+        
+        $count++;
+    }
+    
+    return $count;
+}
+
 function renderSingleFolderSelect(array $selected_parts, string $current_abs_path, $auditDb): void {
     $is_root = empty($selected_parts);
     $subfolders = getSubfolders(path: $current_abs_path);
     $has_children = !empty($subfolders);
     
-    // Get current folder name and check audit status
+    // Get current folder name, audit status, and file count
     $current_status = getFolderAuditStatus($current_abs_path, $auditDb);
+    $current_file_count = countFilesInFolder($current_abs_path);
     $current_icon = $is_root ? '🏠' : '📂';
-    $current_folder_name = $current_icon . ' ' . ($is_root ? 'Root' : basename($current_abs_path));
+    $current_folder_name = $current_icon . ' ' . ($is_root ? 'Root' : basename($current_abs_path)) . ' (' . $current_file_count . ')';
     ?>
     <select name="goto_folder" id="folder-select"
             onchange="this.form.submit()"
@@ -256,6 +284,7 @@ function renderSingleFolderSelect(array $selected_parts, string $current_abs_pat
             <?php
                 $subfolderPath = $current_abs_path . DIRECTORY_SEPARATOR . $folder;
                 $subfolder_status = getFolderAuditStatus($subfolderPath, $auditDb);
+                $subfolder_file_count = countFilesInFolder($subfolderPath);
                 
                 // Choose icon based on audit status
                 switch ($subfolder_status) {
@@ -273,7 +302,7 @@ function renderSingleFolderSelect(array $selected_parts, string $current_abs_pat
                 }
             ?>
             <option value="<?= htmlspecialchars($folder) ?>">
-                <?= $subfolder_icon ?> <?= htmlspecialchars($folder) ?>
+                <?= $subfolder_icon ?> <?= htmlspecialchars($folder) ?> (<?= $subfolder_file_count ?>)
             </option>
         <?php endforeach; ?>
     </select>
