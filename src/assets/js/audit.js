@@ -40,9 +40,9 @@ function auditCurrentView() {
   const visibleWebPaths = state.allVideos.slice(startIdx, endIdx);
   
   // Convert web paths to filesystem paths for the API
+  // Use the webToFsPathMap to get the correct filesystem path
   const filesToAudit = visibleWebPaths.map(webPath => {
-    const webIndex = state.originalVideos.indexOf(webPath);
-    return state.allFilesWithPaths[webIndex];
+    return state.webToFsPathMap[webPath];
   }).filter(path => path); // Remove any undefined entries
   
   console.log('Audit request (current view):', {
@@ -51,7 +51,6 @@ function auditCurrentView() {
     startIdx: startIdx,
     endIdx: endIdx,
     fileCount: filesToAudit.length,
-    totalFiles: state.allFilesWithPaths.length,
     visibleWebPaths: visibleWebPaths.length,
     auditingVisible: 'Only currently visible files (respects filters)'
   });
@@ -68,15 +67,13 @@ function auditAllFiles() {
   // Audit ALL files in the current folder (all original videos)
   const allWebPaths = state.originalVideos;
   
-  // Convert all web paths to filesystem paths
+  // Convert all web paths to filesystem paths using the map
   const filesToAudit = allWebPaths.map(webPath => {
-    const webIndex = state.originalVideos.indexOf(webPath);
-    return state.allFilesWithPaths[webIndex];
+    return state.webToFsPathMap[webPath];
   }).filter(path => path);
   
   console.log('Audit request (ALL FILES):', {
     fileCount: filesToAudit.length,
-    totalFiles: state.allFilesWithPaths.length,
     auditingAll: 'Auditing entire folder'
   });
   

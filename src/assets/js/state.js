@@ -4,6 +4,7 @@ export const state = {
   allVideos: [],
   originalVideos: [],
   allFilesWithPaths: [],
+  webToFsPathMap: {}, // NEW: Map web paths to filesystem paths
   audioThumbs: {},
   auditStatusMap: {},
   favoritesMap: {}, // NEW: Track favorited files
@@ -30,6 +31,13 @@ export const state = {
     this.allVideos = [...config.allVideos];
     this.originalVideos = [...config.allVideos];
     this.allFilesWithPaths = config.allFilesWithPaths;
+    
+    // Create web-to-filesystem path mapping
+    this.webToFsPathMap = {};
+    config.allVideos.forEach((webPath, index) => {
+      this.webToFsPathMap[webPath] = config.allFilesWithPaths[index];
+    });
+    
     this.audioThumbs = config.audioThumbs;
     this.auditStatusMap = config.auditStatusMap;
     this.favoritesMap = config.favoritesMap || {};
@@ -61,8 +69,7 @@ export const state = {
   
   // Favorites methods (database-backed)
   async toggleFavorite(file) {
-    const webIndex = this.originalVideos.indexOf(file);
-    const fsPath = this.allFilesWithPaths[webIndex];
+    const fsPath = this.webToFsPathMap[file];
     
     if (!fsPath) {
       console.error('Could not find filesystem path for:', file);

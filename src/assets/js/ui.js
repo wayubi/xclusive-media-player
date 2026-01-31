@@ -103,11 +103,11 @@ function createSelectButton(file) {
           // Remove from audit status map
           delete state.auditStatusMap[f];
           
-          // Remove from allFilesWithPaths
-          const fileIdx = state.allVideos.indexOf(f);
-          if (fileIdx !== -1 && fileIdx < state.allFilesWithPaths.length) {
-            state.allFilesWithPaths.splice(fileIdx, 1);
-          }
+          // Remove from webToFsPathMap
+          delete state.webToFsPathMap[f];
+          
+          // Remove from favorites map
+          delete state.favoritesMap[f];
         });
         
         state.startIndex = Math.min(state.startIndex, Math.max(0, state.allVideos.length - state.totalCells));
@@ -137,25 +137,17 @@ function createAuditButton(file, container) {
     auditBtn.innerHTML = '⏳';
     auditBtn.disabled = true;
     
-    // Get the filesystem path for this file
+    // Get the filesystem path for this file using the map
     const webPath = file;
-    const fileIndex = state.allVideos.indexOf(webPath);
-    if (fileIndex === -1) {
-      auditBtn.innerHTML = '❌';
-      setTimeout(() => {
-        auditBtn.innerHTML = '📋';
-        auditBtn.disabled = false;
-      }, 1500);
-      return;
-    }
+    const fsPath = state.webToFsPathMap[webPath];
     
-    const fsPath = state.allFilesWithPaths[fileIndex];
     if (!fsPath) {
       auditBtn.innerHTML = '❌';
       setTimeout(() => {
         auditBtn.innerHTML = '📋';
         auditBtn.disabled = false;
       }, 1500);
+      console.error('Could not find filesystem path for:', webPath);
       return;
     }
     

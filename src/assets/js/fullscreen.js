@@ -252,11 +252,11 @@ function setupKeyboardHandler(playlist, play, close, getIndex) {
         // Remove from audit status map
         delete state.auditStatusMap[del];
         
-        // Remove from allFilesWithPaths
-        const fileIdx = state.allVideos.indexOf(del);
-        if (fileIdx !== -1 && fileIdx < state.allFilesWithPaths.length) {
-          state.allFilesWithPaths.splice(fileIdx, 1);
-        }
+        // Remove from webToFsPathMap
+        delete state.webToFsPathMap[del];
+        
+        // Remove from favorites map
+        delete state.favoritesMap[del];
         
         // Update audit display
         import('./audit.js').then(module => {
