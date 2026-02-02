@@ -237,7 +237,8 @@ function getFolderAuditStatus(string $folderPath, $auditDb): string {
     $excluded = getExcludedFolders();
     
     foreach ($it as $file) {
-        if (!$file->isFile() || $file->getFilename() === '.audited') continue;
+        $name = $file->getFilename();
+        if (!$file->isFile() || $name[0] === '.') continue;
         $pathname = $file->getPathname();
         
         foreach ($excluded as $folder) {
@@ -288,7 +289,8 @@ function countFilesInFolder(string $folderPath): int {
     $excluded = getExcludedFolders();
     
     foreach ($it as $file) {
-        if (!$file->isFile() || $file->getFilename() === '.audited') continue;
+        $name = $file->getFilename();
+        if (!$file->isFile() || $name[0] === '.') continue;
         $pathname = $file->getPathname();
         
         foreach ($excluded as $folder) {
