@@ -1,27 +1,25 @@
 // fullscreen.js - Fullscreen player functionality
 import { state } from './state.js';
 import { renderGrid } from './grid.js';
+import { mediaPool } from './mediaPool.js';
 
 export function startFullscreenFrom(file, startTime = 0) {
   state.fullscreenMode = 'tile';
-  document.querySelectorAll('#grid video, #grid audio').forEach(m => m.pause());
   state.lastFullscreen = { file, time: startTime };
   startFullscreenPlayer(state.allVideos, state.allVideos.indexOf(file), startTime);
 }
 
 export function playAll() {
   state.fullscreenMode = 'playlist';
-  document.querySelectorAll('#grid audio, #grid video').forEach(m => m.pause());
   startFullscreenPlayer(state.allVideos, state.startIndex);
 }
 
 export function shufflePlay() {
   state.fullscreenMode = 'playlist';
-  document.querySelectorAll('#grid audio, #grid video').forEach(m => m.pause());
   startFullscreenPlayer([...state.allVideos].sort(() => Math.random() - 0.5), 0);
 }
 
-export function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
+export async function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
   if (!playlist.length) return;
   let i = index;
 
@@ -31,11 +29,10 @@ export function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
     return;
   }
 
-  document.querySelectorAll('#grid video, #grid audio').forEach(m => {
-    m.pause();
-    m.src = ''; // Clear source to release connections
-    m.load();   // Reset the media element
-  });
+  // Phase 1: Release all grid media elements to free browser connections
+  // This is critical to prevent seeking hangs in fullscreen
+  await mediaPool.releaseAll();
+  mediaPool.clearQueues();
 
   const container = createFullscreenContainer();
   let mediaEl, thumb;

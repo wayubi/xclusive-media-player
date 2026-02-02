@@ -1,11 +1,17 @@
 // mediaContainer.js - Create media containers for grid
 import { state } from './state.js';
 import { mediaPool } from './mediaPool.js';
-import { mediaQueue } from './mediaQueue.js';
 import { addCentralOverlay, addFileInfoOverlay } from './ui.js';
 import { startFullscreenFrom } from './fullscreen.js';
 
-export function createMediaContainer(file) {
+// Lazy loading offset - start loading when element is within this many pixels of viewport
+export const LAZY_LOAD_OFFSET = 200;
+
+/**
+ * Create a media container for a file
+ * Supports lazy loading - media won't load until visible or prioritized
+ */
+export function createMediaContainer(file, index = 0) {
   const container = document.createElement('div');
   container.className = 'video-container';
 
@@ -39,7 +45,7 @@ export function createMediaContainer(file) {
   let mediaEl = null;
 
   if (isVideo || isAudio) {
-    mediaEl = createMediaElement(file, isVideo, isAudio, container);
+    mediaEl = createLazyMediaElement(file, isVideo, isAudio, container);
   } else if (isImage) {
     mediaEl = createImageElement(file, container);
   } else {
@@ -49,51 +55,37 @@ export function createMediaContainer(file) {
   addCentralOverlay(container, mediaEl, file);
   addFileInfoOverlay(container, file, isAudited);
 
-  // Restore time if this was the last fullscreen item
-  if ((isVideo || isAudio) && state.lastFullscreen.file === file && state.lastFullscreen.time > 0) {
-    mediaEl.addEventListener('loadedmetadata', () => {
-      mediaEl.currentTime = state.lastFullscreen.time;
-    }, { once: true });
-  }
-
   return container;
 }
 
-function createMediaElement(file, isVideo, isAudio, container) {
+/**
+ * Create a media element with lazy loading support
+ * Uses data-src pattern - actual loading happens when element is visible
+ */
+function createLazyMediaElement(file, isVideo, isAudio, container) {
   const mediaEl = isVideo ? mediaPool.getVideo() : mediaPool.getAudio();
 
-  // Reset the reused element
+  // Reset the reused element completely
   mediaEl.pause();
-  mediaEl.src = '';
+  mediaEl.removeAttribute('src');
   mediaEl.currentTime = 0;
+
+  // Store src for lazy loading (don't load immediately)
   mediaEl.dataset.src = file;
   mediaEl.dataset.file = file;
 
-  // Re-apply common properties
+  // Set attributes that don't trigger loading
   mediaEl.loop = true;
   mediaEl.playsInline = true;
   mediaEl.controls = false;
-  mediaEl.preload = 'auto';
+  mediaEl.preload = 'metadata'; // Only load metadata, not full video
 
   if (isVideo) {
     mediaEl.poster = state.audioThumbs[file] || 'cache/no-cover-vid.jpg';
   }
 
-  // Mute / unmute logic
-  const isRecentFullscreen = state.lastFullscreen.file === file && state.isFileVisible(file);
-  let shouldBeUnmuted = false;
-  
-  if (!state.muted) {
-    if (isRecentFullscreen) {
-      shouldBeUnmuted = true;
-    } else {
-      const visibleMedia = state.getVisibleFiles()
-        .filter(f => /\.(mp4|webm|mkv|mp3|wav|ogg)$/i.test(f));
-      if (visibleMedia[0] === file) shouldBeUnmuted = true;
-    }
-  }
-  
-  mediaEl.muted = !shouldBeUnmuted;
+  // Mute by default (unmuting handled by enforceSingleUnmuted)
+  mediaEl.muted = true;
 
   if (isAudio) {
     container.style.cssText = 'display:flex;flex-direction:column;justify-content:center;align-items:center;';
@@ -104,11 +96,8 @@ function createMediaElement(file, isVideo, isAudio, container) {
     container.appendChild(img);
   }
 
-  if (isVideo) mediaQueue.addVideo(mediaEl);
-  if (isAudio) mediaQueue.addAudio(mediaEl);
-
   container.appendChild(mediaEl);
-  
+
   return mediaEl;
 }
 

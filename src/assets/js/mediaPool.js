@@ -45,8 +45,14 @@ export const mediaPool = {
   recycleElements(elements) {
     elements.forEach(el => {
       el.pause();
-      el.src = '';
+      el.removeAttribute('src');
+      el.load();
       el.currentTime = 0;
+      
+      // Remove from DOM to ensure connection release
+      if (el.parentNode) {
+        el.parentNode.removeChild(el);
+      }
       
       if (el.tagName === 'VIDEO') {
         this.returnVideo(el);
@@ -54,6 +60,28 @@ export const mediaPool = {
         this.returnAudio(el);
       }
     });
+  },
+  
+  // Release all grid media elements and return to pool
+  // Use this before fullscreen to ensure connections are freed
+  releaseAll() {
+    const grid = document.getElementById('grid');
+    if (!grid) return;
+    
+    const mediaElements = grid.querySelectorAll('video, audio');
+    this.recycleElements(mediaElements);
+    
+    // Small delay to ensure browser releases TCP connections
+    return new Promise(resolve => setTimeout(resolve, 50));
+  },
+  
+  // Clear all active loading to free up bandwidth
+  clearQueues() {
+    // Reset any in-flight loading counters
+    // This helps when entering fullscreen to free bandwidth
+    if (typeof window !== 'undefined') {
+      window._mediaLoadTimeout = Date.now();
+    }
   }
 };
 
