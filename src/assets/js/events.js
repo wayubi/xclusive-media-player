@@ -5,6 +5,7 @@ import { playAll, shufflePlay } from './fullscreen.js';
 import { initSearch, setupSearchListeners } from './search.js';
 import { runAudit } from './audit.js';
 import { setupUnauditedFilter } from './filter.js';
+import { toggleTileSelection, confirmDelete } from './ui.js';
 
 let scrollDebounce = false;
 
@@ -24,6 +25,9 @@ export function setupEventListeners() {
   
   // Object fit toggle
   setupObjectFitToggle();
+  
+  // Delete hotkeys (number keys 1-9, 0 and DEL key)
+  setupDeleteHotkeys();
 }
 
 function setupGridNavigation() {
@@ -111,4 +115,36 @@ function toggleObjectFit() {
   } else {
     grid.classList.add('no-object-fit');
   }
+}
+
+function setupDeleteHotkeys() {
+  document.addEventListener('keydown', (e) => {
+    // Handle number keys 1-9 and 0
+    const key = e.key;
+    
+    // Map keys to tile indices: 1->0, 2->1, ..., 9->8, 0->9
+    let tileIndex = -1;
+    if (key >= '1' && key <= '9') {
+      tileIndex = parseInt(key) - 1; // 1 becomes 0, 9 becomes 8
+    } else if (key === '0') {
+      tileIndex = 9; // 0 becomes 9 (10th tile)
+    } else if (key === 'Delete') {
+      // DEL key triggers delete confirmation (only when delete is enabled)
+      if (!state.deleteEnabled) return;
+      e.preventDefault();
+      confirmDelete();
+      return;
+    }
+    
+    // If we have a valid tile index, toggle its selection (only when delete is enabled)
+    if (tileIndex !== -1) {
+      if (!state.deleteEnabled) return;
+      const containers = document.querySelectorAll('#grid .video-container');
+      // Only process if the tile exists (e.g., ignore 7-0 on a 6-tile grid)
+      if (tileIndex < containers.length) {
+        e.preventDefault();
+        toggleTileSelection(tileIndex);
+      }
+    }
+  });
 }

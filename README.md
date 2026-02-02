@@ -46,6 +46,7 @@ Perfect for media professionals, content curators, and anyone managing large col
 
 ### Security & File Management
 - **Delete protection**: Secret code-based authorization with cookie persistence (30 days)
+- **Keyboard shortcuts for delete**: Number keys 1-9,0 to select tiles, DEL to confirm deletion
 - **Dual validation**: Frontend and backend verification for all destructive operations
 - **Secure defaults**: Delete functionality disabled by default
 - **Audit trails**: All operations logged for accountability
@@ -297,6 +298,27 @@ The configuration already includes throttling to protect drives:
 | `Mouse Wheel` | Navigate grid pages | Grid |
 | `Touch Swipe` | Navigate grid (mobile) | Grid (mobile) |
 
+### Delete Hotkeys (Grid View)
+
+When delete mode is enabled (`?delete=your_secret_code`), use these hotkeys for quick file deletion:
+
+| Key | Action | Notes |
+|-----|--------|-------|
+| `1` - `9` | Select tile 1-9 for deletion | Press again to deselect |
+| `0` | Select tile 10 for deletion | Only works if 10+ tiles visible |
+| `Delete` | Confirm deletion | Deletes all selected files |
+
+**How it works:**
+- Number keys toggle the delete selection state for each tile (1-9, 0 for 10th)
+- Selected tiles show **three visual indicators**:
+  - 🔴 **Red border** around the tile (replaces yellow NEW border)
+  - 🔴 **Red "DELETE" badge** in top-right corner (replaces NEW badge)
+  - 🔴 **Red pulsing 🗙 button** when you hover over the tile
+- Keys for non-existent tiles are ignored (e.g., 7-0 on a 6-tile grid)
+- Press `Delete` to confirm and delete all selected files
+- **Grid navigation clears selections**: Pressing Next/Previous or scrolling clears all delete selections
+- Ideal for 5×2 (10 tile) grids for rapid curation workflows
+
 ### Fullscreen Player
 
 **Entry Points**:
@@ -490,7 +512,7 @@ This frees up browser connections for the fullscreen video to seek efficiently.
 **Visual Feedback**:
 5. **Unaudited Files**: Gold animated border + "NEW" shimmer badge
 6. **Favorited Items**: Pink animated glow effect on ❤️ hearts
-7. **Selected for Delete**: Red pulsing animation on 🗙 button
+7. **Selected for Delete**: Red border + "DELETE" badge (replaces NEW) + red pulsing 🗙 button
 8. **Loading State**: ⏳ spinner on buttons during operations
 
 **Technical**:

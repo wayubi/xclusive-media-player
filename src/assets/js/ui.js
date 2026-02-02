@@ -3,6 +3,86 @@ import { state } from './state.js';
 import { startFullscreenFrom } from './fullscreen.js';
 import { renderGrid } from './grid.js';
 
+// Track selected tiles for keyboard delete operations
+let selectedTiles = new Set();
+
+export function toggleTileSelection(index) {
+  const containers = document.querySelectorAll('#grid .video-container');
+  if (index < 0 || index >= containers.length) return false;
+  
+  const container = containers[index];
+  const selectBtn = container.querySelector('button[data-file]');
+  
+  if (!selectBtn || selectBtn.dataset.selected === undefined) return false;
+  
+  const isSelected = selectBtn.dataset.selected === 'true';
+  
+  if (isSelected) {
+    // Unselect - remove red styling
+    selectBtn.dataset.selected = 'false';
+    selectBtn.classList.remove('selected');
+    container.classList.remove('selected-for-delete');
+    selectedTiles.delete(index);
+  } else {
+    // Select - add red border and DELETE badge
+    selectBtn.dataset.selected = 'true';
+    selectBtn.classList.add('selected');
+    container.classList.add('selected-for-delete');
+    selectedTiles.add(index);
+  }
+  
+  return true;
+}
+
+export function confirmDelete() {
+  const selected = Array.from(document.querySelectorAll('#grid .video-container button[data-selected="true"]'));
+  const filesToDelete = selected.map(b => b.dataset.file);
+  
+  if (!filesToDelete.length) return;
+  
+  if (!confirm(`Delete ${filesToDelete.length} file(s)?`)) return;
+    
+  fetch('post-handler.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'delete', files: filesToDelete })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.error) return alert('Delete error: ' + data.error);
+    
+    filesToDelete.forEach(f => {
+      const idx = state.allVideos.indexOf(f);
+      if (idx !== -1) state.allVideos.splice(idx, 1);
+      
+      const origIdx = state.originalVideos.indexOf(f);
+      if (origIdx !== -1) state.originalVideos.splice(origIdx, 1);
+      
+      delete state.auditStatusMap[f];
+      delete state.webToFsPathMap[f];
+      delete state.favoritesMap[f];
+    });
+    
+    state.startIndex = Math.min(state.startIndex, Math.max(0, state.allVideos.length - state.totalCells));
+    selectedTiles.clear();
+    
+    import('./audit.js').then(module => {
+      module.updateAuditDisplay();
+    });
+    
+    renderGrid();
+  })
+  .catch(() => alert('Delete failed'));
+}
+
+export function getSelectedTileCount() {
+  return selectedTiles.size;
+}
+
+export function clearSelectedTiles() {
+  selectedTiles.clear();
+}
+
 export function addFileInfoOverlay(container, file, isAudited) {
   container.style.position ||= 'relative';
 
@@ -73,55 +153,22 @@ function createSelectButton(file) {
   selectBtn.onclick = e => {
     e.stopPropagation();
     
+    // Find the index of this button's container
+    const container = selectBtn.closest('.video-container');
+    const containers = document.querySelectorAll('#grid .video-container');
+    const index = Array.from(containers).indexOf(container);
+    
     if (selectBtn.dataset.selected === 'false') {
+      // Select - add red border and DELETE badge
       selectBtn.dataset.selected = 'true';
+      selectBtn.classList.add('selected');
+      container.classList.add('selected-for-delete');
+      if (index !== -1) selectedTiles.add(index);
       return; // Stop here on first click
     }
     
-    // Second click - show delete dialog
-    const selected = Array.from(document.querySelectorAll('#grid .video-container button[data-selected="true"]'));
-    const filesToDelete = selected.map(b => b.dataset.file);
-    
-    if (!filesToDelete.length || !confirm(`Delete ${filesToDelete.length} file(s)?`)) return;
-      
-      fetch('post-handler.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete', files: filesToDelete })
-      })
-      .then(r => r.json())
-      .then(data => {
-        if (data.error) return alert('Delete error: ' + data.error);
-        
-        filesToDelete.forEach(f => {
-          // Remove from allVideos
-          const idx = state.allVideos.indexOf(f);
-          if (idx !== -1) state.allVideos.splice(idx, 1);
-          
-          // Remove from originalVideos
-          const origIdx = state.originalVideos.indexOf(f);
-          if (origIdx !== -1) state.originalVideos.splice(origIdx, 1);
-          
-          // Remove from audit status map
-          delete state.auditStatusMap[f];
-          
-          // Remove from webToFsPathMap
-          delete state.webToFsPathMap[f];
-          
-          // Remove from favorites map
-          delete state.favoritesMap[f];
-        });
-        
-        state.startIndex = Math.min(state.startIndex, Math.max(0, state.allVideos.length - state.totalCells));
-        
-        // Update the audit display to reflect the new counts
-        import('./audit.js').then(module => {
-          module.updateAuditDisplay();
-        });
-        
-        renderGrid();
-      })
-      .catch(() => alert('Delete failed'));
+    // Second click - show delete dialog (handled by DEL key or second click)
+    confirmDelete();
   };
   
   return selectBtn;

@@ -215,6 +215,56 @@ body {
   box-shadow: 0 4px 12px rgba(251, 191, 36, 0.4);
 }
 
+/* ============================================
+   DELETE SELECTION STATE - Red border & badge
+   Takes precedence over unaudited (yellow) state
+   ============================================ */
+.video-container.selected-for-delete {
+  border: 2px solid transparent;
+  background: 
+    linear-gradient(135deg, rgba(20, 20, 30, 0.8), rgba(15, 15, 25, 0.9)) padding-box,
+    linear-gradient(135deg, #ef4444, #dc2626, #ef4444) border-box;
+  box-shadow: 
+    0 8px 32px rgba(239, 68, 68, 0.3),
+    0 0 40px rgba(239, 68, 68, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  animation: pulseDelete 2s ease-in-out infinite;
+  position: relative;
+}
+
+@keyframes pulseDelete {
+  0%, 100% {
+    box-shadow: 
+      0 8px 32px rgba(239, 68, 68, 0.3),
+      0 0 40px rgba(239, 68, 68, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+  50% {
+    box-shadow: 
+      0 12px 48px rgba(239, 68, 68, 0.5),
+      0 0 60px rgba(239, 68, 68, 0.35),
+      inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  }
+}
+
+/* DELETE badge in top-right corner */
+.video-container.selected-for-delete::before {
+  content: 'DELETE';
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: #fff;
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  z-index: 6; /* Higher than NEW badge so it shows on top */
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.5);
+}
+
 /* Favorite heart icon */
 .favorite-heart {
   position: absolute;
