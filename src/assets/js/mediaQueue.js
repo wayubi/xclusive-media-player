@@ -1,4 +1,4 @@
-// mediaQueue.js - Media loading queue management with priority support
+// mediaQueue.js - Media loading queue management with robust completion signals
 import { state } from './state.js';
 
 const audioQueue = [];
@@ -9,6 +9,67 @@ let activeVideoLoads = 0;
 // Default limits - can be adjusted dynamically based on grid size
 let MAX_CONCURRENT_AUDIO = 6;
 let MAX_CONCURRENT_VIDEO = 6;
+
+// Timeout for stuck media loads (15 seconds)
+const MEDIA_LOAD_TIMEOUT = 15000;
+
+/**
+ * Create a robust media load completion tracker
+ * Uses multiple signals: canplay, loadedmetadata, error, and timeout fallback
+ * Ensures queue slot is always freed even if media is malformed or stalls
+ */
+function trackMediaLoad(mediaElement, onComplete) {
+  let completed = false;
+  let timeoutId = null;
+
+  const cleanup = () => {
+    if (completed) return;
+    completed = true;
+
+    // Remove all listeners
+    mediaElement.removeEventListener('canplay', handleCanPlay);
+    mediaElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
+    mediaElement.removeEventListener('error', handleError);
+    
+    // Clear timeout
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+
+    // Call completion callback
+    onComplete();
+  };
+
+  const handleCanPlay = () => {
+    // Best signal - media is ready to play (enough data buffered)
+    cleanup();
+  };
+
+  const handleLoadedMetadata = () => {
+    // Good fallback - metadata is loaded (duration, dimensions)
+    cleanup();
+  };
+
+  const handleError = () => {
+    // Error occurred - still need to free up queue slot
+    console.warn('Media failed to load:', mediaElement.src || mediaElement.dataset?.src);
+    cleanup();
+  };
+
+  // Attach listeners
+  mediaElement.addEventListener('canplay', handleCanPlay, { once: true });
+  mediaElement.addEventListener('loadedmetadata', handleLoadedMetadata, { once: true });
+  mediaElement.addEventListener('error', handleError, { once: true });
+
+  // Ultimate timeout fallback - ensures queue never gets stuck
+  timeoutId = setTimeout(() => {
+    if (!completed) {
+      console.warn('Media load timeout (15s):', mediaElement.src || mediaElement.dataset?.src);
+      cleanup();
+    }
+  }, MEDIA_LOAD_TIMEOUT);
+}
 
 export const mediaQueue = {
   /**
@@ -46,13 +107,11 @@ export const mediaQueue = {
       delete audio.dataset.src;
       audio.load();
 
-      const done = () => {
+      // Use robust completion tracking
+      trackMediaLoad(audio, () => {
         activeAudioLoads = Math.max(0, activeAudioLoads - 1);
         this.processAudioQueue();
-      };
-
-      audio.addEventListener('loadedmetadata', done, { once: true });
-      audio.addEventListener('error', done, { once: true });
+      });
     }
   },
 
@@ -69,17 +128,14 @@ export const mediaQueue = {
       delete video.dataset.src;
       video.load();
 
-      const done = () => {
+      // Use robust completion tracking with auto-play
+      trackMediaLoad(video, () => {
+        // Try to play once loaded (canplay is best for this)
+        video.play().catch(() => {});
+        
         activeVideoLoads = Math.max(0, activeVideoLoads - 1);
         this.processVideoQueue();
-      };
-
-      video.addEventListener('loadedmetadata', () => {
-        video.play().catch(() => {});
-        done();
-      }, { once: true });
-
-      video.addEventListener('error', done, { once: true });
+      });
     }
   },
 
