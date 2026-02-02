@@ -90,6 +90,10 @@ function auditAllFiles() {
 }
 
 function performAudit(filesToAudit, webPaths, mode) {
+  // Capture audit context before starting to prevent race conditions
+  // when user navigates while audit is in progress
+  const auditContext = state.startAuditContext();
+  
   // IMMEDIATELY update UI before API call
   // Update audit status for the web paths
   webPaths.forEach((webPath) => {
@@ -123,6 +127,9 @@ function performAudit(filesToAudit, webPaths, mode) {
   .then(data => {
     console.log(`Audit response (${mode}):`, data);
     
+    // Check if user navigated away during the audit
+    const contextStillValid = state.isValidAuditContext(auditContext);
+    
     if (auditButton) {
       auditButton.innerHTML = '✓';
       setTimeout(() => {
@@ -132,51 +139,67 @@ function performAudit(filesToAudit, webPaths, mode) {
     }
     
     if (data.error) {
-      // Revert changes if API failed
-      webPaths.forEach((webPath) => {
-        state.auditStatusMap[webPath] = false;
-      });
-      
-      updateAuditDisplay();
-      
-      // Re-add unaudited classes
-      const containers = document.querySelectorAll('#grid .video-container');
-      containers.forEach((container, idx) => {
-        const visibleFiles = state.getVisibleFiles();
-        const file = visibleFiles[idx];
+      // Only revert changes if user is still in the same view
+      if (contextStillValid) {
+        webPaths.forEach((webPath) => {
+          state.auditStatusMap[webPath] = false;
+        });
         
-        if (file && !state.auditStatusMap[file]) {
-          container.classList.add('unaudited');
+        updateAuditDisplay();
+        
+        // Re-add unaudited classes
+        const containers = document.querySelectorAll('#grid .video-container');
+        containers.forEach((container, idx) => {
+          const visibleFiles = state.getVisibleFiles();
+          const file = visibleFiles[idx];
+          
+          if (file && !state.auditStatusMap[file]) {
+            container.classList.add('unaudited');
+          }
+        });
+        
+        const auditText = document.getElementById('audit-text');
+        if (auditText) {
+          auditText.innerHTML = `<span style="color: #ff4444;">❌ Error: ${data.error}</span>`;
         }
-      });
-      
-      const auditText = document.getElementById('audit-text');
-      if (auditText) {
-        auditText.innerHTML = `<span style="color: #ff4444;">❌ Error: ${data.error}</span>`;
+      } else {
+        console.log('Audit failed but user navigated away - not reverting stale changes');
       }
+      
       console.error('Audit error:', data);
       return;
     }
     
-    // Success - UI is already updated, just refresh display to be sure
-    updateAuditDisplay();
+    // Success - clear context and refresh display
+    state.clearAuditContext();
+    
+    // Only update UI if user is still in the same view
+    if (contextStillValid) {
+      updateAuditDisplay();
+    }
   })
   .catch(err => {
     console.error('Audit failed:', err);
+    
+    // Check if user navigated away during the audit
+    const contextStillValid = state.isValidAuditContext(auditContext);
     
     if (auditButton) {
       auditButton.innerHTML = originalText;
       auditButton.disabled = false;
     }
     
-    // Revert changes if request failed
-    webPaths.forEach((webPath) => {
-      state.auditStatusMap[webPath] = false;
-    });
-    
-    updateAuditDisplay();
-    
-    alert('Audit failed: ' + err.message);
+    // Only revert changes if user is still in the same view
+    if (contextStillValid) {
+      webPaths.forEach((webPath) => {
+        state.auditStatusMap[webPath] = false;
+      });
+      
+      updateAuditDisplay();
+      alert('Audit failed: ' + err.message);
+    } else {
+      console.log('Audit failed but user navigated away - not reverting stale changes');
+    }
   });
 }
 

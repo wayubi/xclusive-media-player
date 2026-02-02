@@ -135,6 +135,9 @@ function createAuditButton(file, container) {
   auditBtn.onclick = async (e) => {
     e.stopPropagation();
     
+    // Capture audit context to prevent race conditions
+    const auditContext = state.startAuditContext();
+    
     // Immediate visual feedback - change button appearance
     auditBtn.innerHTML = '⏳';
     auditBtn.disabled = true;
@@ -175,8 +178,51 @@ function createAuditButton(file, container) {
       
       const data = await response.json();
       
+      // Check if user navigated away during the audit
+      const contextStillValid = state.isValidAuditContext(auditContext);
+      
       if (data.error) {
-        // If API fails, revert the changes
+        // Only revert changes if user is still viewing the same file
+        if (contextStillValid) {
+          state.auditStatusMap[webPath] = false;
+          container.classList.add('unaudited');
+          
+          import('./audit.js').then(module => {
+            module.updateAuditDisplay();
+          });
+          
+          auditBtn.innerHTML = '❌';
+          setTimeout(() => {
+            auditBtn.innerHTML = '📋';
+            auditBtn.disabled = false;
+          }, 1500);
+          
+          alert('Audit failed: ' + data.error);
+        } else {
+          console.log('Audit failed but user navigated away - not reverting stale changes');
+        }
+        return;
+      }
+      
+      // Success! Clear context
+      state.clearAuditContext();
+      
+      // Only update button if we're still in context
+      if (contextStillValid) {
+        auditBtn.innerHTML = '✓';
+        
+        setTimeout(() => {
+          auditBtn.innerHTML = '📋';
+          auditBtn.disabled = false;
+        }, 1500);
+      }
+      
+    } catch (err) {
+      // Check if user navigated away during the audit
+      const contextStillValid = state.isValidAuditContext(auditContext);
+      
+      // Only revert changes if user is still viewing the same file
+      if (contextStillValid) {
         state.auditStatusMap[webPath] = false;
         container.classList.add('unaudited');
         
@@ -184,41 +230,17 @@ function createAuditButton(file, container) {
           module.updateAuditDisplay();
         });
         
+        console.error('Audit failed:', err);
         auditBtn.innerHTML = '❌';
         setTimeout(() => {
           auditBtn.innerHTML = '📋';
           auditBtn.disabled = false;
         }, 1500);
         
-        alert('Audit failed: ' + data.error);
-        return;
+        alert('Audit failed: ' + err.message);
+      } else {
+        console.log('Audit failed but user navigated away - not reverting stale changes');
       }
-      
-      // Success!
-      auditBtn.innerHTML = '✓';
-      
-      setTimeout(() => {
-        auditBtn.innerHTML = '📋';
-        auditBtn.disabled = false;
-      }, 1500);
-      
-    } catch (err) {
-      // If request fails, revert the changes
-      state.auditStatusMap[webPath] = false;
-      container.classList.add('unaudited');
-      
-      import('./audit.js').then(module => {
-        module.updateAuditDisplay();
-      });
-      
-      console.error('Audit failed:', err);
-      auditBtn.innerHTML = '❌';
-      setTimeout(() => {
-        auditBtn.innerHTML = '📋';
-        auditBtn.disabled = false;
-      }, 1500);
-      
-      alert('Audit failed: ' + err.message);
     }
   };
   

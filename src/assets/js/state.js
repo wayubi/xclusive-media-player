@@ -27,6 +27,9 @@ export const state = {
   unauditedFilter: false,
   favoritesFilter: false, // NEW: Track favorites filter state
   
+  // Audit context tracking to prevent race conditions
+  currentAuditContext: null,
+  
   // Initialize state from bootstrap data
   init(config) {
     this.allVideos = [...config.allVideos];
@@ -195,5 +198,33 @@ export const state = {
     
     this.startIndex = 0;
     return this.allVideos.length;
+  },
+  
+  // Audit context tracking methods to prevent race conditions
+  // when navigating during pending audits
+  startAuditContext() {
+    this.currentAuditContext = {
+      startIndex: this.startIndex,
+      allVideosSnapshot: [...this.allVideos],
+      currentPath: this.currentPath,
+      timestamp: Date.now()
+    };
+    return this.currentAuditContext;
+  },
+  
+  isValidAuditContext(context) {
+    if (!context) return false;
+    
+    // Check if we're still in the same view (same path and same visible files)
+    const samePath = this.currentPath === context.currentPath;
+    const sameStartIndex = this.startIndex === context.startIndex;
+    const sameVisibleFiles = this.allVideos.length === context.allVideosSnapshot.length &&
+      this.allVideos.every((file, idx) => file === context.allVideosSnapshot[idx]);
+    
+    return samePath && sameStartIndex && sameVisibleFiles;
+  },
+  
+  clearAuditContext() {
+    this.currentAuditContext = null;
   }
 };
