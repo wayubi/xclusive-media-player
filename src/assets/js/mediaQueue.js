@@ -6,9 +6,12 @@ const videoQueue = [];
 let activeAudioLoads = 0;
 let activeVideoLoads = 0;
 
+const MAX_CONCURRENT_AUDIO = 6;
+const MAX_CONCURRENT_VIDEO = 6;
+
 export const mediaQueue = {
   processAudioQueue() {
-    while (activeAudioLoads < state.totalCells && audioQueue.length) {
+    while (activeAudioLoads < MAX_CONCURRENT_AUDIO && audioQueue.length) {
       const audio = audioQueue.shift();
       if (!audio?.dataset?.src) continue;
       
@@ -28,7 +31,7 @@ export const mediaQueue = {
   },
   
   processVideoQueue() {
-    while (activeVideoLoads < state.totalCells && videoQueue.length) {
+    while (activeVideoLoads < MAX_CONCURRENT_VIDEO && videoQueue.length) {
       const video = videoQueue.shift();
       if (!video?.dataset?.src) continue;
       

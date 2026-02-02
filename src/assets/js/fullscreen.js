@@ -31,6 +31,12 @@ export function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
     return;
   }
 
+  document.querySelectorAll('#grid video, #grid audio').forEach(m => {
+    m.pause();
+    m.src = ''; // Clear source to release connections
+    m.load();   // Reset the media element
+  });
+
   const container = createFullscreenContainer();
   let mediaEl, thumb;
 
@@ -103,12 +109,15 @@ export function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
     state.lastFullscreen.file = playlist[i];
 
     state.startIndex = Math.floor(state.allVideos.indexOf(playlist[i]) / state.totalCells) * state.totalCells;
-    renderGrid();
-
+    
+    // Clean up fullscreen elements
     if (thumb) thumb.remove();
     if (mediaEl) mediaEl.remove();
     container.remove();
     document.removeEventListener('keydown', keyHandler);
+    
+    // Force complete grid re-render to restore video sources
+    renderGrid();
   }
 
   createMedia(playlist[i], startTime);
