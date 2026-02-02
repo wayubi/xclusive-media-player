@@ -5,6 +5,15 @@ import { renderGrid } from './grid.js';
 
 // Track selected tiles for keyboard delete operations
 let selectedTiles = new Set();
+let selectAllMode = false;
+
+export function isSelectAllMode() {
+  return selectAllMode;
+}
+
+export function setSelectAllMode(value) {
+  selectAllMode = value;
+}
 
 export function toggleTileSelection(index) {
   const containers = document.querySelectorAll('#grid .video-container');
@@ -38,41 +47,155 @@ export function confirmDelete() {
   const selected = Array.from(document.querySelectorAll('#grid .video-container button[data-selected="true"]'));
   const filesToDelete = selected.map(b => b.dataset.file);
   
-  if (!filesToDelete.length) return;
+  if (!filesToDelete.length && !selectAllMode) return;
   
-  if (!confirm(`Delete ${filesToDelete.length} file(s)?`)) return;
+  // If in select all mode, delete the entire folder recursively
+  if (selectAllMode) {
+    const currentFolder = getCurrentFolderPath();
+    if (!currentFolder) {
+      alert('Cannot determine current folder');
+      return;
+    }
     
-  fetch('post-handler.php', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'delete', files: filesToDelete })
-  })
-  .then(r => r.json())
-  .then(data => {
-    if (data.error) return alert('Delete error: ' + data.error);
+    // Get stats from the API response for the confirmation message
+    if (!confirm(`Delete all files, subfolders, and the current folder?`)) return;
     
-    filesToDelete.forEach(f => {
-      const idx = state.allVideos.indexOf(f);
-      if (idx !== -1) state.allVideos.splice(idx, 1);
+    fetch('post-handler.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        action: 'delete', 
+        recursive: true, 
+        delete_folder: true,
+        folder: currentFolder 
+      })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) return alert('Delete error: ' + data.error);
       
-      const origIdx = state.originalVideos.indexOf(f);
-      if (origIdx !== -1) state.originalVideos.splice(origIdx, 1);
+      // Clear selection state
+      selectedTiles.clear();
+      selectAllMode = false;
       
-      delete state.auditStatusMap[f];
-      delete state.webToFsPathMap[f];
-      delete state.favoritesMap[f];
-    });
+      // Navigate to parent folder
+      if (data.parent_path) {
+        navigateToFolder(data.parent_path);
+      } else {
+        // Fallback: refresh the grid
+        renderGrid();
+      }
+    })
+    .catch(() => alert('Delete failed'));
+  } else {
+    // Original single/multi file deletion
+    if (!confirm(`Delete ${filesToDelete.length} file(s)?`)) return;
     
-    state.startIndex = Math.min(state.startIndex, Math.max(0, state.allVideos.length - state.totalCells));
-    selectedTiles.clear();
-    
-    import('./audit.js').then(module => {
-      module.updateAuditDisplay();
-    });
-    
-    renderGrid();
-  })
-  .catch(() => alert('Delete failed'));
+    fetch('post-handler.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'delete', files: filesToDelete })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) return alert('Delete error: ' + data.error);
+      
+      filesToDelete.forEach(f => {
+        const idx = state.allVideos.indexOf(f);
+        if (idx !== -1) state.allVideos.splice(idx, 1);
+        
+        const origIdx = state.originalVideos.indexOf(f);
+        if (origIdx !== -1) state.originalVideos.splice(origIdx, 1);
+        
+        delete state.auditStatusMap[f];
+        delete state.webToFsPathMap[f];
+        delete state.favoritesMap[f];
+      });
+      
+      state.startIndex = Math.min(state.startIndex, Math.max(0, state.allVideos.length - state.totalCells));
+      selectedTiles.clear();
+      
+      import('./audit.js').then(module => {
+        module.updateAuditDisplay();
+      });
+      
+      renderGrid();
+    })
+    .catch(() => alert('Delete failed'));
+  }
+}
+
+export function selectAllFiles() {
+  // Select all visible tiles
+  const containers = document.querySelectorAll('#grid .video-container');
+  containers.forEach((container, index) => {
+    const selectBtn = container.querySelector('button[data-file]');
+    if (selectBtn && selectBtn.dataset.selected === 'false') {
+      selectBtn.dataset.selected = 'true';
+      selectBtn.classList.add('selected');
+      container.classList.add('selected-for-delete');
+      selectedTiles.add(index);
+    }
+  });
+  
+  selectAllMode = true;
+}
+
+export function clearAllSelections() {
+  const containers = document.querySelectorAll('#grid .video-container');
+  containers.forEach((container) => {
+    const selectBtn = container.querySelector('button[data-file]');
+    if (selectBtn) {
+      selectBtn.dataset.selected = 'false';
+      selectBtn.classList.remove('selected');
+    }
+    container.classList.remove('selected-for-delete');
+  });
+  
+  selectedTiles.clear();
+  selectAllMode = false;
+}
+
+function getCurrentFolderPath() {
+  // currentPath is an absolute filesystem path string (e.g., "/root/xclusive/volumes/MyFolder")
+  if (!state.currentPath || state.currentPath === '') {
+    return '/volumes';
+  }
+  
+  // Convert filesystem path to web path
+  // e.g., "/root/xclusive/volumes/MyFolder" → "/volumes/MyFolder"
+  const volumesIndex = state.currentPath.indexOf('/volumes/');
+  if (volumesIndex !== -1) {
+    return state.currentPath.substring(volumesIndex);
+  }
+  
+  // If it doesn't contain /volumes/, just return /volumes
+  return '/volumes';
+}
+
+function navigateToFolder(path) {
+  // Navigate to a folder by modifying the URL
+  const url = new URL(window.location.href);
+  
+  if (path === '/volumes' || path === '') {
+    // Root folder - clear path params
+    url.searchParams.delete('path[]');
+  } else {
+    // Convert path to array format
+    const cleanPath = path.replace('/volumes/', '').replace('/volumes', '');
+    if (cleanPath) {
+      const pathParts = cleanPath.split('/').filter(p => p);
+      url.searchParams.delete('path[]');
+      pathParts.forEach(part => {
+        url.searchParams.append('path[]', part);
+      });
+    }
+  }
+  
+  // Add cache buster
+  url.searchParams.set('t', Date.now().toString());
+  
+  window.location.href = url.toString();
 }
 
 export function getSelectedTileCount() {

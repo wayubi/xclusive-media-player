@@ -46,7 +46,8 @@ Perfect for media professionals, content curators, and anyone managing large col
 
 ### Security & File Management
 - **Delete protection**: Secret code-based authorization with cookie persistence (30 days)
-- **Keyboard shortcuts for delete**: Number keys 1-9,0 to select tiles, DEL to confirm deletion
+- **Permanent deletion**: Files and folders are deleted immediately (no trash/recycle bin)
+- **Recursive deletion**: Can delete entire folders including all subfolders and hidden files
 - **Dual validation**: Frontend and backend verification for all destructive operations
 - **Secure defaults**: Delete functionality disabled by default
 - **Audit trails**: All operations logged for accountability
@@ -289,7 +290,7 @@ The configuration already includes throttling to protect drives:
 | Key | Action | Context |
 |-----|--------|---------|
 | `/` | Open search overlay | Global |
-| `Esc` | Close search / Exit fullscreen | Search/Fullscreen |
+| `Esc` | Close search / Exit fullscreen / Clear delete selections | Search/Fullscreen/Grid (delete mode) |
 | `c` | Toggle object-fit (cover/contain) | Global |
 | `Delete` | Delete current file | Fullscreen (when enabled) |
 | `←` / `→` | Navigate playlist | Fullscreen |
@@ -306,18 +307,26 @@ When delete mode is enabled (`?delete=your_secret_code`), use these hotkeys for 
 |-----|--------|-------|
 | `1` - `9` | Select tile 1-9 for deletion | Press again to deselect |
 | `0` | Select tile 10 for deletion | Only works if 10+ tiles visible |
-| `Delete` | Confirm deletion | Deletes all selected files |
+| `Delete` (nothing selected) | Select ALL items | Selects all files in current folder |
+| `Delete` (items selected) | Confirm deletion | Deletes selected files or entire folder |
+| `Esc` | Clear selections | Removes all delete selections |
 
 **How it works:**
 - Number keys toggle the delete selection state for each tile (1-9, 0 for 10th)
+- **Delete key is two-phase**:
+  1. First press (nothing selected): Selects ALL items in current folder including subfolders
+  2. Second press: Shows confirmation dialog and permanently deletes everything
+- **Recursive deletion**: Deletes all files, hidden files, subfolders, and the folder itself
 - Selected tiles show **three visual indicators**:
   - 🔴 **Red border** around the tile (replaces yellow NEW border)
   - 🔴 **Red "DELETE" badge** in top-right corner (replaces NEW badge)
   - 🔴 **Red pulsing 🗙 button** when you hover over the tile
 - Keys for non-existent tiles are ignored (e.g., 7-0 on a 6-tile grid)
-- Press `Delete` to confirm and delete all selected files
 - **Grid navigation clears selections**: Pressing Next/Previous or scrolling clears all delete selections
+- **ESC clears selections**: Press Escape anytime to cancel delete selections (not in fullscreen)
+- After folder deletion, automatically navigates to parent folder
 - Ideal for 5×2 (10 tile) grids for rapid curation workflows
+- **Permanent deletion**: Files are deleted immediately (no trash/recycle bin)
 
 ### Fullscreen Player
 
@@ -486,7 +495,8 @@ This frees up browser connections for the fullscreen video to seek efficiently.
 
 | Action | Method | Parameters | Description | Response |
 |--------|--------|------------|-------------|----------|
-| `delete` | POST | `files[]` | Move files to trash | `{status, deleted_count, errors}` |
+| `delete` | POST | `files[]` | Delete specific files permanently | `{status, results}` |
+| `delete` | POST | `recursive=true`, `delete_folder=true`, `folder` | Recursively delete folder and all contents (including hidden files) | `{status, deleted: {files, hidden_files, subfolders}, parent_path}` |
 | `audit` | POST | `file_paths[]` | Mark files as audited | `{status, date, count, stats}` |
 | `audit_status_batch` | POST | `file_paths[]` | Get audit status for files | `{status, audit_statuses}` |
 | `metadata` | POST | `files[]` | Get full metadata (single) | Metadata object |

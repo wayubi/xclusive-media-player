@@ -5,7 +5,7 @@ import { playAll, shufflePlay } from './fullscreen.js';
 import { initSearch, setupSearchListeners } from './search.js';
 import { runAudit } from './audit.js';
 import { setupUnauditedFilter } from './filter.js';
-import { toggleTileSelection, confirmDelete } from './ui.js';
+import { toggleTileSelection, confirmDelete, selectAllFiles, clearAllSelections, isSelectAllMode, getSelectedTileCount } from './ui.js';
 
 let scrollDebounce = false;
 
@@ -119,8 +119,30 @@ function toggleObjectFit() {
 
 function setupDeleteHotkeys() {
   document.addEventListener('keydown', (e) => {
-    // Handle number keys 1-9 and 0
     const key = e.key;
+    
+    // Check if we're in fullscreen mode by looking for the fullscreen container
+    const isFullscreenActive = document.querySelector('div[style*="z-index:9999"]') !== null;
+    
+    // ESC key - clear delete selections (only when not in fullscreen)
+    if (key === 'Escape') {
+      if (isFullscreenActive) {
+        // Let fullscreen.js handle ESC for exiting fullscreen
+        return;
+      }
+      
+      if (!state.deleteEnabled) return;
+      
+      const selectedCount = getSelectedTileCount();
+      const inSelectAllMode = isSelectAllMode();
+      
+      // Only process if there are selections
+      if (selectedCount > 0 || inSelectAllMode) {
+        e.preventDefault();
+        clearAllSelections();
+      }
+      return;
+    }
     
     // Map keys to tile indices: 1->0, 2->1, ..., 9->8, 0->9
     let tileIndex = -1;
@@ -129,10 +151,19 @@ function setupDeleteHotkeys() {
     } else if (key === '0') {
       tileIndex = 9; // 0 becomes 9 (10th tile)
     } else if (key === 'Delete') {
-      // DEL key triggers delete confirmation (only when delete is enabled)
+      // DEL key - two phase delete
       if (!state.deleteEnabled) return;
       e.preventDefault();
-      confirmDelete();
+      
+      const selectedCount = getSelectedTileCount();
+      
+      if (selectedCount === 0 && !isSelectAllMode()) {
+        // First Delete press with nothing selected - select all
+        selectAllFiles();
+      } else {
+        // Second Delete press or items already selected - confirm and delete
+        confirmDelete();
+      }
       return;
     }
     

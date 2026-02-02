@@ -16,14 +16,25 @@ $ch = curl_init('http://php-cli:8080/api.php');
 
 switch ($data['action']) {
     case 'delete':
-        if (empty($data['files'])) {
-            break;
+        // Check for recursive folder deletion
+        if (!empty($data['recursive']) && !empty($data['delete_folder']) && !empty($data['folder'])) {
+            $payload = [
+                'action' => 'delete',
+                'recursive' => true,
+                'delete_folder' => true,
+                'folder' => $data['folder'],
+            ];
+        } elseif (!empty($data['files'])) {
+            // Original file deletion
+            $payload = [
+                'action' => 'delete',
+                'files'  => $data['files'],
+            ];
+        } else {
+            http_response_code(400);
+            echo json_encode(['error' => 'Missing files or folder parameter']);
+            exit;
         }
-
-        $payload = [
-            'action' => 'delete',
-            'files'  => $data['files'],
-        ];
         break;
 
     case 'audit':

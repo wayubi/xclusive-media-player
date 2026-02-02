@@ -44,6 +44,67 @@ if (!is_dir($cacheDir)) {
     mkdir($cacheDir, 0777, true);
 }
 
+function countFolderContents(string $path): array {
+    $stats = ['files' => 0, 'hidden_files' => 0, 'subfolders' => 0];
+    
+    if (!is_dir($path)) {
+        return $stats;
+    }
+    
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($path, RecursiveDirectoryIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::SELF_FIRST
+    );
+    
+    foreach ($iterator as $file) {
+        if ($file->isFile()) {
+            $stats['files']++;
+            // Check if hidden (starts with .)
+            if ($file->getFilename()[0] === '.') {
+                $stats['hidden_files']++;
+            }
+        } elseif ($file->isDir()) {
+            $stats['subfolders']++;
+        }
+    }
+    
+    // Subtract 1 from subfolders if we're counting the root folder itself
+    if ($stats['subfolders'] > 0) {
+        $stats['subfolders']--;
+    }
+    
+    return $stats;
+}
+
+function deleteRecursive(string $path): bool {
+    if (!file_exists($path)) {
+        return true;
+    }
+    
+    if (is_file($path)) {
+        return unlink($path);
+    }
+    
+    if (is_dir($path)) {
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($path, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::CHILD_FIRST
+        );
+        
+        foreach ($iterator as $file) {
+            if ($file->isFile()) {
+                unlink($file->getPathname());
+            } elseif ($file->isDir()) {
+                rmdir($file->getPathname());
+            }
+        }
+        
+        return rmdir($path);
+    }
+    
+    return false;
+}
+
 function getMetadataForFile(string $webPath, string $root, string $cacheDir): ?array
 {
     $cleanFile = ltrim(preg_replace('#^/volumes/#i', '', $webPath), '/');
@@ -114,41 +175,82 @@ function getMetadataForFile(string $webPath, string $root, string $cacheDir): ?a
 
 switch ($action) {
     case 'delete':
-        if (empty($files)) {
-            http_response_code(400);
-            echo json_encode(['error' => 'No files provided']);
-            exit;
-        }
-
-        $trash = '/tmp/.trash';
-        if (!is_dir($trash) && !mkdir($trash, 0777, true)) {
-            http_response_code(500);
-            echo json_encode(['error' => 'Failed to create trash directory']);
-            exit;
-        }
-
-        $results = [];
-
-        foreach ($files as $file) {
-            $decodedFile = urldecode($file);
-            // Strip /volumes prefix
-            $cleanFile = ltrim(preg_replace('#^/volumes/#i', '', $decodedFile), '/');
-            $fsPath = realpath($root . '/' . $cleanFile);
-
-            if (!$fsPath || !str_starts_with($fsPath, $root) || !file_exists($fsPath)) {
-                $results[$file] = 'not_found';
-                continue;
+        $recursive = $data['recursive'] ?? false;
+        $deleteFolder = $data['delete_folder'] ?? false;
+        
+        if ($recursive && $deleteFolder) {
+            // Recursive folder deletion mode
+            $folder = $data['folder'] ?? null;
+            if (!$folder) {
+                http_response_code(400);
+                echo json_encode(['error' => 'No folder path provided for recursive deletion']);
+                exit;
             }
-
-            $newName = $trash . '/' . uniqid() . '_' . basename($fsPath);
-            if (rename($fsPath, $newName)) {
-                $results[$file] = 'moved';
+            
+            $decodedFolder = urldecode($folder);
+            $cleanFolder = ltrim(preg_replace('#^/volumes/#i', '', $decodedFolder), '/');
+            $fsPath = realpath($root . '/' . $cleanFolder);
+            
+            if (!$fsPath || !str_starts_with($fsPath, $root) || !is_dir($fsPath)) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Invalid folder path']);
+                exit;
+            }
+            
+            // Get parent path before deletion
+            $parentPath = dirname($fsPath);
+            $parentWebPath = '/volumes/' . ltrim(str_replace($root, '', $parentPath), '/');
+            if ($parentWebPath === '/volumes/') {
+                $parentWebPath = '/volumes';
+            }
+            
+            // Count items before deletion
+            $stats = countFolderContents($fsPath);
+            
+            // Perform recursive deletion
+            $deleted = deleteRecursive($fsPath);
+            
+            if ($deleted) {
+                echo json_encode([
+                    'status' => 'success',
+                    'deleted' => $stats,
+                    'parent_path' => $parentWebPath,
+                    'message' => "Deleted {$stats['files']} files ({$stats['hidden_files']} hidden), {$stats['subfolders']} subfolders, and the folder"
+                ]);
             } else {
-                $results[$file] = 'failed';
+                http_response_code(500);
+                echo json_encode(['error' => 'Failed to delete folder']);
             }
-        }
+        } else {
+            // Original single file deletion mode
+            if (empty($files)) {
+                http_response_code(400);
+                echo json_encode(['error' => 'No files provided']);
+                exit;
+            }
 
-        echo json_encode(['status' => 'ok', 'results' => $results]);
+            $results = [];
+
+            foreach ($files as $file) {
+                $decodedFile = urldecode($file);
+                // Strip /volumes prefix
+                $cleanFile = ltrim(preg_replace('#^/volumes/#i', '', $decodedFile), '/');
+                $fsPath = realpath($root . '/' . $cleanFile);
+
+                if (!$fsPath || !str_starts_with($fsPath, $root) || !file_exists($fsPath)) {
+                    $results[$file] = 'not_found';
+                    continue;
+                }
+
+                if (unlink($fsPath)) {
+                    $results[$file] = 'deleted';
+                } else {
+                    $results[$file] = 'failed';
+                }
+            }
+
+            echo json_encode(['status' => 'ok', 'results' => $results]);
+        }
         break;
 
     case 'audit':

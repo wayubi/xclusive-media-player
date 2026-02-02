@@ -3,7 +3,7 @@ import { state } from './state.js';
 import { mediaPool } from './mediaPool.js';
 import { mediaQueue } from './mediaQueue.js';
 import { createMediaContainer, LAZY_LOAD_OFFSET } from './mediaContainer.js';
-import { syncMuteIcons, clearSelectedTiles } from './ui.js';
+import { syncMuteIcons, clearSelectedTiles, clearAllSelections } from './ui.js';
 
 // IntersectionObserver for lazy loading media
 let gridObserver = null;
@@ -348,18 +348,8 @@ export function prevGrid() {
 }
 
 function clearDeleteSelections() {
-  // Remove selected-for-delete class from all containers
-  document.querySelectorAll('#grid .video-container.selected-for-delete').forEach(container => {
-    container.classList.remove('selected-for-delete');
-    const btn = container.querySelector('button[data-file]');
-    if (btn) {
-      btn.dataset.selected = 'false';
-      btn.classList.remove('selected');
-    }
-  });
-  
-  // Clear the tracking Set
-  clearSelectedTiles();
+  // Use the centralized clear function from ui.js
+  clearAllSelections();
 }
 
 function enforceSingleUnmuted() {
