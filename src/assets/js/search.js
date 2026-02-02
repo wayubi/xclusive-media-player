@@ -28,24 +28,24 @@ export function initSearch() {
 
 export function applySearch(term) {
   term = (term || '').trim().toLowerCase();
-  state.currentSearch = term;
-  state.unauditedFilter = false; // Clear unaudited filter when searching
-
+  
   if (!term) {
-    state.allVideos = searchableItems.map(item => item.webPath);
-    state.startIndex = 0;
+    state.setFilter(null);
     renderGrid();
     closeSearch();
     return;
   }
 
-  const filtered = searchableItems.filter(item => {
-    if (item.filename.includes(term)) return true;
-    return item.folderNames.some(folder => folder.includes(term));
+  state.setFilter('search', {
+    searchTerm: term,
+    filterFn: file => {
+      const item = searchableItems.find(i => i.webPath === file);
+      if (!item) return false;
+      return item.filename.includes(term) || 
+             item.folderNames.some(folder => folder.includes(term));
+    }
   });
-
-  state.allVideos = filtered.map(item => item.webPath);
-  state.startIndex = 0;
+  
   renderGrid();
   closeSearch();
 }

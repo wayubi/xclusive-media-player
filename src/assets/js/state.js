@@ -117,5 +117,83 @@ export const state = {
     return Object.keys(this.favoritesMap).filter(file => 
       this.favoritesMap[file] && this.originalVideos.includes(file)
     ).length;
+  },
+  
+  // Delete a video from all state structures
+  deleteVideo(file) {
+    let removed = false;
+    
+    // Remove from arrays
+    const allIdx = this.allVideos.indexOf(file);
+    if (allIdx !== -1) {
+      this.allVideos.splice(allIdx, 1);
+      removed = true;
+    }
+    
+    const origIdx = this.originalVideos.indexOf(file);
+    if (origIdx !== -1) {
+      this.originalVideos.splice(origIdx, 1);
+    }
+    
+    // Remove from all maps
+    delete this.auditStatusMap[file];
+    delete this.webToFsPathMap[file];
+    delete this.favoritesMap[file];
+    
+    return removed;
+  },
+  
+  // Unified filter method for all filter types
+  setFilter(type, options = {}) {
+    const { searchTerm, filterFn } = options;
+    
+    switch (type) {
+      case 'unaudited':
+        this.unauditedFilter = !this.unauditedFilter;
+        this.favoritesFilter = false;
+        this.currentSearch = '';
+        
+        if (this.unauditedFilter) {
+          this.allVideos = this.originalVideos.filter(file => !this.isFileAudited(file));
+        } else {
+          this.allVideos = [...this.originalVideos];
+        }
+        break;
+        
+      case 'favorites':
+        this.favoritesFilter = !this.favoritesFilter;
+        this.unauditedFilter = false;
+        this.currentSearch = '';
+        
+        if (this.favoritesFilter) {
+          this.allVideos = this.getFavoriteFiles();
+        } else {
+          this.allVideos = [...this.originalVideos];
+        }
+        break;
+        
+      case 'search':
+        this.currentSearch = searchTerm || '';
+        this.unauditedFilter = false;
+        
+        if (filterFn && this.currentSearch) {
+          this.allVideos = this.originalVideos.filter(filterFn);
+        } else {
+          this.allVideos = [...this.originalVideos];
+        }
+        break;
+        
+      case null:
+      case 'clear':
+        // Clear all filters
+        this.unauditedFilter = false;
+        this.favoritesFilter = false;
+        this.currentSearch = '';
+        this.allVideos = [...this.originalVideos];
+        break;
+    }
+    
+    this.startIndex = 0;
+    return this.allVideos.length;
   }
 };

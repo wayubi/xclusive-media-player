@@ -254,24 +254,9 @@ function setupKeyboardHandler(playlist, play, close, getIndex) {
         const data = await resp.json();
         if (data.error) throw new Error(data.error);
 
+        // Remove from playlist and all state structures
         playlist.splice(i, 1);
-        
-        // Remove from allVideos
-        const idx = state.allVideos.indexOf(del);
-        if (idx !== -1) state.allVideos.splice(idx, 1);
-        
-        // Remove from originalVideos
-        const origIdx = state.originalVideos.indexOf(del);
-        if (origIdx !== -1) state.originalVideos.splice(origIdx, 1);
-        
-        // Remove from audit status map
-        delete state.auditStatusMap[del];
-        
-        // Remove from webToFsPathMap
-        delete state.webToFsPathMap[del];
-        
-        // Remove from favorites map
-        delete state.favoritesMap[del];
+        state.deleteVideo(del);
         
         // Update audit display
         import('./audit.js').then(module => {

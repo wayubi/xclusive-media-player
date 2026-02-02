@@ -3,20 +3,7 @@ import { state } from './state.js';
 import { renderGrid } from './grid.js';
 
 export function toggleUnauditedFilter() {
-  state.unauditedFilter = !state.unauditedFilter;
-  
-  if (state.unauditedFilter) {
-    // Filter to show only unaudited files
-    state.allVideos = state.originalVideos.filter(file => {
-      return !state.isFileAudited(file);
-    });
-    state.currentSearch = ''; // Clear any existing search
-  } else {
-    // Restore all files
-    state.allVideos = [...state.originalVideos];
-  }
-  
-  state.startIndex = 0;
+  state.setFilter('unaudited');
   renderGrid();
   updateFileCount();
 }

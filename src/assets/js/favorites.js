@@ -57,19 +57,7 @@ export async function updateFavoritesDisplay() {
 }
 
 export function toggleFavoritesFilter() {
-  state.favoritesFilter = !state.favoritesFilter;
-  
-  if (state.favoritesFilter) {
-    // Filter to show only favorited files
-    state.allVideos = state.getFavoriteFiles();
-    state.currentSearch = ''; // Clear any existing search
-    state.unauditedFilter = false; // Clear unaudited filter
-  } else {
-    // Restore all files
-    state.allVideos = [...state.originalVideos];
-  }
-  
-  state.startIndex = 0;
+  state.setFilter('favorites');
   renderGrid();
   updateFileCount();
 }
