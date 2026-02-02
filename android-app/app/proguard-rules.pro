@@ -19,3 +19,36 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Keep JavaScript interface
+-keepclassmembers class com.xclusive.mediaplayer.web.bridge.PlayerBridge {
+    @android.webkit.JavascriptInterface <methods>;
+}
+
+# Keep Media3 ExoPlayer classes
+-keep class androidx.media3.** { *; }
+-dontwarn androidx.media3.**
+
+# Keep Koin
+-keep class org.koin.** { *; }
+-dontwarn org.koin.**
+
+# Keep ViewModel
+-keep class * extends androidx.lifecycle.ViewModel {
+    <init>(...);
+}
+
+# Keep coroutines
+-keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
+-keepnames class kotlinx.coroutines.internal.AndroidExceptionPreHandler {}
+
+# Keep model classes
+-keep class com.xclusive.mediaplayer.data.model.** { *; }
+
+# Remove logging in release
+-assumenosideeffects class android.util.Log {
+    public static *** d(...);
+    public static *** v(...);
+    public static *** i(...);
+    public static *** w(...);
+}

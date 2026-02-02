@@ -1,8 +1,5 @@
 <resources>
-    <!-- Server IP / port -->
-    <string name="server_ip">127.0.0.1</string>
-    <string name="server_port">8050</string>
-
-    <!-- Feature toggle: use ExoPlayer if true, else WebView -->
-    <bool name="use_exoplayer">true</bool>
+    <string name="app_name">Xclusive Media Player</string>
+    <string name="error_connection">Unable to connect to server</string>
+    <string name="retry">Retry</string>
 </resources>

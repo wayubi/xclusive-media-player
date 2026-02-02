@@ -1,0 +1,14 @@
+{
+  "server": {
+    "host": "your-server-domain.com",
+    "port": 8050,
+    "useHttps": true
+  },
+  "features": {
+    "useExoPlayer": true,
+    "enableDiscovery": false
+  },
+  "ui": {
+    "forceLandscapeOnTablets": true
+  }
+}
