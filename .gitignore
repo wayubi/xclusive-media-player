@@ -16,3 +16,6 @@ android-app/local.properties
 data/db/
 compose.override.yml
 .env
+
+# Android app configuration (contains real server settings - don't commit)
+android-app/app/src/main/res/raw/config.json
