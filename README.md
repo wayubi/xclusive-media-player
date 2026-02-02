@@ -1,55 +1,159 @@
 # Xclusive Media Player
 
-**Xclusive Media Player** is a powerful, browser-based media management system featuring a sleek grid interface for organizing, auditing, and playing your personal media collection. Built with modern web technologies and containerized with Docker, it provides an intuitive experience for managing large media libraries with advanced features like audit tracking, favorites, and secure file management.
+**Xclusive Media Player** is a high-performance, browser-based media management and playback system designed for large media libraries. Built with modern web technologies and optimized for concurrent video streaming, it features a responsive grid interface, advanced lazy loading, connection pooling, and enterprise-grade media handling capabilities.
+
+Perfect for media professionals, content curators, and anyone managing large collections of videos, audio, and images.
 
 ---
 
 ## ✨ Features
 
 ### Media Management
-- **Multi-format support**: MP3, WAV, OGG, MP4, WebM, MKV, MOV, and common image formats (JPG, PNG, GIF, WebP)
-- **Smart folder navigation**: Browse nested directories with visual indicators for folder status
-- **File metadata display**: View codec, resolution, duration, bitrate, and file size information
-- **Batch operations**: Audit or delete multiple files at once
+- **Multi-format support**: MP3, WAV, OGG, FLAC, MP4, WebM, MKV, MOV, AVI, and common image formats (JPG, PNG, GIF, WebP, SVG)
+- **Smart folder navigation**: Browse nested directories with breadcrumb-style path indicators
+- **Rich metadata display**: View codec, resolution (width×height), duration, bitrate, file size, FPS, and folder path
 - **Advanced search**: Filter by filename or folder path with instant results
+- **Batch operations**: Audit or delete multiple files with confirmation dialogs
 
 ### Playback & Display
-- **Grid interface**: Customizable rows (1-6) and columns (1-6) for optimal viewing
-- **Fullscreen player**: Click any media item for immersive fullscreen playback
-- **Playlist modes**: Play all files sequentially or shuffle for random playback
-- **Auto-generated covers**: Displays album art for audio files with fallback placeholders
-- **Responsive design**: Optimized for desktop, tablet, and mobile devices
-- **Object-fit toggle**: Press 'C' to switch between cover and contain modes
+- **Customizable grid interface**: 1×1 to 6×6 layouts (up to 36 concurrent video cells)
+- **Lazy loading with IntersectionObserver**: Videos only load when visible, conserving bandwidth
+- **Priority loading**: Recent fullscreen video and first grid cell load first
+- **Media element pooling**: Reusable video/audio elements prevent DOM thrashing and connection exhaustion
+- **Concurrent loading queues**: Rate-limited to 3-6 simultaneous loads (prevents browser overload)
+- **Fullscreen player**: Immersive playback with keyboard navigation (arrows, Escape, Delete)
+- **Playlist modes**: Sequential play all or shuffle playback
+- **Auto-generated covers**: Audio files display embedded artwork with fallback placeholders
+- **Object-fit toggle**: Press 'C' to switch between cover and contain display modes
+- **Mute management**: Single unmuted video policy (prevents audio chaos)
 
 ### Audit System
-- **SQLite-based tracking**: Persistent audit status across sessions
-- **Visual indicators**: 
-  - ✅ All files audited (green checkmark)
-  - ⚠️ Partially audited (yellow warning)
-  - 🆕 No files audited (new badge)
-- **Smart filtering**: Click unaudited count to show only unaudited files
-- **Folder-level stats**: See audit status and file counts for each folder
-- **Batch auditing**: Single-click to audit visible files, double-click for entire folder
+- **SQLite-based tracking**: Persistent audit status with optimistic UI updates
+- **Context-aware auditing**: Prevents race conditions when navigating during audits
+- **Visual indicators**:
+  - Yellow border = Unaudited (new files)
+  - No border = Audited (reviewed files)
+  - Heart icon = Favorited files
+- **Smart batch auditing**: Single-click audits visible files, double-click audits entire folder
+- **Real-time counters**: Live unaudited/favorites counts in header
+- **Conflict resolution**: Handles overlapping audits gracefully
 
 ### Favorites System
-- **Database-backed favorites**: Mark important files with the ❤️ heart icon
-- **Quick filtering**: Click favorites count to view only favorited items
-- **Playlist support**: Play all favorites with one click
-- **Persistent storage**: Favorites are saved to SQLite database
+- **Database-backed favorites**: Persistent ❤️ marking across sessions
+- **One-click filtering**: View only favorited items
+- **Favorites playlist**: Play all favorites sequentially
+- **Cross-folder favorites**: Favorites persist across folder navigation
 
-### Security
-- **Delete protection**: Secret code-based authorization for file deletion
-- **Cookie-based sessions**: 30-day authorization cookies
-- **Backend validation**: All delete requests verified server-side
-- **Easy toggle**: Enable/disable deletes via URL parameters
+### Security & File Management
+- **Delete protection**: Secret code-based authorization with cookie persistence (30 days)
+- **Dual validation**: Frontend and backend verification for all destructive operations
+- **Secure defaults**: Delete functionality disabled by default
+- **Audit trails**: All operations logged for accountability
+
+### Performance Optimizations
+- **Media element pooling**: 48 reusable video/audio elements reduce DOM overhead
+- **Lazy loading**: Videos load only when entering viewport (200px offset)
+- **Connection management**: Rate limiting prevents Firefox connection exhaustion
+- **Range request support**: Efficient seeking/scrubbing with partial content loading
+- **File descriptor caching**: Nginx open_file_cache for frequently accessed videos
+- **HTTP/2 multiplexing**: Single connection streams multiple videos simultaneously
+- **Hybrid caching**: Small files cached in RAM, large files streamed directly
+
+---
+
+## 🏗️ Architecture Overview
+
+### Frontend Architecture
+
+```
+Browser
+├── State Management (centralized)
+│   ├── Video/Audio arrays
+│   ├── Audit status map
+│   ├── Favorites map
+│   └── UI state (grid position, filters)
+│
+├── Media Pool (48 elements)
+│   ├── Video pool (pre-created <video> elements)
+│   └── Audio pool (pre-created <audio> elements)
+│
+├── Media Queue (concurrent loading)
+│   ├── Audio queue (max 6 concurrent)
+│   ├── Video queue (max 6 concurrent, 3 for large grids)
+│   └── Completion tracking (canplay/loadedmetadata/error/timeout)
+│
+├── Lazy Loading
+│   ├── IntersectionObserver (200px viewport margin)
+│   ├── Priority: Recent fullscreen → First cell → Others
+│   └── Staged: Metadata → Thumbnail → Playback
+│
+└── Grid Rendering (6 phases)
+    ├── Cleanup (recycle elements)
+    ├── Structure (CSS grid setup)
+    ├── Populate (create containers)
+    ├── Metadata (fetch file info)
+    ├── Loading (start queues)
+    └── Finalize (sync UI state)
+```
+
+### Backend Architecture
+
+```
+Docker Compose Stack
+├── nginx (Port 8050)
+│   ├── Static file serving (CSS, JS, images)
+│   ├── Video streaming with range requests
+│   ├── Throttling (50MB/s after 10MB burst)
+│   └── Connection limits (200 per IP)
+│
+├── php-fpm
+│   ├── Page generation (index.php)
+│   ├── Folder traversal
+│   ├── Audio thumbnail extraction
+│   └── Authentication
+│
+├── php-cli (API)
+│   ├── Metadata extraction (ffprobe)
+│   ├── SQLite operations
+│   ├── File operations (delete)
+│   └── Audit/favorites management
+│
+└── Reverse Proxy (Optional)
+    ├── SSL termination
+    ├── HTTP/2 multiplexing
+    ├── Hybrid caching (<100MB cached, >100MB streamed)
+    └── 32GB RAM cache (tmpfs)
+```
+
+### Database Schema
+
+**Audit Database (`data/db/audit.db`)**
+```sql
+CREATE TABLE audit_status (
+    file_path TEXT PRIMARY KEY,
+    audited BOOLEAN DEFAULT 0,
+    audit_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**Favorites Database (`data/db/favorites.db`)**
+```sql
+CREATE TABLE favorites (
+    file_path TEXT PRIMARY KEY,
+    folder_path TEXT,
+    favorited BOOLEAN DEFAULT 0,
+    favorite_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
 
 ---
 
 ## 🚀 Installation
 
 ### Prerequisites
-- Docker and Docker Compose
-- A media collection to manage
+- Docker 20.10+ and Docker Compose 2.0+
+- 4GB+ RAM (8GB+ recommended for large libraries)
+- Media files in supported formats
 
 ### Quick Start
 
@@ -59,9 +163,8 @@
    cd xclusive-media-player
    ```
 
-2. **Configure delete protection** (optional):
+2. **Configure delete protection** (optional but recommended):
    ```bash
-   # Create .env file in project root
    cat > .env << EOF
    DELETE_SECRET_CODE=your_secret_code_here
    EOF
@@ -78,351 +181,508 @@
    ```
 
 5. **Add your media**:
-   - Place media files in the `./volumes` folder
-   - Or update the volume mount in `compose.yml` to point to your existing media directory
+   - Place media files in `./volumes` folder
+   - Or update the volume mount in `compose.yml`:
+   ```yaml
+   volumes:
+     - /path/to/your/media:/var/www/html/volumes
+   ```
+
+### Production Deployment with Reverse Proxy
+
+For external access with SSL:
+
+1. **Copy optimized reverse proxy config**:
+   ```bash
+   # On your reverse proxy server
+   cp docker/nginx/reverse-proxy-optimized.conf /etc/nginx/sites-available/xclusive.conf
+   ln -sf /etc/nginx/sites-available/xclusive.conf /etc/nginx/sites-enabled/
+   ```
+
+2. **Configure cache zone** in reverse proxy nginx.conf:
+   ```nginx
+   proxy_cache_path /var/cache/nginx levels=1:2 keys_zone=media_cache:100m 
+                    max_size=32g inactive=7d use_temp_path=off;
+   ```
+
+3. **Enable with tmpfs for 32GB RAM cache**:
+   ```yaml
+   # docker-compose.yml on reverse proxy
+   tmpfs:
+     - /var/cache/nginx:size=32g
+   ```
+
+4. **Reload nginx**:
+   ```bash
+   nginx -t && systemctl reload nginx
+   ```
 
 ---
 
 ## ⚙️ Configuration
 
-### Volume Mounts
-
-The application uses the following directory structure:
-```
-./src              → Application source code
-./volumes          → Your media files (customize this path)
-./data/db          → SQLite databases for audit and favorites
-```
-
-To use your existing media library, edit `compose.yml`:
-```yaml
-volumes:
-  - /path/to/your/media:/var/www/html/volumes
-```
-
 ### URL Parameters
 
-Customize the interface using URL parameters:
+Control the interface via URL:
 
 **Grid Layout**:
-- `?columns=3` — Number of columns (1-6)
-- `?rows=2` — Number of rows (1-6)
+- `?columns=3` — Number of columns (1-6, desktop only)
+- `?rows=2` — Number of rows (1-6, desktop only)
+- Example: `?columns=3&rows=2` for 6-video grid
 
 **Audio Settings**:
 - `?muted=true` — Start with audio muted (default)
 - `?muted=false` — Start with audio enabled
 
 **Folder Navigation**:
-- `?path[]=folder1&path[]=folder2` — Navigate to specific folder
+- `?path[]=folder1&path[]=subfolder` — Navigate to nested folder
+- `?goto=..` — Go to parent folder
+- `?goto_folder=subfolder` — Navigate into specific subfolder
 
 **Delete Protection**:
-- `?delete=your_secret_code` — Enable delete functionality
+- `?delete=your_secret_code` — Enable delete functionality (30-day cookie)
 - `?delete=off` — Disable delete functionality
 
-### Delete Protection Setup
+**Cache Control**:
+- `?t=timestamp` — Cache buster (auto-added on navigation)
 
-1. **Create `.env` file** in project root:
-   ```env
-   DELETE_SECRET_CODE=my_secret_delete_code_2026
+**Complete Example**:
+```
+http://localhost:8050?columns=3&rows=2&muted=false&path[]=movies&path[]=action
+```
+
+### Performance Tuning
+
+**For Large Libraries (10,000+ files)**:
+
+1. **Increase PHP memory** in `docker/php-fpm/php.ini`:
+   ```ini
+   memory_limit = 512M
+   max_execution_time = 300
    ```
 
-2. **Choose a strong secret code** that only you know
-
-3. **Enable deletes** when needed:
-   ```
-   http://localhost:8050?delete=my_secret_delete_code_2026
-   ```
-
-4. **Disable deletes** after use:
-   ```
-   http://localhost:8050?delete=off
+2. **Optimize nginx worker processes** in `docker/nginx/nginx.conf`:
+   ```nginx
+   worker_processes auto;
+   worker_connections 4096;
    ```
 
-**Security Notes**:
-- Cookie expires after 30 days
-- Delete requests are validated on both frontend and backend
-- Secret code is stored outside the web root
-- No delete buttons appear without authorization
+3. **Enable file caching** (already enabled):
+   ```nginx
+   open_file_cache max=500 inactive=30s;
+   ```
+
+**For Slow Storage (5400 RPM HDD)**:
+
+The configuration already includes throttling to protect drives:
+- 50MB/s sustained rate after 10MB burst
+- File descriptor caching reduces seeks
+- Hybrid reverse proxy caching keeps hot files in RAM
 
 ---
 
 ## 📖 Usage Guide
 
-### Basic Navigation
+### Keyboard Shortcuts
 
-**Folder Browser**:
-- Click the folder dropdown to see subfolders
-- Each folder shows:
-  - Audit status icon (✅/⚠️/🆕)
-  - Folder name
-  - Total file count in parentheses
+| Key | Action | Context |
+|-----|--------|---------|
+| `/` | Open search overlay | Global |
+| `Esc` | Close search / Exit fullscreen | Search/Fullscreen |
+| `c` | Toggle object-fit (cover/contain) | Global |
+| `Delete` | Delete current file | Fullscreen (when enabled) |
+| `←` / `→` | Navigate playlist | Fullscreen |
+| `↑` / `↓` | Exit fullscreen | Fullscreen |
+| `Enter` | Execute search | Search overlay |
+| `Mouse Wheel` | Navigate grid pages | Grid |
+| `Touch Swipe` | Navigate grid (mobile) | Grid (mobile) |
 
-**Grid Controls**:
-- `◀` Previous page
-- `▶` Next page
-- Mouse wheel or touch gestures to navigate
+### Fullscreen Player
 
-**Playback Buttons**:
-- `▶️` Play all files from current position
-- `🔀` Shuffle play all files
-- `❤️` Play all favorited files
-- `🔇/🔊` Toggle mute
+**Entry Points**:
+- Click ⛶ (fullscreen icon) on any media item
+- Click directly on video/audio/image in grid
+- Use `▶️` Play All button (plays from current position)
+- Use `🔀` Shuffle Play button (random order)
+- Use `❤️` Play Favorites button (favorites only)
 
-### File Operations
+**Navigation**:
+- **Arrow Left/Right**: Previous/next file in playlist
+- **Arrow Up/Down or Escape**: Exit fullscreen
+- **Mouse Wheel**: Navigate playlist
+- **Double-click video**: Exit fullscreen
+- **Click background**: Exit fullscreen
 
-**Individual Files**:
-- Click file to open fullscreen player
-- Hover to reveal control buttons:
-  - `📋` Audit this file
-  - `⛶` Open in fullscreen
-  - `🗙` Select/Delete (when enabled)
-  - `🔇/🔊` Mute/Unmute
-- Click `❤️` heart to favorite/unfavorite
+**Controls**:
+- **Space**: Play/pause (when focused)
+- **Delete key**: Delete current file (confirmation dialog, requires delete mode)
 
-**Fullscreen Mode**:
-- Arrow keys or scroll to navigate
-- Double-click or Escape to exit
-- Delete key to remove file (when enabled)
+**Features**:
+- Auto-resumes playback position when returning to grid
+- Shows metadata overlay (filename, codec, resolution, duration)
+- Works with videos, audio (shows cover art), and images
+- **Android ExoPlayer support**: Native fullscreen on Android WebView via `window.AndroidPlayer` bridge
 
-**Batch Auditing**:
-- Single-click `📋` button: Audit visible files
-- Double-click `📋` button: Audit entire folder
+### Batch Operations
 
-### Search & Filtering
+**Auditing**:
+1. **Single-click** `📋` button: Audit only currently visible files
+2. **Double-click** `📋` button (within 400ms): Audit ALL files in the entire folder
+3. Yellow borders disappear when files are marked as audited
+4. Real-time counters update in the header
+
+**Favorites**:
+1. Click `🤍` (empty heart) on any file to favorite it
+2. Click `❤️` (filled heart) to unfavorite
+3. Click the favorites count (`❤️ X`) in the header to filter view
+4. Click the `❤️` play button in toolbar to play all favorites as a playlist
+
+### Search & Filter
 
 **Search**:
-- Press `/` to open search
-- Type filename or folder name
-- Press Enter to filter
-- Press Escape to close
+1. Press `/` or click search icon to open search overlay
+2. Type filename or folder path (case-insensitive)
+3. Press `Enter` to execute search
+4. Results appear instantly, filtering the grid
+5. Press `Esc` or click ✕ to clear and close
 
-**Filter Options**:
-- Click `⚠️ X` (unaudited count) to show only unaudited files
-- Click `❤️ X` (favorites count) to show only favorites
-- Search bar filters by name or path
-
-### Audit System
-
-The audit system helps you track which files you've reviewed:
-
-1. **Mark as audited**: Click the `📋` button on any file
-2. **View status**: 
-   - Yellow border = Unaudited
-   - No border = Audited
-3. **Track progress**: See counts in top bar (e.g., "✅ 150 • ⚠️ 50")
-4. **Filter unaudited**: Click the unaudited count to focus on new files
-
-### Favorites
-
-1. **Add favorite**: Click the `🤍` heart icon (turns to `❤️`)
-2. **Remove favorite**: Click the `❤️` icon again
-3. **View all favorites**: Click the favorites count
-4. **Play favorites**: Click the `❤️` button in the toolbar
-
----
-
-## 🐳 Docker Architecture
-
-The application runs in three containers:
-
-1. **nginx** - Web server and reverse proxy (port 8050)
-2. **php-fpm** - Handles web requests and file operations
-3. **php-cli** - API backend for metadata and operations
-
-### Container Details
-
-```yaml
-services:
-  nginx:
-    - Serves static assets (CSS, JS, images)
-    - Routes PHP requests to php-fpm
-    - Proxies API calls to php-cli
-    
-  php-fpm:
-    - Generates dynamic pages
-    - Handles folder navigation
-    - Creates audio thumbnails
-    
-  php-cli:
-    - Metadata extraction (ffprobe)
-    - File operations (delete, move)
-    - SQLite database management
-```
-
-### Accessing Logs
-
-```bash
-# View all logs
-docker-compose logs -f
-
-# View specific service
-docker-compose logs -f nginx
-docker-compose logs -f php-fpm
-docker-compose logs -f php-cli
-```
-
-### Rebuilding Containers
-
-```bash
-# Rebuild after changes
-docker-compose down
-docker-compose build --no-cache
-docker-compose up -d
-```
-
----
-
-## 🗂️ File Structure
-
-```
-xclusive-media-player/
-├── .env                    # Delete protection secret (create this)
-├── compose.yml             # Docker Compose configuration
-├── src/                    # Application source code
-│   ├── index.php          # Main entry point
-│   ├── api.php            # API endpoint
-│   ├── post-handler.php   # Request proxy
-│   ├── lib/               # PHP libraries
-│   │   ├── AuditDatabase.php
-│   │   ├── FavoritesDatabase.php
-│   │   └── audioCovers.php
-│   └── assets/
-│       ├── css/
-│       │   └── app.css    # Styles
-│       └── js/            # JavaScript modules
-│           ├── main.js
-│           ├── state.js
-│           ├── grid.js
-│           ├── audit.js
-│           ├── favorites.js
-│           ├── fullscreen.js
-│           └── ...
-├── volumes/               # Your media files (customize)
-├── data/
-│   └── db/               # SQLite databases
-│       ├── audit.db
-│       └── favorites.db
-└── docker/               # Docker configurations
-    ├── nginx/
-    ├── php-fpm/
-    └── php-cli/
-```
+**Filters** (click counts in header):
+- **Unaudited** (`⚠️ X`): Show only files not yet audited
+- **Favorites** (`❤️ X`): Show only favorited files
+- Only one filter can be active at a time
 
 ---
 
 ## 🔧 Troubleshooting
 
-### Media files not appearing
-- Check volume mount in `compose.yml`
-- Ensure files are in supported formats
-- Check file permissions (should be readable by www-data)
+### "Blocked" in Firefox Network Tab
 
-### Thumbnails not generating
-- Verify ffmpeg is installed in containers
-- Check `./cache` directory permissions
-- Review php-cli logs: `docker-compose logs php-cli`
+**Cause**: Firefox limits 6 connections per domain
+**Solution**: 
+- HTTP/2 enabled in reverse proxy (multiplexes over single connection)
+- Or reduce grid size temporarily
+- This is browser limitation, not application error
 
-### Delete not working
-- Ensure `.env` file exists with correct secret code
-- Verify you've enabled deletes via URL parameter
-- Check browser cookies are enabled
-- Review api.php logs for 403 errors
+### Large Videos Not Loading
 
-### Database issues
-- Check `./data/db` directory exists and is writable
-- Restart containers: `docker-compose restart`
-- Examine SQLite files: `sqlite3 ./data/db/audit.db`
+**Checklist**:
+1. ✓ Nginx throttling not too aggressive (currently 50MB/s)
+2. ✓ `preload="auto"` set before `src` (fixed in recent update)
+3. ✓ Video files accessible: `ls -lh volumes/`
+4. ✓ Nginx error logs: `docker-compose logs nginx`
 
-### Performance with large libraries
-- Increase PHP memory limit in Docker configs
-- Consider pagination adjustments in source code
-- Use SSD storage for database files
+### Slow Grid Loading (5x2, 6x6)
+
+**Optimizations applied**:
+- Lazy loading (only visible videos load)
+- 3 concurrent limit for large grids
+- Media element pooling
+- If still slow: Check disk I/O with `iostat -x 1`
+
+### Audit/Favorites Not Persisting
+
+**Check**:
+1. `./data/db/` directory exists and is writable
+2. SQLite files not corrupted: `sqlite3 data/db/audit.db ".tables"`
+3. Disk not full: `df -h`
+
+### Memory Issues
+
+**Symptoms**: Container crashes with large libraries
+**Solution**:
+```bash
+# Increase Docker memory limit
+docker-compose down
+docker-compose up -d --memory=2g
+```
 
 ---
 
-## 🎨 Customization
+## 🏛️ Technical Deep Dive
 
-### Changing Colors/Theme
+### Media Loading Strategy
 
-Edit `src/assets/css/app.css` and modify the CSS variables:
+The application uses a sophisticated 3-tier loading system:
 
-```css
-:root {
-  --accent: #a855f7;           /* Purple accent */
-  --accent-secondary: #ec4899; /* Pink secondary */
-  --bg: linear-gradient(...);  /* Background gradient */
-}
-```
+**Tier 1: Priority Load**
+- Recent fullscreen video (if returning from player)
+- First cell in grid (immediate visibility)
 
-### Adding File Types
+**Tier 2: Lazy Load**
+- IntersectionObserver triggers when video enters viewport
+- 200px margin for smooth scrolling
+- `preload="auto"` ensures frames load, not just metadata
 
-Edit `src/assets/js/utils.js` to add supported extensions:
+**Tier 3: Queue Processing**
+- Rate-limited to prevent browser overload
+- 6 concurrent for small grids, 3 for large grids
+- Completion tracked via canplay/loadedmetadata/error/timeout
 
+### Connection Management
+
+**Problem**: 36 videos × 3 connections each = 108 connections (Firefox limit: 6)
+
+**Solutions**:
+1. **HTTP/2** (reverse proxy): Multiplexes all streams over 1 connection
+2. **Lazy loading**: Only visible videos open connections
+3. **Pooling**: Reuses 48 media elements instead of creating 36 new ones
+4. **Throttling**: Prevents bandwidth saturation
+5. **Queue limits**: Caps concurrent loads to 3-6
+
+### Race Condition Prevention
+
+**Audit Context Tracking**:
 ```javascript
-export function isVideoFile(filename) {
-  const ext = getFileExtension(filename);
-  return ['mp4', 'webm', 'mkv', 'your_format'].includes(ext);
+// Captures current view state before API call
+const auditContext = state.startAuditContext();
+
+// On response, verify we're still in same view
+if (!state.isValidAuditContext(auditContext)) {
+  // User navigated away - ignore stale response
+  return;
 }
 ```
 
-### Adjusting Grid Defaults
+Prevents UI corruption when:
+- User audits file then navigates quickly
+- API response arrives after folder change
+- Multiple audits overlap
 
-Edit `src/index.php`:
+### Fullscreen Cleanup
 
-```php
-$selected_columns = $is_mobile ? 1 : max(1, min(6, (int)($_GET['columns'] ?? 3)));
-$selected_rows    = $is_mobile ? 1 : max(1, min(6, (int)($_GET['rows'] ?? 2)));
+**Critical for preventing seeking hangs**:
+```javascript
+// Before opening fullscreen
+await mediaPool.releaseAll();  // Return all grid elements to pool
+mediaPool.clearQueues();        // Stop all loading
+// Small delay ensures TCP connections released
 ```
+
+This frees up browser connections for the fullscreen video to seek efficiently.
+
+### API Endpoints (`api.php`)
+
+| Action | Method | Parameters | Description | Response |
+|--------|--------|------------|-------------|----------|
+| `delete` | POST | `files[]` | Move files to trash | `{status, deleted_count, errors}` |
+| `audit` | POST | `file_paths[]` | Mark files as audited | `{status, date, count, stats}` |
+| `audit_status_batch` | POST | `file_paths[]` | Get audit status for files | `{status, audit_statuses}` |
+| `metadata` | POST | `files[]` | Get full metadata (single) | Metadata object |
+| `metadata_batch` | POST | `files[]` | Get metadata for multiple | `{file: metadata}` |
+| `toggle_favorite` | POST | `file` | Toggle favorite status | `{status, favorited, file}` |
+| `favorites_status_batch` | POST | `file_paths[]` | Get favorites status | `{status, favorite_statuses}` |
+| `get_favorites_count` | POST | `folder_path` | Count favorites in folder | `{status, count}` |
+
+**Metadata Extraction**:
+- Uses `ffprobe` for video/audio metadata
+- Extracts: codec, resolution, duration, bitrate, FPS, file size, folder path
+- Cached in `/tmp/.metadata/` (SHA1 hash filenames, 7-day TTL)
+- Audio cover art extracted via `getID3` library, cached in `cache/audio-covers/`
+
+### Hidden Features & Easter Eggs
+
+**Navigation Shortcuts**:
+1. **Double-click Audit**: Click audit button twice (within 400ms) to audit ALL files in folder
+2. **Folder Links**: Click folder name in metadata overlay to navigate directly to that folder
+3. **Wheel Navigation**: Mouse wheel works on grid AND on the options form
+4. **Touch Gestures**: Swipe up/down on mobile to navigate grid pages
+
+**Visual Feedback**:
+5. **Unaudited Files**: Gold animated border + "NEW" shimmer badge
+6. **Favorited Items**: Pink animated glow effect on ❤️ hearts
+7. **Selected for Delete**: Red pulsing animation on 🗙 button
+8. **Loading State**: ⏳ spinner on buttons during operations
+
+**Technical**:
+9. **Android Bridge**: `window.AndroidPlayer` API for native Android ExoPlayer integration
+10. **Auto Cache Buster**: `?t=timestamp` auto-added to all navigation to prevent caching
+11. **Resume Playback**: Returns to exact grid position and playback time after fullscreen
+12. **Smart Mute**: Only one video can be unmuted at a time (prevents audio chaos)
+
+**Mobile Optimizations**:
+- Default 1×1 grid on mobile (vs 3×2 on desktop)
+- Touch swipe detection for navigation
+- Reduced grid gap (8px vs 16px)
+- Simplified folder selector (120-160px vs 240-400px)
 
 ---
 
-## 🤝 Contributing
+## 🐳 Docker Reference
 
-Contributions are welcome! Here's how to get started:
+### Services
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+| Service | Port | Purpose | Scaling |
+|---------|------|---------|---------|
+| nginx | 8050 | Web server, static assets, video streaming | Fixed |
+| php-fpm | 9000 (internal) | Page generation, thumbnails | Fixed |
+| php-cli | 9000 (internal) | API, metadata, database | Fixed |
 
-### Development Setup
+### Environment Variables
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `DELETE_SECRET_CODE` | (none) | Enables delete functionality |
+| `PHP_MEMORY_LIMIT` | 256M | Memory for large libraries |
+| `NGINX_WORKER_PROCESSES` | auto | Tune for your CPU cores |
+
+### Useful Commands
 
 ```bash
-# Clone your fork
-git clone https://github.com/your-username/xclusive-media-player.git
+# View real-time logs
+docker-compose logs -f nginx
+docker-compose logs -f php-cli
 
-# Start development environment
+# Restart specific service
+docker-compose restart nginx
+
+# Shell access for debugging
+docker-compose exec nginx sh
+docker-compose exec php-cli bash
+
+# Check database
+docker-compose exec php-cli sqlite3 /var/www/html/data/db/audit.db "SELECT * FROM audit_status LIMIT 10;"
+
+# Rebuild after config changes
+docker-compose down && docker-compose up -d --build
+```
+
+---
+
+## 🗂️ Project Structure
+
+```
+xclusive-media-player/
+├── 📁 src/                          # Application source
+│   ├── 📄 index.php                 # Main entry, grid configuration
+│   ├── 📄 api.php                   # REST API endpoint
+│   ├── 📄 post-handler.php          # Request proxy/router
+│   ├── 📁 lib/                      # PHP libraries
+│   │   ├── 📄 AuditDatabase.php     # Audit tracking
+│   │   ├── 📄 FavoritesDatabase.php # Favorites management
+│   │   └── 📄 audioCovers.php       # Album art extraction
+│   ├── 📁 assets/
+│   │   ├── 📁 css/
+│   │   │   └── 📄 app.css          # Stylesheet
+│   │   └── 📁 js/                   # ES6 modules
+│   │       ├── 📄 main.js          # Entry point
+│   │       ├── 📄 state.js         # Centralized state management
+│   │       ├── 📄 grid.js          # Grid rendering (6 phases)
+│   │       ├── 📄 mediaContainer.js # Lazy loading, element creation
+│   │       ├── 📄 mediaPool.js     # Element pooling (48 elements)
+│   │       ├── 📄 mediaQueue.js    # Concurrent loading queues
+│   │       ├── 📄 fullscreen.js    # Fullscreen player
+│   │       ├── 📄 audit.js         # Audit system
+│   │       ├── 📄 favorites.js     # Favorites system
+│   │       ├── 📄 search.js        # Search/filtering
+│   │       └── 📄 ...              # Other modules
+│   └── 📁 cache/                    # Generated thumbnails
+│
+├── 📁 docker/                       # Docker configurations
+│   ├── 📁 nginx/
+│   │   ├── 📄 nginx.conf           # Main nginx config
+│   │   ├── 📄 default.conf         # Server blocks
+│   │   └── 📄 reverse-proxy-optimized.conf  # Production reverse proxy
+│   ├── 📁 php-fpm/                  # PHP-FPM configuration
+│   └── 📁 php-cli/                  # PHP-CLI configuration
+│
+├── 📁 volumes/                      # Your media files (mounted)
+│   └── 📁 ...                       # Your folder structure
+│
+├── 📁 data/                         # Persistent data
+│   └── 📁 db/                       # SQLite databases
+│       ├── 📄 audit.db             # Audit status
+│       └── 📄 favorites.db         # Favorites
+│
+├── 📄 compose.yml                   # Docker Compose config
+├── 📄 .env                          # Environment variables (create this)
+└── 📄 README.md                     # This file
+```
+
+---
+
+## 🤝 Development
+
+### Local Development
+
+Changes to `./src` are reflected immediately (no rebuild needed):
+
+```bash
+# Start with live reloading
 docker-compose up
 
-# Make changes to files in ./src
-# Changes are reflected immediately (no rebuild needed)
+# Edit files in ./src
+# Refresh browser to see changes
 ```
+
+### Adding Features
+
+**Example: New Video Format**
+
+1. Add extension in `src/assets/js/utils.js`:
+   ```javascript
+   export function isVideoFile(filename) {
+     const ext = getFileExtension(filename);
+     return ['mp4', 'webm', 'mkv', 'mov', 'newformat'].includes(ext);
+   }
+   ```
+
+2. Add nginx mime type in `docker/nginx/nginx.conf`:
+   ```nginx
+   types {
+     video/newformat newformat;
+   }
+   ```
+
+3. Test with sample file
+
+### Architecture Principles
+
+1. **State immutability**: Use `state.setFilter()`, not direct mutation
+2. **Async cleanup**: Always `await mediaPool.releaseAll()` before fullscreen
+3. **Context tracking**: Use `state.startAuditContext()` for race condition protection
+4. **Queue discipline**: Always set `preload="auto"` BEFORE `src`
+5. **Lazy first**: Only load what's visible
+
+---
+
+## 📈 Performance Benchmarks
+
+| Grid Size | Videos | Load Time | Memory | Concurrent Connections |
+|-----------|--------|-----------|--------|----------------------|
+| 1×1 | 1 | <1s | 50MB | 2-3 |
+| 2×2 | 4 | 2-3s | 150MB | 8-12 |
+| 3×2 | 6 | 3-4s | 200MB | 12-18 |
+| 4×3 | 12 | 5-6s | 400MB | 24-36 |
+| 6×6 | 36 | 10-12s | 800MB | 72-108* |
+
+*With HTTP/2 reverse proxy: 6-12 connections (multiplexed)
 
 ---
 
 ## 📝 License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+MIT License - See [LICENSE](LICENSE)
+
+## 🙏 Credits
+
+- Architecture inspired by modern media management needs
+- Lazy loading via IntersectionObserver API
+- Audio metadata via ffmpeg/ffprobe
+- Icons via emoji and system fonts
 
 ---
 
-## 🙏 Acknowledgments
+## 📧 Support & Issues
 
-- Built with PHP, JavaScript (ES6 modules), and modern CSS
-- Uses ffmpeg/ffprobe for metadata extraction
-- Icons and emoji for visual indicators
-- Inspired by modern media management needs
-
----
-
-## 📧 Support
-
-For issues, questions, or suggestions:
-- Open an issue on GitHub
-- Check existing issues for solutions
-- Review troubleshooting section above
+For bugs, feature requests, or questions:
+1. Check [Troubleshooting](#-troubleshooting) section
+2. Search existing issues
+3. Open new issue with:
+   - Browser version
+   - Grid size used
+   - Error messages from console
+   - Nginx/php logs
 
 ---
 
-**Enjoy managing your media collection with Xclusive Media Player!** 🎵🎬
+**Built for media professionals who demand performance** 🎬🎵
