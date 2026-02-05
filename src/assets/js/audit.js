@@ -31,7 +31,7 @@ export function runAudit() {
   }
 }
 
-function auditCurrentView() {
+export function auditCurrentView() {
   // Get only the currently visible files (startIndex to startIndex + totalCells)
   const startIdx = state.startIndex;
   const endIdx = state.startIndex + state.totalCells;

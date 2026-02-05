@@ -3,7 +3,7 @@ import { state } from './state.js';
 import { nextGrid, prevGrid, renderGrid } from './grid.js';
 import { playAll, shufflePlay } from './fullscreen.js';
 import { initSearch, setupSearchListeners } from './search.js';
-import { runAudit } from './audit.js';
+import { runAudit, auditCurrentView } from './audit.js';
 import { setupUnauditedFilter } from './filter.js';
 import { toggleTileSelection, confirmDelete, selectAllFiles, clearAllSelections, isSelectAllMode, getSelectedTileCount } from './ui.js';
 
@@ -150,8 +150,10 @@ function setupDeleteHotkeys() {
       tileIndex = parseInt(key) - 1; // 1 becomes 0, 9 becomes 8
     } else if (key === '0') {
       tileIndex = 9; // 0 becomes 9 (10th tile)
-    } else if (key === 'Delete') {
+    } else if (key === 'Delete' || key.toLowerCase() === 'd') {
       // DEL key - two phase delete
+      // Skip if in fullscreen mode (fullscreen.js handles delete for single video)
+      if (isFullscreenActive) return;
       if (!state.deleteEnabled) return;
       e.preventDefault();
       
@@ -164,6 +166,11 @@ function setupDeleteHotkeys() {
         // Second Delete press or items already selected - confirm and delete
         confirmDelete();
       }
+      return;
+    } else if (key.toLowerCase() === 'a') {
+      // 'a' key - audit current view
+      e.preventDefault();
+      auditCurrentView();
       return;
     }
     
