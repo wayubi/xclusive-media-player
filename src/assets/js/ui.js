@@ -11,6 +11,202 @@ export function isSelectAllMode() {
   return selectAllMode;
 }
 
+function showScaryDeleteConfirmation() {
+  return new Promise((resolve) => {
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'scary-delete-modal';
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.9);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 999999;
+      animation: fadeIn 0.3s ease;
+    `;
+
+    // Create modal content
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+      background: linear-gradient(135deg, #8B0000 0%, #4a0000 100%);
+      border: 4px solid #ff0000;
+      border-radius: 20px;
+      padding: 40px;
+      max-width: 600px;
+      text-align: center;
+      box-shadow: 0 0 50px rgba(255, 0, 0, 0.8), inset 0 0 30px rgba(0, 0, 0, 0.5);
+      animation: shake 0.5s ease-in-out;
+    `;
+
+    // Warning icon
+    const icon = document.createElement('div');
+    icon.textContent = '⚠️';
+    icon.style.cssText = `
+      font-size: 80px;
+      margin-bottom: 20px;
+      animation: pulse 1s ease-in-out infinite;
+    `;
+
+    // Title
+    const title = document.createElement('h2');
+    title.textContent = '⚠️ DANGER ZONE ⚠️';
+    title.style.cssText = `
+      color: #ffff00;
+      font-size: 32px;
+      font-weight: bold;
+      margin: 0 0 20px 0;
+      text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.8);
+      letter-spacing: 3px;
+    `;
+
+    // Warning text
+    const warning = document.createElement('p');
+    warning.innerHTML = `
+      <strong style="color: #ff0000; font-size: 24px;">YOU ARE ABOUT TO DELETE:</strong><br><br>
+      <span style="color: #ffffff; font-size: 20px;">
+        • ALL files in this folder<br>
+        • ALL subfolders recursively<br>
+        • THE FOLDER ITSELF<br><br>
+      </span>
+      <span style="color: #ff6666; font-size: 18px;">
+        This action is <strong style="color: #ffff00;">PERMANENT</strong> and <strong style="color: #ffff00;">CANNOT BE UNDONE!</strong>
+      </span>
+    `;
+    warning.style.cssText = `
+      color: #ffffff;
+      font-size: 18px;
+      line-height: 1.6;
+      margin: 20px 0;
+    `;
+
+    // Final warning
+    const finalWarning = document.createElement('p');
+    finalWarning.textContent = 'Are you absolutely sure you want to proceed?';
+    finalWarning.style.cssText = `
+      color: #ffff00;
+      font-size: 22px;
+      font-weight: bold;
+      margin: 30px 0;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+    `;
+
+    // Button container
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.cssText = `
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      margin-top: 30px;
+    `;
+
+    // NO button
+    const noBtn = document.createElement('button');
+    noBtn.textContent = 'NO, CANCEL';
+    noBtn.style.cssText = `
+      background: linear-gradient(135deg, #228B22, #006400);
+      color: white;
+      border: 3px solid #00ff00;
+      padding: 15px 40px;
+      font-size: 20px;
+      font-weight: bold;
+      border-radius: 10px;
+      cursor: pointer;
+      box-shadow: 0 5px 15px rgba(0, 255, 0, 0.4);
+      transition: all 0.2s;
+    `;
+    noBtn.onmouseover = () => {
+      noBtn.style.transform = 'scale(1.05)';
+      noBtn.style.boxShadow = '0 8px 20px rgba(0, 255, 0, 0.6)';
+    };
+    noBtn.onmouseout = () => {
+      noBtn.style.transform = 'scale(1)';
+      noBtn.style.boxShadow = '0 5px 15px rgba(0, 255, 0, 0.4)';
+    };
+
+    // YES button
+    const yesBtn = document.createElement('button');
+    yesBtn.textContent = 'YES, DELETE EVERYTHING';
+    yesBtn.style.cssText = `
+      background: linear-gradient(135deg, #8B0000, #4a0000);
+      color: white;
+      border: 3px solid #ff0000;
+      padding: 15px 40px;
+      font-size: 20px;
+      font-weight: bold;
+      border-radius: 10px;
+      cursor: pointer;
+      box-shadow: 0 5px 15px rgba(255, 0, 0, 0.4);
+      transition: all 0.2s;
+    `;
+    yesBtn.onmouseover = () => {
+      yesBtn.style.transform = 'scale(1.05)';
+      yesBtn.style.boxShadow = '0 8px 20px rgba(255, 0, 0, 0.8)';
+    };
+    yesBtn.onmouseout = () => {
+      yesBtn.style.transform = 'scale(1)';
+      yesBtn.style.boxShadow = '0 5px 15px rgba(255, 0, 0, 0.4)';
+    };
+
+    // Add click handlers
+    noBtn.onclick = () => {
+      document.body.removeChild(overlay);
+      resolve(false);
+    };
+
+    yesBtn.onclick = () => {
+      document.body.removeChild(overlay);
+      resolve(true);
+    };
+
+    // Keyboard handler for ESC
+    const keyHandler = (e) => {
+      if (e.key === 'Escape') {
+        document.body.removeChild(overlay);
+        document.removeEventListener('keydown', keyHandler);
+        resolve(false);
+      }
+    };
+    document.addEventListener('keydown', keyHandler);
+
+    // Assemble modal
+    buttonContainer.appendChild(noBtn);
+    buttonContainer.appendChild(yesBtn);
+    modal.appendChild(icon);
+    modal.appendChild(title);
+    modal.appendChild(warning);
+    modal.appendChild(finalWarning);
+    modal.appendChild(buttonContainer);
+    overlay.appendChild(modal);
+
+    // Add animations
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+        20%, 40%, 60%, 80% { transform: translateX(5px); }
+      }
+      @keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.1); }
+      }
+    `;
+    document.head.appendChild(style);
+
+    // Show modal
+    document.body.appendChild(overlay);
+  });
+}
+
 export function setSelectAllMode(value) {
   selectAllMode = value;
 }
@@ -43,7 +239,7 @@ export function toggleTileSelection(index) {
   return true;
 }
 
-export function confirmDelete() {
+export async function confirmDelete() {
   const selected = Array.from(document.querySelectorAll('#grid .video-container button[data-selected="true"]'));
   const filesToDelete = selected.map(b => b.dataset.file);
   
@@ -57,8 +253,9 @@ export function confirmDelete() {
       return;
     }
     
-    // Get stats from the API response for the confirmation message
-    if (!confirm(`Delete all files, subfolders, and the current folder?`)) return;
+    // Show scary confirmation dialog
+    const confirmed = await showScaryDeleteConfirmation();
+    if (!confirmed) return;
     
     fetch('post-handler.php', {
       method: 'POST',
