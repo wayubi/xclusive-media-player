@@ -4,6 +4,14 @@ import { renderGrid } from './grid.js';
 import { mediaPool } from './mediaPool.js';
 
 export function startFullscreenFrom(file, startTime = 0) {
+  // Check if this file has an unsupported codec
+  if (state.hasUnsupportedCodec(file)) {
+    const meta = state.getFileMetadata(file);
+    const codec = meta?.video?.codec || 'unknown';
+    alert(`This file uses an unsupported video codec (${codec}).\n\nFile: ${file.split('/').pop()}\n\nTo play this file, you can:\n• Convert it to MP4 (H.264/AVC codec)\n• Download and play it locally in a media player`);
+    return;
+  }
+
   state.fullscreenMode = 'tile';
   state.lastFullscreen = { file, time: startTime };
   startFullscreenPlayer(state.allVideos, state.allVideos.indexOf(file), startTime);
@@ -23,9 +31,36 @@ export async function startFullscreenPlayer(playlist, index = 0, startTime = 0) 
   if (!playlist.length) return;
   let i = index;
 
+  // Filter out unsupported videos from playlist (check by codec)
+  const supportedPlaylist = playlist.filter(file => !state.hasUnsupportedCodec(file));
+
+  // If no supported videos, show message and return
+  if (supportedPlaylist.length === 0) {
+    alert('No supported video files in this folder.\n\nThis folder contains videos with unsupported codecs (WMV3, FLV1, MPEG4, etc.). Please convert these files to MP4 with H.264 codec.');
+    return;
+  }
+
+  // Find the closest supported video to the requested index
+  if (state.hasUnsupportedCodec(playlist[i])) {
+    // Find next supported video
+    let foundIndex = -1;
+    for (let j = 0; j < playlist.length; j++) {
+      const checkIdx = (i + j) % playlist.length;
+      if (!state.hasUnsupportedCodec(playlist[checkIdx])) {
+        foundIndex = supportedPlaylist.indexOf(playlist[checkIdx]);
+        break;
+      }
+    }
+    i = foundIndex >= 0 ? foundIndex : 0;
+  } else {
+    // Convert original index to filtered playlist index
+    i = supportedPlaylist.indexOf(playlist[index]);
+    if (i === -1) i = 0;
+  }
+
   // Android ExoPlayer support
   if (window.AndroidPlayer && window.useExoPlayer) {
-    AndroidPlayer.playFullscreen(JSON.stringify(playlist), i, startTime);
+    AndroidPlayer.playFullscreen(JSON.stringify(supportedPlaylist), i, startTime);
     return;
   }
 
@@ -74,8 +109,8 @@ export async function startFullscreenPlayer(playlist, index = 0, startTime = 0) 
   }
 
   function play(idx) {
-    i = (idx + playlist.length) % playlist.length;
-    const file = playlist[i];
+    i = (idx + supportedPlaylist.length) % supportedPlaylist.length;
+    const file = supportedPlaylist[i];
 
     if (mediaEl && state.lastFullscreen.file === file) {
       container.innerHTML = '';
@@ -103,25 +138,25 @@ export async function startFullscreenPlayer(playlist, index = 0, startTime = 0) 
     } else {
       state.lastFullscreen.time = 0;
     }
-    state.lastFullscreen.file = playlist[i];
+    state.lastFullscreen.file = supportedPlaylist[i];
 
-    state.startIndex = Math.floor(state.allVideos.indexOf(playlist[i]) / state.totalCells) * state.totalCells;
-    
+    state.startIndex = Math.floor(state.allVideos.indexOf(supportedPlaylist[i]) / state.totalCells) * state.totalCells;
+
     // Clean up fullscreen elements
     if (thumb) thumb.remove();
     if (mediaEl) mediaEl.remove();
     container.remove();
     document.removeEventListener('keydown', keyHandler);
-    
+
     // Force complete grid re-render to restore video sources
     renderGrid();
   }
 
-  createMedia(playlist[i], startTime);
+  createMedia(supportedPlaylist[i], startTime);
 
   // Event handlers
   setupFullscreenEvents(container, play, close, () => i);
-  const keyHandler = setupKeyboardHandler(playlist, play, close, () => i);
+  const keyHandler = setupKeyboardHandler(supportedPlaylist, play, close, () => i);
   document.addEventListener('keydown', keyHandler);
 }
 
@@ -208,67 +243,35 @@ function setupFullscreenEvents(container, play, close, getIndex) {
   container.addEventListener('click', e => {
     if (e.target === container) close();
   });
+
+  // Double-click on background to close
+  container.addEventListener('dblclick', e => {
+    if (e.target === container) close();
+  });
 }
 
 function setupKeyboardHandler(playlist, play, close, getIndex) {
-  return async (e) => {
+  return function keyHandler(e) {
     const i = getIndex();
-    
-    if (e.key === 'Escape' || [38, 40].includes(e.keyCode)) {
-      e.preventDefault();
-      return close();
-    }
-    
-    if (e.keyCode === 37) {
-      e.preventDefault();
-      play(i - 1);
-      return;
-    }
-    
-    if (e.keyCode === 39) {
-      e.preventDefault();
-      play(i + 1);
-      return;
-    }
 
-    if (e.key === 'Delete') {
-      // Check if deletes are enabled
-      if (!state.deleteEnabled) {
-        alert('Delete functionality is disabled. Contact administrator to enable.');
-        return;
-      }
-      
-      if (!confirm('Delete this file?')) return;
-      
-      const del = playlist[i];
-      try {
-        const resp = await fetch('post-handler.php', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'delete', files: [del] })
-        });
-        
-        const data = await resp.json();
-        if (data.error) throw new Error(data.error);
-
-        // Remove from playlist and all state structures
-        playlist.splice(i, 1);
-        state.deleteVideo(del);
-        
-        // Update audit display
-        import('./audit.js').then(module => {
-          module.updateAuditDisplay();
-        });
-        
-        renderGrid();
-
-        if (!playlist.length) return close();
-        const newI = i % playlist.length;
-        play(newI);
-      } catch (err) {
-        console.error(err);
-        alert('Delete failed');
-      }
+    switch (e.key) {
+      case 'ArrowRight':
+      case 'ArrowDown':
+      case ' ':
+        e.preventDefault();
+        play(i + 1);
+        break;
+      case 'ArrowLeft':
+      case 'ArrowUp':
+        e.preventDefault();
+        play(i - 1);
+        break;
+      case 'Escape':
+      case 'q':
+      case 'Q':
+        e.preventDefault();
+        close();
+        break;
     }
   };
 }

@@ -14,6 +14,7 @@ export const LAZY_LOAD_OFFSET = 200;
 export function createMediaContainer(file, index = 0) {
   const container = document.createElement('div');
   container.className = 'video-container';
+  container.dataset.file = file;
 
   // Check if file is audited
   const isAudited = state.isFileAudited(file);
@@ -37,14 +38,21 @@ export function createMediaContainer(file, index = 0) {
   };
   container.appendChild(heart);
 
+  // Determine file type by extension
   const ext = file.split('.').pop().toLowerCase();
   const isAudio = ['mp3','wav','ogg'].includes(ext);
-  const isVideo = ['mp4', 'webm', 'mkv', 'mov', 'm4v', '3gp', 'flv', 'wmv'].includes(ext);
+  const isVideo = ['mp4', 'webm', 'mkv', 'mov', 'm4v', '3gp', 'flv', 'wmv', 'avi', 'mpg', 'mpeg'].includes(ext);
   const isImage = ['jpg','jpeg','png','gif','webp'].includes(ext);
 
   let mediaEl = null;
 
-  if (isVideo || isAudio) {
+  // Check if we already have metadata for this file (from previous fetch)
+  const existingMeta = state.getFileMetadata(file);
+  if (existingMeta && isVideo && state.hasUnsupportedCodec(file)) {
+    // We already know it's unsupported, create placeholder
+    mediaEl = createUnsupportedPlaceholder(container, file);
+  } else if (isVideo || isAudio) {
+    // Create video/audio element (will be transformed to unsupported if needed after metadata)
     mediaEl = createLazyMediaElement(file, isVideo, isAudio, container);
   } else if (isImage) {
     mediaEl = createImageElement(file, container);
@@ -56,6 +64,153 @@ export function createMediaContainer(file, index = 0) {
   addFileInfoOverlay(container, file, isAudited);
 
   return container;
+}
+
+/**
+ * Transform a container to show unsupported video (called after metadata fetch)
+ */
+export function transformToUnsupportedVideo(container, file) {
+  // Skip if already transformed
+  if (container.classList.contains('unsupported-video')) return;
+
+  // Add unsupported video class for styling
+  container.classList.add('unsupported-video');
+
+  // Find and remove the video element (recycle it)
+  const videoEl = container.querySelector('video');
+  if (videoEl) {
+    // Cancel any pending loads
+    videoEl.removeAttribute('src');
+    videoEl.removeAttribute('data-src');
+    mediaPool.recycleElements([videoEl]);
+    videoEl.remove();
+  }
+
+  // Remove fullscreen and mute buttons from central overlay (keep delete and audit)
+  const centralOverlay = container.querySelector('.central-overlay');
+  if (centralOverlay) {
+    const buttons = centralOverlay.querySelectorAll('button');
+    buttons.forEach(btn => {
+      const btnText = btn.innerHTML;
+      const isFullscreen = btnText === '⛶';
+      const isMute = btnText === '🔇' || btnText === '🔊';
+      if (isFullscreen || isMute) {
+        btn.remove();
+      }
+    });
+  }
+
+  // Create unsupported video wrapper
+  if (!container.querySelector('.unsupported-video-wrapper')) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'unsupported-video-wrapper';
+
+    // Thumbnail image
+    const img = document.createElement('img');
+    img.src = state.audioThumbs[file] || 'cache/no-cover-vid.jpg';
+    img.className = 'unsupported-video-thumb';
+    img.loading = 'lazy';
+    wrapper.appendChild(img);
+
+    // Warning overlay
+    const warning = document.createElement('div');
+    warning.className = 'unsupported-video-warning';
+    warning.innerHTML = '⚠️ Not Playable';
+    wrapper.appendChild(warning);
+
+    // Format badge with codec name or error status
+    const meta = state.getFileMetadata(file);
+    let codecName, alertMessage;
+    
+    if (!meta || Object.keys(meta).length === 0) {
+      // No metadata at all
+      codecName = 'NO META';
+      alertMessage = `This file has no metadata and cannot be played.\n\nFile: ${file.split('/').pop()}\n\nThis may be a corrupted or fake video file.`;
+    } else if (!meta.video || !meta.video.codec) {
+      // Has metadata but no video codec info
+      codecName = 'NO VIDEO';
+      alertMessage = `This file has no video stream and cannot be played.\n\nFile: ${file.split('/').pop()}\n\nThis may be an audio-only file or corrupted.`;
+    } else {
+      // Has unsupported codec
+      codecName = meta.video.codec.toUpperCase();
+      alertMessage = `This file uses an unsupported video codec (${meta.video.codec}).\n\nFile: ${file.split('/').pop()}\n\nTo play this file, you can:\n• Convert it to MP4 (H.264/AVC codec)\n• Download and play it locally in a media player`;
+    }
+    
+    const badge = document.createElement('div');
+    badge.className = 'unsupported-video-badge';
+    badge.textContent = codecName;
+    wrapper.appendChild(badge);
+
+    // Click to show alert
+    wrapper.onclick = (e) => {
+      e.stopPropagation();
+      alert(alertMessage);
+    };
+
+    // Insert before overlays
+    const overlay = container.querySelector('.overlay');
+    if (overlay) {
+      container.insertBefore(wrapper, overlay);
+    } else {
+      container.appendChild(wrapper);
+    }
+  }
+}
+
+/**
+ * Create placeholder for unsupported videos (used when metadata already known)
+ */
+function createUnsupportedPlaceholder(container, file) {
+  container.classList.add('unsupported-video');
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'unsupported-video-wrapper';
+
+  // Thumbnail image
+  const img = document.createElement('img');
+  img.src = state.audioThumbs[file] || 'cache/no-cover-vid.jpg';
+  img.className = 'unsupported-video-thumb';
+  img.loading = 'lazy';
+  wrapper.appendChild(img);
+
+  // Warning overlay
+  const warning = document.createElement('div');
+  warning.className = 'unsupported-video-warning';
+  warning.innerHTML = '⚠️ Not Playable';
+  wrapper.appendChild(warning);
+
+  // Format badge with codec name or error status
+  const meta = state.getFileMetadata(file);
+  let codecName, alertMessage;
+
+  if (!meta || Object.keys(meta).length === 0) {
+    // No metadata at all
+    codecName = 'NO META';
+    alertMessage = `This file has no metadata and cannot be played.\n\nFile: ${file.split('/').pop()}\n\nThis may be a corrupted or fake video file.`;
+  } else if (!meta.video || !meta.video.codec) {
+    // Has metadata but no video codec info
+    codecName = 'NO VIDEO';
+    alertMessage = `This file has no video stream and cannot be played.\n\nFile: ${file.split('/').pop()}\n\nThis may be an audio-only file or corrupted.`;
+  } else {
+    // Has unsupported codec
+    codecName = meta.video.codec.toUpperCase();
+    alertMessage = `This file uses an unsupported video codec (${meta.video.codec}).\n\nFile: ${file.split('/').pop()}\n\nTo play this file, you can:\n• Convert it to MP4 (H.264/AVC codec)\n• Download and play it locally in a media player`;
+  }
+
+  const badge = document.createElement('div');
+  badge.className = 'unsupported-video-badge';
+  badge.textContent = codecName;
+  wrapper.appendChild(badge);
+
+  // Click to show alert
+  wrapper.onclick = (e) => {
+    e.stopPropagation();
+    alert(alertMessage);
+  };
+
+  container.appendChild(wrapper);
+
+  return wrapper;
 }
 
 /**

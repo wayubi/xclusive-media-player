@@ -30,6 +30,12 @@ export const state = {
   // Audit context tracking to prevent race conditions
   currentAuditContext: null,
   
+  // File metadata cache
+  fileMetadataMap: {},
+  
+  // Unsupported video codecs (these don't play in browsers)
+  unsupportedCodecs: ['wmv3', 'flv1', 'wmv2', 'mpeg4', 'wmv1', 'mpeg1video'],
+  
   // Initialize state from bootstrap data
   init(config) {
     this.allVideos = [...config.allVideos];
@@ -226,5 +232,33 @@ export const state = {
   
   clearAuditContext() {
     this.currentAuditContext = null;
+  },
+  
+  // Store metadata for a file
+  setFileMetadata(file, metadata) {
+    this.fileMetadataMap[file] = metadata;
+  },
+  
+  // Get metadata for a file
+  getFileMetadata(file) {
+    return this.fileMetadataMap[file] || null;
+  },
+  
+  // Check if a file has an unsupported codec OR no metadata at all
+  // Files with no metadata (empty/corrupted) are treated as unplayable
+  hasUnsupportedCodec(file) {
+    const meta = this.fileMetadataMap[file];
+    
+    // No metadata at all = treat as unplayable
+    if (!meta || Object.keys(meta).length === 0) {
+      return true;
+    }
+    
+    // No video codec info = treat as unplayable
+    if (!meta.video || !meta.video.codec) {
+      return true;
+    }
+    
+    return this.unsupportedCodecs.includes(meta.video.codec.toLowerCase());
   }
 };

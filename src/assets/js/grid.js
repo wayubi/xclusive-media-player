@@ -2,11 +2,12 @@
 import { state } from './state.js';
 import { mediaPool } from './mediaPool.js';
 import { mediaQueue } from './mediaQueue.js';
-import { createMediaContainer, LAZY_LOAD_OFFSET } from './mediaContainer.js';
+import { createMediaContainer, transformToUnsupportedVideo, LAZY_LOAD_OFFSET } from './mediaContainer.js';
 import { syncMuteIcons, clearSelectedTiles, clearAllSelections } from './ui.js';
 
 // IntersectionObserver for lazy loading media
 let gridObserver = null;
+let metadataPromise = null;
 
 /**
  * Main grid render function - orchestrates all phases
@@ -25,14 +26,15 @@ export function renderGrid() {
   // Phase 3: Populate - Create media containers (lazy loading)
   populateGridContainers(grid, visibleFiles);
 
-  // Phase 4: Metadata - Fetch file metadata
-  fetchMetadataBatch(grid, visibleFiles);
+  // Phase 4: Metadata - Fetch file metadata, then load videos
+  // Videos won't load until metadata is processed (to skip unsupported codecs)
+  fetchMetadataBatch(grid, visibleFiles).then(() => {
+    // Phase 5: Media Loading - Start after metadata is ready
+    startPrioritizedLoading(grid, visibleFiles);
 
-  // Phase 5: Media Loading - Start with prioritized lazy loading
-  startPrioritizedLoading(grid, visibleFiles);
-
-  // Phase 6: UI Finalization - Sync state and update counters
-  finalizeGridUI(grid);
+    // Phase 6: UI Finalization
+    finalizeGridUI(grid);
+  });
 }
 
 /**
@@ -100,11 +102,12 @@ function populateGridContainers(grid, visibleFiles) {
 /**
  * Phase 4: Metadata
  * Fetch file metadata in batch for visible items
+ * Returns a promise that resolves when metadata is processed
  */
 function fetchMetadataBatch(grid, visibleFiles) {
   const visibleFilesDecoded = visibleFiles.map(f => decodeURIComponent(f));
 
-  fetch('api.php', {
+  return fetch('api.php', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -119,6 +122,9 @@ function fetchMetadataBatch(grid, visibleFiles) {
       const decodedFile = decodeURIComponent(file);
       const meta = metas[decodedFile] || {};
 
+      // Store metadata in state
+      state.setFileMetadata(file, meta);
+
       const filenameElem = container.querySelector('.overlay > div:first-child');
       const metaElem = container.querySelector('.overlay > div:last-child');
 
@@ -131,6 +137,11 @@ function fetchMetadataBatch(grid, visibleFiles) {
         const parts = buildMetadataParts(meta);
         metaElem.innerHTML = parts.join(' • ');
       }
+
+      // Transform container if it has unsupported codec
+      if (state.hasUnsupportedCodec(file)) {
+        transformToUnsupportedVideo(container, file);
+      }
     });
   })
   .catch(() => {
@@ -142,9 +153,11 @@ function fetchMetadataBatch(grid, visibleFiles) {
  * Phase 5: Media Loading
  * Start with prioritized loading using IntersectionObserver
  * Priority: 1. Recent fullscreen video, 2. First cell, 3. Others lazy loaded
+ * Now runs AFTER metadata is fetched to skip unsupported videos
  */
 function startPrioritizedLoading(grid, visibleFiles) {
   // Find the priority media element (recent fullscreen or first)
+  // Skip unsupported videos (they won't have data-src after transformation)
   const mediaElements = Array.from(grid.querySelectorAll('audio[data-src], video[data-src]'));
   let priorityElement = null;
 
@@ -334,7 +347,7 @@ function navigateToFolder(folderPath) {
 export function nextGrid() {
   // Clear any delete selections before navigating
   clearDeleteSelections();
-  
+
   state.startIndex = (state.startIndex + state.totalCells) % state.allVideos.length;
   renderGrid();
 }
@@ -342,7 +355,7 @@ export function nextGrid() {
 export function prevGrid() {
   // Clear any delete selections before navigating
   clearDeleteSelections();
-  
+
   state.startIndex = (state.startIndex - state.totalCells + state.allVideos.length) % state.allVideos.length;
   renderGrid();
 }

@@ -1,4 +1,6 @@
 // utils.js - Utility functions
+import { state } from './state.js';
+
 export function setVhUnit() {
   document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`);
 }
@@ -24,10 +26,15 @@ export function isAudioFile(filename) {
 
 export function isVideoFile(filename) {
   const ext = getFileExtension(filename);
-  return ['mp4', 'webm', 'mkv', 'mov', 'm4v', '3gp', 'flv', 'wmv'].includes(ext);
+  return ['mp4', 'webm', 'mkv', 'mov', 'm4v', '3gp', 'flv', 'wmv', 'avi', 'mpg', 'mpeg'].includes(ext);
 }
 
 export function isImageFile(filename) {
   const ext = getFileExtension(filename);
   return ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext);
+}
+
+export function isUnsupportedVideoFile(file) {
+  // Check codec from stored metadata
+  return state.hasUnsupportedCodec(file);
 }
