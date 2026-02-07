@@ -27,7 +27,7 @@ export function startFullscreenFrom(file, startTime = 0) {
 
 function isTextFile(file) {
   const ext = file.split('.').pop().toLowerCase();
-  return ['txt', 'md', 'log', 'json', 'xml', 'csv', 'yaml', 'yml', 'conf', 'cfg', 'ini', 'nfo'].includes(ext);
+  return ['txt', 'md', 'log', 'json', 'xml', 'csv', 'yaml', 'yml', 'conf', 'cfg', 'ini', , 'sfv'].includes(ext);
 }
 
 export function playAll() {

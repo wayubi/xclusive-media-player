@@ -123,7 +123,7 @@ function getMetadataForFile(string $webPath, string $root, string $cacheDir): ?a
     }
 
     $ext = strtolower(pathinfo($fsPath, PATHINFO_EXTENSION));
-    $textExtensions = ['txt', 'nfo', 'md', 'log', 'json', 'xml', 'csv', 'yaml', 'yml', 'conf', 'cfg', 'ini'];
+    $textExtensions = ['txt', 'nfo', 'sfv', 'md', 'log', 'json', 'xml', 'csv', 'yaml', 'yml', 'conf', 'cfg', 'ini'];
 
     // Handle text files specially - don't use ffprobe
     if (in_array($ext, $textExtensions)) {

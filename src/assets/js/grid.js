@@ -140,7 +140,7 @@ function fetchMetadataBatch(grid, visibleFiles) {
 
       // Transform container if it has unsupported codec (but not for text files)
       const ext = file.split('.').pop().toLowerCase();
-      const isTextFile = ['txt', 'md', 'log', 'json', 'xml', 'csv', 'yaml', 'yml', 'conf', 'cfg', 'ini', 'nfo'].includes(ext);
+      const isTextFile = ['txt', 'md', 'log', 'json', 'xml', 'csv', 'yaml', 'yml', 'conf', 'cfg', 'ini', 'nfo', 'sfv'].includes(ext);
       if (!isTextFile && state.hasUnsupportedCodec(file)) {
         transformToUnsupportedVideo(container, file);
       }
