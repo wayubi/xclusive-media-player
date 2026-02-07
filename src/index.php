@@ -131,7 +131,7 @@ if ($nav_action !== null) {
     exit;
 }
 
-$selected_columns = $is_mobile ? 1 : max(1, min(6, (int)($_GET['columns'] ?? 3)));
+$selected_columns = $is_mobile ? 1 : max(1, min(6, (int)($_GET['columns'] ?? 5)));
 $selected_rows    = $is_mobile ? 1 : max(1, min(6, (int)($_GET['rows'] ?? 2)));
 $total_cells = $selected_columns * $selected_rows;
 
