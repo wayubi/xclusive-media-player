@@ -171,6 +171,7 @@ function getFiles(string $path): array {
     foreach ($it as $file) {
         $name = $file->getFilename();
         if (!$file->isFile() || $name[0] === '.') continue;
+        if (strtolower(pathinfo($name, PATHINFO_EXTENSION)) === 'nfo') continue;
         $pathname = $file->getPathname();
 
         foreach ($excluded as $folder) {
@@ -239,14 +240,15 @@ function getFolderAuditStatus(string $folderPath, $auditDb): string {
     foreach ($it as $file) {
         $name = $file->getFilename();
         if (!$file->isFile() || $name[0] === '.') continue;
+        if (strtolower(pathinfo($name, PATHINFO_EXTENSION)) === 'nfo') continue;
         $pathname = $file->getPathname();
-        
+
         foreach ($excluded as $folder) {
             if (strpos($pathname, "/$folder/") !== false) {
                 continue 2;
             }
         }
-        
+
         $files[] = $pathname;
     }
     
@@ -291,14 +293,15 @@ function countFilesInFolder(string $folderPath): int {
     foreach ($it as $file) {
         $name = $file->getFilename();
         if (!$file->isFile() || $name[0] === '.') continue;
+        if (strtolower(pathinfo($name, PATHINFO_EXTENSION)) === 'nfo') continue;
         $pathname = $file->getPathname();
-        
+
         foreach ($excluded as $folder) {
             if (strpos($pathname, "/$folder/") !== false) {
                 continue 2;
             }
         }
-        
+
         $count++;
     }
     
