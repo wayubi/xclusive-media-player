@@ -122,6 +122,24 @@ function getMetadataForFile(string $webPath, string $root, string $cacheDir): ?a
         return json_decode($json, true) ?: null;
     }
 
+    $ext = strtolower(pathinfo($fsPath, PATHINFO_EXTENSION));
+    $textExtensions = ['txt', 'nfo', 'md', 'log', 'json', 'xml', 'csv', 'yaml', 'yml', 'conf', 'cfg', 'ini'];
+
+    // Handle text files specially - don't use ffprobe
+    if (in_array($ext, $textExtensions)) {
+        $output = [
+            'file'     => basename($fsPath),
+            'folder'   => basename(dirname($fsPath)),
+            'filesize' => filesize($fsPath),
+            'text'     => [
+                'encoding' => detectTextEncoding($fsPath),
+            ],
+        ];
+
+        file_put_contents($cacheFile, json_encode($output, JSON_PRETTY_PRINT));
+        return $output;
+    }
+
     $cmd = sprintf(
         'ffprobe -v quiet -print_format json -show_format -show_streams %s',
         escapeshellarg($fsPath)
@@ -171,6 +189,43 @@ function getMetadataForFile(string $webPath, string $root, string $cacheDir): ?a
     file_put_contents($cacheFile, json_encode($output, JSON_PRETTY_PRINT));
 
     return $output;
+}
+
+/**
+ * Detect the encoding of a text file
+ * Returns 'utf-8', 'ascii', 'iso-8859-1' (ANSI), or 'binary'
+ */
+function detectTextEncoding(string $filePath): string
+{
+    $handle = fopen($filePath, 'rb');
+    if (!$handle) {
+        return 'binary';
+    }
+
+    // Read first 8KB for detection
+    $content = fread($handle, 8192);
+    fclose($handle);
+
+    // Check for UTF-8 BOM
+    if (substr($content, 0, 3) === "\xEF\xBB\xBF") {
+        return 'utf-8-bom';
+    }
+
+    // Try to detect encoding using mb_check_encoding
+    if (mb_check_encoding($content, 'UTF-8')) {
+        // Check if it's pure ASCII
+        if (preg_match('/^[\x00-\x7F]*$/', $content)) {
+            return 'ascii';
+        }
+        return 'utf-8';
+    }
+
+    // Check if it could be Windows-1252 / ISO-8859-1 (ANSI)
+    if (mb_check_encoding($content, 'Windows-1252') || mb_check_encoding($content, 'ISO-8859-1')) {
+        return 'ansi';
+    }
+
+    return 'binary';
 }
 
 switch ($action) {

@@ -244,21 +244,30 @@ export const state = {
     return this.fileMetadataMap[file] || null;
   },
   
-  // Check if a file has an unsupported codec OR no metadata at all
-  // Files with no metadata (empty/corrupted) are treated as unplayable
+  // Check if a file has an unsupported codec or no metadata
+  // Only applies to video files - text/audio files have different handling
   hasUnsupportedCodec(file) {
+    const ext = file.split('.').pop().toLowerCase();
+    const isVideoFile = ['mp4', 'webm', 'mkv', 'mov', 'm4v', '3gp', 'flv', 'wmv', 'avi', 'mpg', 'mpeg'].includes(ext);
+
+    // Only check video files
+    if (!isVideoFile) {
+      return false;
+    }
+
     const meta = this.fileMetadataMap[file];
-    
-    // No metadata at all = treat as unplayable
+
+    // No metadata at all = unplayable (corrupted/empty video file)
     if (!meta || Object.keys(meta).length === 0) {
       return true;
     }
-    
-    // No video codec info = treat as unplayable
+
+    // No video codec info = unplayable (not a valid video)
     if (!meta.video || !meta.video.codec) {
       return true;
     }
-    
+
+    // Check if codec is unsupported
     return this.unsupportedCodecs.includes(meta.video.codec.toLowerCase());
   }
 };

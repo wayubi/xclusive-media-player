@@ -300,7 +300,6 @@ body {
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  z-index: 1;
 }
 
 /* Thumbnail for unsupported videos */
@@ -349,16 +348,6 @@ body {
   transition: opacity 0.2s ease;
 }
 
-/* Hide badge on container hover so buttons below are accessible */
-.video-container.unsupported-video:hover .unsupported-video-badge {
-  opacity: 0 !important;
-}
-
-/* Also hide when hovering over the wrapper itself */
-.unsupported-video-wrapper:hover .unsupported-video-badge {
-  opacity: 0 !important;
-}
-
 /* Favorite heart icon */
 .favorite-heart {
   position: absolute;
@@ -404,6 +393,180 @@ body {
 
 #favorites-count:hover {
   color: #ec4899;
+}
+
+/* ============================================
+   TEXT FILE STYLING
+   ============================================ */
+
+/* Container for text files */
+.text-file-container {
+  background: linear-gradient(135deg, rgba(15, 20, 25, 0.95), rgba(10, 15, 20, 0.98));
+  border: 1px solid rgba(100, 150, 200, 0.2);
+}
+
+/* Wrapper for text content */
+.text-file-wrapper {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  cursor: default;
+  background: rgba(10, 12, 16, 0.95);
+  position: relative;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(168, 85, 247, 0.4) rgba(0, 0, 0, 0.3);
+}
+
+/* Webkit scrollbar styling */
+.text-file-wrapper::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.text-file-wrapper::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 3px;
+}
+
+.text-file-wrapper::-webkit-scrollbar-thumb {
+  background: rgba(168, 85, 247, 0.4);
+  border-radius: 3px;
+}
+
+.text-file-wrapper::-webkit-scrollbar-thumb:hover {
+  background: rgba(168, 85, 247, 0.6);
+}
+
+/* Loading placeholder */
+.text-file-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: rgba(255, 255, 255, 0.5);
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Preformatted text content */
+.text-file-content {
+  margin: 0;
+  padding: 12px 16px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #e2e8f0;
+  white-space: pre;
+  word-wrap: normal;
+  overflow-wrap: normal;
+  tab-size: 4;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Syntax highlighting colors for common elements */
+.text-file-content .keyword { color: #c084fc; }
+.text-file-content .string { color: #4ade80; }
+.text-file-content .comment { color: #6b7280; }
+.text-file-content .number { color: #f472b6; }
+
+/* Fullscreen text viewer */
+.text-fullscreen-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(5, 7, 10, 0.98);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  backdrop-filter: blur(20px);
+}
+
+.text-fullscreen-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 2px solid rgba(168, 85, 247, 0.4);
+  background: linear-gradient(135deg, rgba(20, 20, 30, 0.95), rgba(30, 20, 40, 0.95));
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+  z-index: 10000;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.text-fullscreen-close:hover {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.9), rgba(139, 92, 246, 0.8));
+  border-color: var(--accent-glow);
+  transform: scale(1.1);
+}
+
+.text-fullscreen-title {
+  padding: 20px 80px 20px 30px;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 18px;
+  font-weight: 600;
+  color: #fff;
+  border-bottom: 1px solid rgba(168, 85, 247, 0.2);
+  background: linear-gradient(90deg, rgba(168, 85, 247, 0.1), transparent);
+}
+
+.text-fullscreen-content {
+  flex: 1;
+  overflow: auto;
+  padding: 30px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(168, 85, 247, 0.5) rgba(0, 0, 0, 0.5);
+}
+
+.text-fullscreen-content::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.text-fullscreen-content::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 6px;
+}
+
+.text-fullscreen-content::-webkit-scrollbar-thumb {
+  background: rgba(168, 85, 247, 0.5);
+  border-radius: 6px;
+  border: 2px solid rgba(0, 0, 0, 0.5);
+}
+
+.text-fullscreen-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(168, 85, 247, 0.7);
+}
+
+.text-fullscreen-content pre {
+  margin: 0;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #e2e8f0;
+  white-space: pre;
+  word-wrap: normal;
+  overflow-wrap: normal;
+  tab-size: 4;
+}
+
+.text-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: rgba(255, 255, 255, 0.5);
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 16px;
 }
 
 /* Central overlay buttons - modern design */
@@ -519,8 +682,8 @@ body {
   position: absolute;
   inset: 0;
   background: linear-gradient(
-    to top, 
-    rgba(0, 0, 0, 0.9) 0%, 
+    to top,
+    rgba(0, 0, 0, 0.9) 0%,
     rgba(0, 0, 0, 0.6) 40%,
     transparent 80%
   );
@@ -533,6 +696,7 @@ body {
   padding: 20px;
   pointer-events: none;
   border-radius: var(--radius);
+  z-index: 10;
 }
 
 .video-container:hover .overlay {

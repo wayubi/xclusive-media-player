@@ -2,7 +2,7 @@
 import { state } from './state.js';
 import { mediaPool } from './mediaPool.js';
 import { mediaQueue } from './mediaQueue.js';
-import { createMediaContainer, transformToUnsupportedVideo, LAZY_LOAD_OFFSET } from './mediaContainer.js';
+import { createMediaContainer, transformToUnsupportedVideo, loadTextContent, LAZY_LOAD_OFFSET } from './mediaContainer.js';
 import { syncMuteIcons, clearSelectedTiles, clearAllSelections } from './ui.js';
 
 // IntersectionObserver for lazy loading media
@@ -138,8 +138,10 @@ function fetchMetadataBatch(grid, visibleFiles) {
         metaElem.innerHTML = parts.join(' • ');
       }
 
-      // Transform container if it has unsupported codec
-      if (state.hasUnsupportedCodec(file)) {
+      // Transform container if it has unsupported codec (but not for text files)
+      const ext = file.split('.').pop().toLowerCase();
+      const isTextFile = ['txt', 'md', 'log', 'json', 'xml', 'csv', 'yaml', 'yml', 'conf', 'cfg', 'ini', 'nfo'].includes(ext);
+      if (!isTextFile && state.hasUnsupportedCodec(file)) {
         transformToUnsupportedVideo(container, file);
       }
     });
@@ -183,6 +185,12 @@ function startPrioritizedLoading(grid, visibleFiles) {
     setupLazyLoading(elementsToLazyLoad);
   }
 
+  // Also lazy load text files
+  const textWrappers = Array.from(grid.querySelectorAll('.text-file-wrapper:not([data-loaded])'));
+  if (textWrappers.length > 0) {
+    setupTextLazyLoading(textWrappers);
+  }
+
   // Process queues with reduced concurrency for large grids
   const gridSize = visibleFiles.length;
   const maxConcurrent = gridSize > 6 ? 3 : 6; // Reduce for large grids
@@ -216,6 +224,27 @@ function loadMediaElement(element, isPriority = false) {
 }
 
 /**
+ * Unified IntersectionObserver callback that handles both videos and text files
+ */
+function handleIntersection(entries) {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const element = entry.target;
+      
+      // Check if it's a text file wrapper
+      if (element.classList.contains('text-file-wrapper')) {
+        loadTextContent(element);
+      } else {
+        // It's a video/audio element
+        loadMediaElement(element);
+      }
+      
+      gridObserver.unobserve(element);
+    }
+  });
+}
+
+/**
  * Setup IntersectionObserver for lazy loading
  */
 function setupLazyLoading(elements) {
@@ -224,16 +253,8 @@ function setupLazyLoading(elements) {
     gridObserver.disconnect();
   }
 
-  // Create new observer
-  gridObserver = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        const element = entry.target;
-        loadMediaElement(element);
-        gridObserver.unobserve(element);
-      }
-    });
-  }, {
+  // Create unified observer
+  gridObserver = new IntersectionObserver(handleIntersection, {
     root: null,
     rootMargin: `${LAZY_LOAD_OFFSET}px`,
     threshold: 0.1
@@ -241,6 +262,23 @@ function setupLazyLoading(elements) {
 
   // Observe all elements
   elements.forEach(el => gridObserver.observe(el));
+}
+
+/**
+ * Setup IntersectionObserver for lazy loading text files
+ */
+function setupTextLazyLoading(textWrappers) {
+  // Use existing observer or create new one
+  if (!gridObserver) {
+    gridObserver = new IntersectionObserver(handleIntersection, {
+      root: null,
+      rootMargin: `${LAZY_LOAD_OFFSET}px`,
+      threshold: 0.1
+    });
+  }
+
+  // Observe all text wrappers
+  textWrappers.forEach(wrapper => gridObserver.observe(wrapper));
 }
 
 /**
@@ -276,6 +314,18 @@ function buildMetadataParts(meta) {
     const folderLink = `<span class="folder-link" style="cursor: pointer; text-decoration: underline; pointer-events: auto;">${meta.folder}</span>`;
     parts.push(folderLink);
   }
+
+  // Handle text file metadata
+  if (meta.text) {
+    if (meta.text.encoding) {
+      parts.push(meta.text.encoding.toUpperCase());
+    }
+    if (meta.filesize) {
+      parts.push((meta.filesize / 1024 / 1024).toFixed(2) + ' MB');
+    }
+    return parts;
+  }
+
   if (meta.video?.width && meta.video?.height) {
     parts.push(`${meta.video.width}×${meta.video.height}`);
   }

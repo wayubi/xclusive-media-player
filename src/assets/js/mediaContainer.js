@@ -43,6 +43,7 @@ export function createMediaContainer(file, index = 0) {
   const isAudio = ['mp3','wav','ogg'].includes(ext);
   const isVideo = ['mp4', 'webm', 'mkv', 'mov', 'm4v', '3gp', 'flv', 'wmv', 'avi', 'mpg', 'mpeg'].includes(ext);
   const isImage = ['jpg','jpeg','png','gif','webp'].includes(ext);
+  const isText = ['txt', 'md', 'log', 'json', 'xml', 'csv', 'yaml', 'yml', 'conf', 'cfg', 'ini', 'nfo'].includes(ext);
 
   let mediaEl = null;
 
@@ -56,6 +57,8 @@ export function createMediaContainer(file, index = 0) {
     mediaEl = createLazyMediaElement(file, isVideo, isAudio, container);
   } else if (isImage) {
     mediaEl = createImageElement(file, container);
+  } else if (isText) {
+    mediaEl = createTextContainer(file, container);
   } else {
     container.innerHTML = `<div style="color:red;padding:4px;">Unsupported: ${file}</div>`;
   }
@@ -211,6 +214,118 @@ function createUnsupportedPlaceholder(container, file) {
   container.appendChild(wrapper);
 
   return wrapper;
+}
+
+/**
+ * Create a text file container with lazy loading
+ */
+function createTextContainer(file, container) {
+  container.classList.add('text-file-container');
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'text-file-wrapper';
+  wrapper.dataset.src = file;
+
+  // Initial placeholder
+  const placeholder = document.createElement('div');
+  placeholder.className = 'text-file-placeholder';
+  placeholder.innerHTML = '📄 Loading...';
+  wrapper.appendChild(placeholder);
+
+  container.appendChild(wrapper);
+
+  return wrapper;
+}
+
+/**
+ * Load text content for a container (called from grid.js lazy loader)
+ */
+export function loadTextContent(wrapper) {
+  const file = wrapper.dataset.src;
+  if (!file || wrapper.dataset.loaded) return;
+
+  wrapper.dataset.loaded = 'true';
+
+  fetch(file)
+    .then(response => {
+      if (!response.ok) throw new Error('Failed to load');
+      return response.text();
+    })
+    .then(text => {
+      // Clear placeholder
+      wrapper.innerHTML = '';
+
+      // Create pre element for formatted text
+      const pre = document.createElement('pre');
+      pre.className = 'text-file-content';
+      pre.textContent = text;
+      wrapper.appendChild(pre);
+    })
+    .catch(() => {
+      wrapper.innerHTML = '<div class="text-file-placeholder" style="color: #ff6666;">❌ Error loading file</div>';
+    });
+}
+
+/**
+ * Show text file in fullscreen
+ */
+export function showTextFullscreen(file) {
+  const container = document.createElement('div');
+  container.className = 'text-fullscreen-container';
+
+  // Close button
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'text-fullscreen-close';
+  closeBtn.innerHTML = '✕';
+  closeBtn.onclick = () => container.remove();
+  container.appendChild(closeBtn);
+
+  // Title
+  const title = document.createElement('div');
+  title.className = 'text-fullscreen-title';
+  title.textContent = decodeURIComponent(file.split('/').pop());
+  container.appendChild(title);
+
+  // Content area
+  const contentArea = document.createElement('div');
+  contentArea.className = 'text-fullscreen-content';
+  contentArea.innerHTML = '<div class="text-loading">Loading...</div>';
+  container.appendChild(contentArea);
+
+  document.body.appendChild(container);
+
+  // Load content
+  fetch(file)
+    .then(response => {
+      if (!response.ok) throw new Error('Failed to load');
+      return response.text();
+    })
+    .then(text => {
+      const pre = document.createElement('pre');
+      pre.textContent = text;
+      contentArea.innerHTML = '';
+      contentArea.appendChild(pre);
+    })
+    .catch(() => {
+      contentArea.innerHTML = '<div class="text-loading" style="color: #ff6666;">Error loading file</div>';
+    });
+
+  // Close on Escape key
+  const keyHandler = (e) => {
+    if (e.key === 'Escape') {
+      container.remove();
+      document.removeEventListener('keydown', keyHandler);
+    }
+  };
+  document.addEventListener('keydown', keyHandler);
+
+  // Close on click outside content
+  container.addEventListener('click', (e) => {
+    if (e.target === container) {
+      container.remove();
+      document.removeEventListener('keydown', keyHandler);
+    }
+  });
 }
 
 /**

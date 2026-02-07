@@ -12,41 +12,58 @@ export function startFullscreenFrom(file, startTime = 0) {
     return;
   }
 
+  // Check if this is a text file
+  const ext = file.split('.').pop().toLowerCase();
+  const isTextFile = ['txt', 'md', 'log', 'json', 'xml', 'csv', 'yaml', 'yml', 'conf', 'cfg', 'ini'].includes(ext);
+  if (isTextFile) {
+    // Text files have their own fullscreen viewer
+    return;
+  }
+
   state.fullscreenMode = 'tile';
   state.lastFullscreen = { file, time: startTime };
   startFullscreenPlayer(state.allVideos, state.allVideos.indexOf(file), startTime);
 }
 
+function isTextFile(file) {
+  const ext = file.split('.').pop().toLowerCase();
+  return ['txt', 'md', 'log', 'json', 'xml', 'csv', 'yaml', 'yml', 'conf', 'cfg', 'ini', 'nfo'].includes(ext);
+}
+
 export function playAll() {
   state.fullscreenMode = 'playlist';
-  startFullscreenPlayer(state.allVideos, state.startIndex);
+  // Filter out text files from playlist
+  const videoPlaylist = state.allVideos.filter(file => !isTextFile(file));
+  startFullscreenPlayer(videoPlaylist, state.startIndex);
 }
 
 export function shufflePlay() {
   state.fullscreenMode = 'playlist';
-  startFullscreenPlayer([...state.allVideos].sort(() => Math.random() - 0.5), 0);
+  // Filter out text files from playlist
+  const videoPlaylist = state.allVideos.filter(file => !isTextFile(file));
+  startFullscreenPlayer([...videoPlaylist].sort(() => Math.random() - 0.5), 0);
 }
 
 export async function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
   if (!playlist.length) return;
   let i = index;
 
-  // Filter out unsupported videos from playlist (check by codec)
-  const supportedPlaylist = playlist.filter(file => !state.hasUnsupportedCodec(file));
+  // Filter out unsupported videos and text files from playlist
+  const supportedPlaylist = playlist.filter(file => !state.hasUnsupportedCodec(file) && !isTextFile(file));
 
   // If no supported videos, show message and return
   if (supportedPlaylist.length === 0) {
-    alert('No supported video files in this folder.\n\nThis folder contains videos with unsupported codecs (WMV3, FLV1, MPEG4, etc.). Please convert these files to MP4 with H.264 codec.');
+    alert('No supported video files in this folder.\n\nThis folder contains videos with unsupported codecs (WMV3, FLV1, MPEG4, etc.) or only text files. Please add compatible video files.');
     return;
   }
 
   // Find the closest supported video to the requested index
-  if (state.hasUnsupportedCodec(playlist[i])) {
+  if (state.hasUnsupportedCodec(playlist[i]) || isTextFile(playlist[i])) {
     // Find next supported video
     let foundIndex = -1;
     for (let j = 0; j < playlist.length; j++) {
       const checkIdx = (i + j) % playlist.length;
-      if (!state.hasUnsupportedCodec(playlist[checkIdx])) {
+      if (!state.hasUnsupportedCodec(playlist[checkIdx]) && !isTextFile(playlist[checkIdx])) {
         foundIndex = supportedPlaylist.indexOf(playlist[checkIdx]);
         break;
       }

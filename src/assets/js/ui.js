@@ -435,6 +435,9 @@ export function addCentralOverlay(container, mediaEl, file) {
 
   // Check if this is an unsupported video
   const isUnsupported = container.classList.contains('unsupported-video');
+  
+  // Check if this is a text file
+  const isTextFile = container.classList.contains('text-file-container');
 
   // Select/Delete button - only show if deletes are enabled
   if (state.deleteEnabled) {
@@ -446,21 +449,28 @@ export function addCentralOverlay(container, mediaEl, file) {
   const auditBtn = createAuditButton(file, container);
   overlay.appendChild(auditBtn);
 
-  // Fullscreen button - skip for unsupported videos
+  // Fullscreen/View button - skip for unsupported videos
   if (!isUnsupported) {
     const fsBtn = document.createElement('button');
     fsBtn.innerHTML = '⛶';
-    fsBtn.title = 'Fullscreen';
+    fsBtn.title = isTextFile ? 'View Fullscreen' : 'Fullscreen';
     fsBtn.onclick = e => {
       e.stopPropagation();
-      const time = mediaEl && typeof mediaEl.currentTime === 'number' ? mediaEl.currentTime : 0;
-      startFullscreenFrom(file, time);
+      if (isTextFile) {
+        // For text files, import and call showTextFullscreen
+        import('./mediaContainer.js').then(module => {
+          module.showTextFullscreen(file);
+        });
+      } else {
+        const time = mediaEl && typeof mediaEl.currentTime === 'number' ? mediaEl.currentTime : 0;
+        startFullscreenFrom(file, time);
+      }
     };
     overlay.appendChild(fsBtn);
   }
 
-  // Mute button for audio/video - skip for unsupported videos
-  if (!isUnsupported && mediaEl && (mediaEl.tagName === 'VIDEO' || mediaEl.tagName === 'AUDIO')) {
+  // Mute button for audio/video - skip for unsupported videos and text files
+  if (!isUnsupported && !isTextFile && mediaEl && (mediaEl.tagName === 'VIDEO' || mediaEl.tagName === 'AUDIO')) {
     const muteBtn = createMuteButton(mediaEl);
     overlay.appendChild(muteBtn);
   }
