@@ -217,7 +217,8 @@ function getCurrentPath(string $root, string $selected_path): string {
     if ($cachedRoot === null) {
         $cachedRoot = realpath($root) ?: $root;
     }
-    if (str_contains($selected_path, '..')) {
+    // Block path traversal: .. at start/end or as a directory component
+    if (preg_match('#(^|/)\.\.(/|$)#', $selected_path)) {
         return $cachedRoot;
     }
     $fullPath = $cachedRoot . DIRECTORY_SEPARATOR . ltrim($selected_path, '/\\');
