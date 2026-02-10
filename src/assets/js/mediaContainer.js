@@ -190,6 +190,10 @@ function createUnsupportedPlaceholder(container, file) {
     // No metadata at all
     codecName = 'NO META';
     alertMessage = `This file has no metadata and cannot be played.\n\nFile: ${file.split('/').pop()}\n\nThis may be a corrupted or fake video file.`;
+  } else if (meta.container && meta.container.includes('flv')) {
+    // FLV container - can't play in browsers even with H264
+    codecName = 'FLV';
+    alertMessage = `This file uses an FLV container format which cannot play in web browsers.\n\nFile: ${file.split('/').pop()}\n\nThe video codec (${meta.video?.codec || 'unknown'}) may be supported, but FLV containers are not.\n\nTo play this file, you can:\n• Convert it to MP4 format\n• Download and play it locally in VLC or another media player`;
   } else if (!meta.video || !meta.video.codec) {
     // Has metadata but no video codec info
     codecName = 'NO VIDEO';

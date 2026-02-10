@@ -170,6 +170,7 @@ function getMetadataForFile(string $webPath, string $root, string $cacheDir): ?a
         'filesize' => filesize($fsPath),
         'duration' => $meta['format']['duration'] ?? null,
         'bitrate'  => isset($meta['format']['bit_rate']) ? (int)$meta['format']['bit_rate'] : null,
+        'container'=> $meta['format']['format_name'] ?? null,
         'video'    => $video ? [
             'codec'   => $video['codec_name'] ?? null,
             'width'   => $video['width'] ?? null,

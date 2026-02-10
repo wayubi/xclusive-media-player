@@ -270,6 +270,11 @@ export const state = {
       return true;
     }
 
+    // Check for unsupported container formats (FLV containers can't play in browsers even with H264)
+    if (meta.container && meta.container.includes('flv')) {
+      return true;
+    }
+
     // Check if codec is unsupported
     return this.unsupportedCodecs.includes(meta.video.codec.toLowerCase());
   }

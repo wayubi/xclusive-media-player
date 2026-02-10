@@ -8,7 +8,14 @@ export function startFullscreenFrom(file, startTime = 0) {
   if (state.hasUnsupportedCodec(file)) {
     const meta = state.getFileMetadata(file);
     const codec = meta?.video?.codec || 'unknown';
-    alert(`This file uses an unsupported video codec (${codec}).\n\nFile: ${file.split('/').pop()}\n\nTo play this file, you can:\n• Convert it to MP4 (H.264/AVC codec)\n• Download and play it locally in a media player`);
+    const container = meta?.container || '';
+    
+    // Special message for FLV containers
+    if (container.includes('flv')) {
+      alert(`This file uses an FLV container format which cannot play in web browsers.\n\nFile: ${file.split('/').pop()}\n\nThe video codec (${codec}) may be supported, but FLV containers are not.\n\nTo play this file, you can:\n• Convert it to MP4 format\n• Download and play it locally in VLC or another media player`);
+    } else {
+      alert(`This file uses an unsupported video codec (${codec}).\n\nFile: ${file.split('/').pop()}\n\nTo play this file, you can:\n• Convert it to MP4 (H.264/AVC codec)\n• Download and play it locally in a media player`);
+    }
     return;
   }
 
