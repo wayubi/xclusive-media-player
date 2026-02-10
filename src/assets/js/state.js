@@ -260,9 +260,9 @@ export const state = {
 
     const meta = this.fileMetadataMap[file];
 
-    // No metadata at all = unplayable (corrupted/empty video file)
+    // No metadata = assume playable (metadata will be fetched when needed)
     if (!meta || Object.keys(meta).length === 0) {
-      return true;
+      return false;
     }
 
     // No video codec info = unplayable (not a valid video)

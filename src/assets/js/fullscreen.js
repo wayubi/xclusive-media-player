@@ -32,14 +32,16 @@ function isTextFile(file) {
 
 export function playAll() {
   state.fullscreenMode = 'playlist';
-  // Filter out text files from playlist
+  // Filter out text files from playlist - use originalVideos to get ALL videos regardless of filters
+  // const videoPlaylist = state.originalVideos.filter(file => !isTextFile(file));
   const videoPlaylist = state.allVideos.filter(file => !isTextFile(file));
   startFullscreenPlayer(videoPlaylist, state.startIndex);
 }
 
 export function shufflePlay() {
   state.fullscreenMode = 'playlist';
-  // Filter out text files from playlist
+  // Filter out text files from playlist - use originalVideos to get ALL videos regardless of filters
+  // const videoPlaylist = state.originalVideos.filter(file => !isTextFile(file));
   const videoPlaylist = state.allVideos.filter(file => !isTextFile(file));
   startFullscreenPlayer([...videoPlaylist].sort(() => Math.random() - 0.5), 0);
 }
