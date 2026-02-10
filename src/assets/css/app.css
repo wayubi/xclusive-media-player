@@ -907,3 +907,288 @@ body {
     min-width: 60px;
   }
 }
+
+/* Boss Screen - Cyberpunk Terminal Overlay */
+#boss-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  z-index: 99999;
+  display: none;
+  font-family: 'Courier New', 'Monaco', monospace;
+}
+
+#boss-screen.active {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Scanline effect */
+#boss-screen::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.15),
+    rgba(0, 0, 0, 0.15) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* CRT flicker effect */
+#boss-screen::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(18, 16, 16, 0.1);
+  opacity: 0;
+  pointer-events: none;
+  animation: crt-flicker 0.15s infinite;
+  z-index: 2;
+}
+
+@keyframes crt-flicker {
+  0% { opacity: 0.27861; }
+  5% { opacity: 0.34769; }
+  10% { opacity: 0.23604; }
+  15% { opacity: 0.90626; }
+  20% { opacity: 0.18128; }
+  25% { opacity: 0.83891; }
+  30% { opacity: 0.65583; }
+  35% { opacity: 0.67807; }
+  40% { opacity: 0.26559; }
+  45% { opacity: 0.84693; }
+  50% { opacity: 0.96019; }
+  55% { opacity: 0.08594; }
+  60% { opacity: 0.20313; }
+  65% { opacity: 0.71988; }
+  70% { opacity: 0.53455; }
+  75% { opacity: 0.37288; }
+  80% { opacity: 0.71428; }
+  85% { opacity: 0.70419; }
+  90% { opacity: 0.7003; }
+  95% { opacity: 0.36108; }
+  100% { opacity: 0.24387; }
+}
+
+.boss-terminal {
+  width: 90%;
+  max-width: 1000px;
+  max-height: 90vh;
+  background: rgba(0, 0, 0, 0.9);
+  border: 2px solid var(--accent);
+  box-shadow: 
+    0 0 20px rgba(168, 85, 247, 0.5),
+    inset 0 0 100px rgba(168, 85, 247, 0.05);
+  padding: 30px;
+  position: relative;
+  z-index: 10;
+  animation: terminal-pulse 4s ease-in-out infinite;
+  overflow-y: auto;
+}
+
+@keyframes terminal-pulse {
+  0%, 100% { 
+    border-color: var(--accent);
+    box-shadow: 0 0 20px rgba(168, 85, 247, 0.5), inset 0 0 100px rgba(168, 85, 247, 0.05);
+  }
+  25% { 
+    border-color: var(--accent-secondary);
+    box-shadow: 0 0 20px rgba(236, 72, 153, 0.5), inset 0 0 100px rgba(236, 72, 153, 0.05);
+  }
+  50% { 
+    border-color: #00ffff;
+    box-shadow: 0 0 20px rgba(0, 255, 255, 0.5), inset 0 0 100px rgba(0, 255, 255, 0.05);
+  }
+  75% { 
+    border-color: #ffff00;
+    box-shadow: 0 0 20px rgba(255, 255, 0, 0.5), inset 0 0 100px rgba(255, 255, 0, 0.05);
+  }
+}
+
+.boss-terminal::before {
+  content: "XCLUSIVE SYSTEMS v9.0 — SECURE TERMINAL ACCESS";
+  position: absolute;
+  top: 8px;
+  left: 15px;
+  font-size: 11px;
+  color: var(--accent);
+  opacity: 0.7;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.boss-ascii {
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--accent);
+  text-shadow: 0 0 10px currentColor;
+  margin: 30px 0 20px;
+  white-space: pre;
+  text-align: center;
+  animation: ascii-glow 2s ease-in-out infinite alternate;
+}
+
+@keyframes ascii-glow {
+  from {
+    color: var(--accent);
+    text-shadow: 0 0 10px var(--accent), 0 0 20px var(--accent);
+  }
+  to {
+    color: var(--accent-secondary);
+    text-shadow: 0 0 10px var(--accent-secondary), 0 0 20px var(--accent-secondary), 0 0 30px var(--accent-secondary);
+  }
+}
+
+.boss-output {
+  color: #00ff00;
+  font-size: 14px;
+  line-height: 1.6;
+  min-height: 200px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 10px 0;
+  margin: 20px 0;
+}
+
+.boss-output .output-line {
+  margin: 4px 0;
+  animation: text-flicker 0.1s ease-in-out;
+}
+
+.boss-output .output-line.error {
+  color: #ff4444;
+}
+
+.boss-output .output-line.success {
+  color: #44ff44;
+}
+
+.boss-output .output-line.info {
+  color: #4444ff;
+}
+
+.boss-output .output-line.warning {
+  color: #ffff44;
+}
+
+@keyframes text-flicker {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.boss-input-line {
+  display: flex;
+  align-items: center;
+  color: #00ff00;
+  font-size: 14px;
+  margin-top: 10px;
+}
+
+.boss-prompt {
+  color: var(--accent);
+  font-weight: bold;
+  margin-right: 8px;
+  text-shadow: 0 0 5px var(--accent);
+}
+
+.boss-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #00ff00;
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  flex: 1;
+  caret-color: #00ff00;
+}
+
+.boss-cursor {
+  display: inline-block;
+  width: 10px;
+  height: 18px;
+  background-color: #00ff00;
+  animation: cursor-blink 1s step-end infinite, cursor-color 4s infinite;
+  margin-left: 2px;
+  box-shadow: 0 0 5px currentColor;
+}
+
+@keyframes cursor-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+@keyframes cursor-color {
+  0% { background-color: var(--accent); }
+  25% { background-color: var(--accent-secondary); }
+  50% { background-color: #00ffff; }
+  75% { background-color: #ffff00; }
+  100% { background-color: var(--accent); }
+}
+
+.boss-help-text {
+  color: #666;
+  font-size: 12px;
+  text-align: center;
+  margin-top: 20px;
+  opacity: 0.7;
+}
+
+/* Matrix rain effect */
+.matrix-rain {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+  overflow: hidden;
+}
+
+.matrix-column {
+  position: absolute;
+  top: -100%;
+  color: #0f0;
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.8;
+  text-shadow: 0 0 5px #0f0;
+  animation: matrix-fall linear infinite;
+}
+
+@keyframes matrix-fall {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(200%); }
+}
+
+/* Self-destruct countdown */
+.selfdestruct-countdown {
+  font-size: 72px;
+  color: #ff0000;
+  text-align: center;
+  animation: countdown-pulse 1s ease-in-out infinite;
+  text-shadow: 0 0 20px #ff0000, 0 0 40px #ff0000;
+}
+
+@keyframes countdown-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.1); opacity: 0.8; }
+}
