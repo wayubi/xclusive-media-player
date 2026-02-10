@@ -5,7 +5,7 @@ import { playAll, shufflePlay } from './fullscreen.js';
 import { initSearch, setupSearchListeners } from './search.js';
 import { runAudit, auditCurrentView } from './audit.js';
 import { setupUnauditedFilter } from './filter.js';
-import { toggleTileSelection, confirmDelete, selectAllFiles, clearAllSelections, isSelectAllMode, getSelectedTileCount } from './ui.js';
+import { toggleTileSelection, confirmDelete, selectAllFiles, clearAllSelections, isSelectAllMode, getSelectedTileCount, syncMuteIcons } from './ui.js';
 
 let scrollDebounce = false;
 
@@ -50,6 +50,36 @@ function setupGridNavigation() {
   // Options form wheel
   const optionsForm = document.getElementById('options-form');
   if (optionsForm) addWheelListener(optionsForm);
+  
+  // Mouse hover unmuting
+  setupHoverUnmuting(grid);
+}
+
+function setupHoverUnmuting(grid) {
+  // Use mousemove to continuously unmute whatever container the mouse is over
+  grid.addEventListener('mousemove', (e) => {
+    // Only work if not globally muted
+    if (state.muted) return;
+    
+    const container = e.target.closest('.video-container');
+    if (!container) return;
+    
+    const mediaEl = container.querySelector('video, audio');
+    if (!mediaEl) return;
+    
+    // If this media is already unmuted, no need to do anything
+    if (!mediaEl.muted) return;
+    
+    // Mute all media
+    document.querySelectorAll('#grid video, #grid audio').forEach(m => m.muted = true);
+    
+    // Unmute the hovered one
+    mediaEl.muted = false;
+    mediaEl.play().catch(() => {});
+    
+    // Update mute icons on central overlay
+    syncMuteIcons();
+  });
 }
 
 function addWheelListener(element) {
