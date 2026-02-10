@@ -18,6 +18,9 @@ export const state = {
   currentPath: '',
   deleteEnabled: false, // NEW: Track if deletes are enabled
   
+  // Seek configuration (CTRL+SCROLL seek amount in seconds)
+  seekStepSeconds: 5,
+  
   // UI state
   startIndex: 0,
   lastFullscreen: { file: null, time: 0 },

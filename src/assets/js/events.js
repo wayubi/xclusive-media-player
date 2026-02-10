@@ -56,10 +56,65 @@ function addWheelListener(element) {
   element.addEventListener('wheel', (e) => {
     e.preventDefault();
     if (scrollDebounce) return;
+    
+    // Check if CTRL is pressed for seeking
+    if (e.ctrlKey) {
+      seekMediaUnderCursor(e);
+      return;
+    }
+    
     scrollDebounce = true;
     setTimeout(() => scrollDebounce = false, 200);
     e.deltaY < 0 ? prevGrid() : nextGrid();
   }, { passive: false });
+}
+
+function seekMediaUnderCursor(e) {
+  // Find the element under the mouse cursor
+  const element = document.elementFromPoint(e.clientX, e.clientY);
+  if (!element) return;
+  
+  // Find the video container
+  const container = element.closest('.video-container');
+  if (!container) return;
+  
+  // Find video or audio element within the container
+  const mediaEl = container.querySelector('video, audio');
+  if (!mediaEl || !mediaEl.duration) return;
+  
+  // Calculate seek direction and amount
+  const direction = e.deltaY < 0 ? -1 : 1;
+  const seekAmount = direction * state.seekStepSeconds;
+  
+  // Clamp the new time between 0 and duration
+  const newTime = Math.max(0, Math.min(mediaEl.duration, mediaEl.currentTime + seekAmount));
+  mediaEl.currentTime = newTime;
+  
+  // Show visual feedback
+  showSeekFeedback(container, direction, state.seekStepSeconds);
+}
+
+function showSeekFeedback(container, direction, seconds) {
+  // Remove any existing feedback
+  const existingFeedback = container.querySelector('.seek-feedback');
+  if (existingFeedback) {
+    existingFeedback.remove();
+  }
+  
+  // Create feedback element (styles are defined in CSS)
+  const feedback = document.createElement('div');
+  feedback.className = 'seek-feedback';
+  const arrow = direction > 0 ? '⏩' : '⏪';
+  const sign = direction > 0 ? '+' : '-';
+  feedback.textContent = `${arrow} ${sign}${seconds}s`;
+  
+  container.appendChild(feedback);
+  
+  // Fade out and remove after 1 second
+  setTimeout(() => {
+    feedback.style.opacity = '0';
+    setTimeout(() => feedback.remove(), 400);
+  }, 1000);
 }
 
 function setupGlobalControls() {
