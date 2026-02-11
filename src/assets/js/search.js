@@ -1,6 +1,7 @@
 // search.js - Search and filter functionality
 import { state } from './state.js';
 import { renderGrid } from './grid.js';
+import { isTerminalActive } from './terminal.js';
 
 let searchableItems = [];
 
@@ -92,6 +93,9 @@ export function setupSearchListeners() {
   });
 
   document.addEventListener('keydown', e => {
+    // Don't process if terminal is active
+    if (isTerminalActive()) return;
+    
     if (document.activeElement.matches('input, textarea')) {
       if (e.key === 'Escape') closeSearch();
       return;

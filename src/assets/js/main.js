@@ -3,6 +3,7 @@ import { state } from './state.js';
 import { renderGrid } from './grid.js';
 import { setupEventListeners } from './events.js';
 import { setVhUnit } from './utils.js';
+import { initTerminal } from './terminal.js';
 
 // Bootstrap from PHP
 const {
@@ -41,6 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setVhUnit();
   setupEventListeners();
   renderGrid();
+  initTerminal();
   
   // Initialize favorites display
   import('./favorites.js').then(module => {

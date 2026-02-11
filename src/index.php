@@ -564,7 +564,7 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
                 selectedColumns: <?= $selected_columns ?>,
                 webRoot: <?= json_encode($webRoot) ?>,
                 rootDirAbs: <?= json_encode($root_directory_absolute) ?>,
-                currentPath: <?= json_encode($current_path) ?>,
+                currentPath: <?= json_encode(str_replace($root_directory_absolute, '', $current_path)) ?>,
                 deleteEnabled: <?= $deleteEnabled ? 'true' : 'false' ?>
             };
         </script>

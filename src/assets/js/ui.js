@@ -2,6 +2,7 @@
 import { state } from './state.js';
 import { startFullscreenFrom } from './fullscreen.js';
 import { renderGrid } from './grid.js';
+import { isTerminalActive } from './terminal.js';
 
 // Track selected tiles for keyboard delete operations
 let selectedTiles = new Set();
@@ -165,6 +166,9 @@ function showScaryDeleteConfirmation() {
 
     // Keyboard handler for ESC
     const keyHandler = (e) => {
+      // Don't process if terminal is active
+      if (isTerminalActive()) return;
+      
       if (e.key === 'Escape') {
         document.body.removeChild(overlay);
         document.removeEventListener('keydown', keyHandler);

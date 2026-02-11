@@ -2,6 +2,7 @@
 import { state } from './state.js';
 import { renderGrid } from './grid.js';
 import { mediaPool } from './mediaPool.js';
+import { isTerminalActive } from './terminal.js';
 
 export function startFullscreenFrom(file, startTime = 0) {
   // Check if this file has an unsupported codec
@@ -278,6 +279,9 @@ function setupFullscreenEvents(container, play, close, getIndex) {
 
 function setupKeyboardHandler(playlist, play, close, getIndex) {
   return function keyHandler(e) {
+    // Don't process if terminal is active
+    if (isTerminalActive()) return;
+    
     const i = getIndex();
 
     switch (e.key) {

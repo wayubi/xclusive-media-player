@@ -3,6 +3,7 @@ import { state } from './state.js';
 import { mediaPool } from './mediaPool.js';
 import { addCentralOverlay, addFileInfoOverlay } from './ui.js';
 import { startFullscreenFrom } from './fullscreen.js';
+import { isTerminalActive } from './terminal.js';
 
 // Lazy loading offset - start loading when element is within this many pixels of viewport
 export const LAZY_LOAD_OFFSET = 200;
@@ -316,6 +317,9 @@ export function showTextFullscreen(file) {
 
   // Close on Escape key
   const keyHandler = (e) => {
+    // Don't process if terminal is active
+    if (isTerminalActive()) return;
+    
     if (e.key === 'Escape') {
       container.remove();
       document.removeEventListener('keydown', keyHandler);

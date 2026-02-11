@@ -49,6 +49,20 @@ switch ($data['action']) {
         ];
         break;
 
+    case 'terminal':
+        if (empty($data['command'])) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Missing command parameter']);
+            exit;
+        }
+
+        $payload = [
+            'action' => 'terminal',
+            'command' => $data['command'],
+            'currentDir' => $data['currentDir'] ?? '/volumes',
+        ];
+        break;
+
     default:
         http_response_code(400);
         echo json_encode(['error' => 'Unknown action']);

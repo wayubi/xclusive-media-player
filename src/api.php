@@ -229,6 +229,302 @@ function detectTextEncoding(string $filePath): string
     return 'binary';
 }
 
+// Terminal command helper functions
+function parseTerminalCommand($commandLine) {
+    $args = [];
+    $current = '';
+    $inQuotes = false;
+    $quoteChar = '';
+    
+    for ($i = 0; $i < strlen($commandLine); $i++) {
+        $char = $commandLine[$i];
+        
+        if (($char === '"' || $char === "'") && !$inQuotes) {
+            $inQuotes = true;
+            $quoteChar = $char;
+        } elseif ($char === $quoteChar && $inQuotes) {
+            $inQuotes = false;
+            $quoteChar = '';
+        } elseif ($char === ' ' && !$inQuotes) {
+            if ($current !== '') {
+                $args[] = $current;
+                $current = '';
+            }
+        } else {
+            $current .= $char;
+        }
+    }
+    
+    if ($current !== '') {
+        $args[] = $current;
+    }
+    
+    return $args;
+}
+
+function resolvePath($path, $currentDir, $root) {
+    // Handle ~ as /volumes
+    if ($path === '~' || str_starts_with($path, '~/')) {
+        $path = '/volumes' . substr($path, 1);
+    }
+    
+    // Handle relative paths
+    if (!str_starts_with($path, '/')) {
+        $path = $currentDir . '/' . $path;
+    }
+    
+    // Resolve to real path
+    $realPath = realpath($path);
+    
+    // Security check: must be within /volumes
+    if (!$realPath || !str_starts_with($realPath, $root)) {
+        return null;
+    }
+    
+    return $realPath;
+}
+
+function cmdLs($path, $currentDir, $root) {
+    $targetPath = resolvePath($path, $currentDir, $root);
+    
+    if ($targetPath === null) {
+        return "ls: cannot access '{$path}': No such file or directory";
+    }
+    
+    if (!is_dir($targetPath)) {
+        // If it's a file, just show the file
+        $stat = stat($targetPath);
+        $perms = fileperms($targetPath);
+        $permString = sprintf('%o', $perms & 0777);
+        $size = filesize($targetPath);
+        $date = date('M d H:i', $stat['mtime']);
+        $name = basename($targetPath);
+        return "-rw-r--r-- 1 root root " . str_pad($size, 10) . " {$date} {$name}";
+    }
+    
+    $output = [];
+    $entries = scandir($targetPath);
+    
+    foreach ($entries as $entry) {
+        if ($entry === '.' || $entry === '..') continue;
+        
+        $fullPath = $targetPath . '/' . $entry;
+        $stat = stat($fullPath);
+        $perms = fileperms($fullPath);
+        $isDir = is_dir($fullPath);
+        $permString = ($isDir ? 'd' : '-') . 'rwxrwxrwx';
+        $size = $isDir ? 4096 : filesize($fullPath);
+        $date = date('M d H:i', $stat['mtime']);
+        
+        $output[] = sprintf('%s %s %s %s %s',
+            $permString,
+            str_pad($stat['nlink'], 2),
+            str_pad($size, 10),
+            $date,
+            $entry . ($isDir ? '/' : '')
+        );
+    }
+    
+    return implode("\n", $output);
+}
+
+function cmdCd($path, $currentDir, $root) {
+    $targetPath = resolvePath($path, $currentDir, $root);
+    
+    if ($targetPath === null) {
+        return [
+            'output' => "cd: {$path}: No such file or directory",
+            'newDir' => $currentDir
+        ];
+    }
+    
+    if (!is_dir($targetPath)) {
+        return [
+            'output' => "cd: {$path}: Not a directory",
+            'newDir' => $currentDir
+        ];
+    }
+    
+    return [
+        'output' => '',
+        'newDir' => $targetPath
+    ];
+}
+
+function cmdCat($path, $currentDir, $root) {
+    $targetPath = resolvePath($path, $currentDir, $root);
+    
+    if ($targetPath === null) {
+        return "cat: {$path}: No such file or directory";
+    }
+    
+    if (is_dir($targetPath)) {
+        return "cat: {$path}: Is a directory";
+    }
+    
+    // Safety: only show text files, limit size
+    $ext = strtolower(pathinfo($targetPath, PATHINFO_EXTENSION));
+    $textExtensions = ['txt', 'nfo', 'sfv', 'md', 'log', 'json', 'xml', 'csv', 'yaml', 'yml', 'conf', 'cfg', 'ini', 'sh', 'php', 'js', 'css', 'html'];
+    
+    if (!in_array($ext, $textExtensions) && !empty($ext)) {
+        return "cat: {$path}: Binary file (use with caution)";
+    }
+    
+    $size = filesize($targetPath);
+    if ($size > 1048576) { // 1MB limit
+        return "cat: {$path}: File too large (max 1MB)";
+    }
+    
+    $content = file_get_contents($targetPath);
+    if ($content === false) {
+        return "cat: {$path}: Permission denied";
+    }
+    
+    return $content;
+}
+
+function cmdMkdir($path, $currentDir, $root) {
+    // Build the full path
+    $newPath = str_starts_with($path, '/') ? $path : $currentDir . '/' . $path;
+    
+    // Resolve to real path to check if it already exists
+    $realPath = realpath($newPath);
+    
+    if ($realPath !== false) {
+        // Path exists - check if it's a directory or file
+        if (is_dir($realPath)) {
+            return "mkdir: cannot create directory '{$path}': File exists";
+        } else {
+            return "mkdir: cannot create directory '{$path}': File exists";
+        }
+    }
+    
+    // Check if parent directory is within root
+    $parentDir = dirname($newPath);
+    $realParent = realpath($parentDir);
+    
+    if ($realParent === false || !str_starts_with($realParent, $root)) {
+        return "mkdir: cannot create directory '{$path}': Permission denied";
+    }
+    
+    // Create the directory
+    if (@mkdir($newPath, 0755, true)) {
+        return '';
+    } else {
+        $error = error_get_last();
+        return "mkdir: cannot create directory '{$path}': " . ($error['message'] ?? 'Permission denied');
+    }
+}
+
+function cmdRm($path, $currentDir, $root) {
+    $targetPath = resolvePath($path, $currentDir, $root);
+    
+    if ($targetPath === null) {
+        return "rm: cannot remove '{$path}': No such file or directory";
+    }
+    
+    if (is_dir($targetPath)) {
+        return "rm: cannot remove '{$path}': Is a directory";
+    }
+    
+    if (unlink($targetPath)) {
+        return '';
+    } else {
+        return "rm: cannot remove '{$path}': Permission denied";
+    }
+}
+
+function cmdRmdir($path, $currentDir, $root) {
+    $targetPath = resolvePath($path, $currentDir, $root);
+    
+    if ($targetPath === null) {
+        return "rmdir: failed to remove '{$path}': No such file or directory";
+    }
+    
+    if (!is_dir($targetPath)) {
+        return "rmdir: failed to remove '{$path}': Not a directory";
+    }
+    
+    $entries = scandir($targetPath);
+    $hasEntries = false;
+    foreach ($entries as $entry) {
+        if ($entry !== '.' && $entry !== '..') {
+            $hasEntries = true;
+            break;
+        }
+    }
+    
+    if ($hasEntries) {
+        return "rmdir: failed to remove '{$path}': Directory not empty";
+    }
+    
+    if (rmdir($targetPath)) {
+        return '';
+    } else {
+        return "rmdir: failed to remove '{$path}': Permission denied";
+    }
+}
+
+function cmdCp($src, $dst, $currentDir, $root) {
+    $srcPath = resolvePath($src, $currentDir, $root);
+    $dstPath = resolvePath($dst, $currentDir, $root);
+    
+    if ($srcPath === null) {
+        return "cp: cannot stat '{$src}': No such file or directory";
+    }
+    
+    if (is_dir($srcPath)) {
+        return "cp: -r not specified; omitting directory '{$src}'";
+    }
+    
+    // If dst is a directory, append src filename
+    if ($dstPath !== null && is_dir($dstPath)) {
+        $dstPath = $dstPath . '/' . basename($srcPath);
+    } elseif ($dstPath === null) {
+        // Try as new path
+        $dstPath = str_starts_with($dst, '/') ? $dst : $currentDir . '/' . $dst;
+    }
+    
+    // Security check on destination
+    if (!str_starts_with(realpath(dirname($dstPath)) ?: dirname($dstPath), $root)) {
+        return "cp: cannot create regular file '{$dst}': Permission denied";
+    }
+    
+    if (copy($srcPath, $dstPath)) {
+        return '';
+    } else {
+        return "cp: cannot create regular file '{$dst}': Permission denied";
+    }
+}
+
+function cmdMv($src, $dst, $currentDir, $root) {
+    $srcPath = resolvePath($src, $currentDir, $root);
+    $dstPath = resolvePath($dst, $currentDir, $root);
+    
+    if ($srcPath === null) {
+        return "mv: cannot stat '{$src}': No such file or directory";
+    }
+    
+    // If dst is a directory, append src filename
+    if ($dstPath !== null && is_dir($dstPath)) {
+        $dstPath = $dstPath . '/' . basename($srcPath);
+    } elseif ($dstPath === null) {
+        // Try as new path
+        $dstPath = str_starts_with($dst, '/') ? $dst : $currentDir . '/' . $dst;
+    }
+    
+    // Security check on destination
+    if (!str_starts_with(realpath(dirname($dstPath)) ?: dirname($dstPath), $root)) {
+        return "mv: cannot move '{$src}' to '{$dst}': Permission denied";
+    }
+    
+    if (rename($srcPath, $dstPath)) {
+        return '';
+    } else {
+        return "mv: cannot move '{$src}' to '{$dst}': Permission denied";
+    }
+}
+
 switch ($action) {
     case 'delete':
         $recursive = $data['recursive'] ?? false;
@@ -497,6 +793,134 @@ switch ($action) {
                 'error' => 'Failed to get favorites count: ' . $e->getMessage()
             ]);
         }
+        break;
+
+    case 'terminal':
+        // Execute terminal commands
+        $commandLine = $data['command'] ?? '';
+        $currentDir = $data['currentDir'] ?? '/volumes';
+        
+        if (empty($commandLine)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'No command provided']);
+            exit;
+        }
+        
+        // Parse the command
+        $args = parseTerminalCommand($commandLine);
+        $cmd = strtolower($args[0] ?? '');
+        
+        // Convert web path to filesystem path
+        // $currentDir comes in as web path (e.g., "/videos/action" or "/volumes/videos/action")
+        // We need to convert it to filesystem path (e.g., "/var/www/volumes/videos/action")
+        $cleanDir = ltrim(preg_replace('#^/volumes/?#i', '', $currentDir), '/');
+        $fsDir = $root . ($cleanDir ? '/' . $cleanDir : '');
+        
+        // Validate current directory
+        $currentDir = realpath($fsDir) ?: $root;
+        if (!str_starts_with($currentDir, $root)) {
+            $currentDir = $root;
+        }
+        
+        $output = '';
+        $newDir = $currentDir;
+        
+        switch ($cmd) {
+            case 'ls':
+                $path = $args[1] ?? '.';
+                $output = cmdLs($path, $currentDir, $root);
+                break;
+                
+            case 'cd':
+                if (!isset($args[1])) {
+                    // cd without arguments goes to home directory (/volumes)
+                    $newDir = $root;
+                    $output = '';
+                } else {
+                    $result = cmdCd($args[1], $currentDir, $root);
+                    $output = $result['output'];
+                    $newDir = $result['newDir'];
+                }
+                break;
+                
+            case 'pwd':
+                // Show web path instead of filesystem path
+                $relativePath = str_replace($root, '', $currentDir);
+                $relativePath = ltrim($relativePath, '/');
+                $output = '/volumes' . ($relativePath ? '/' . $relativePath : '');
+                break;
+                
+            case 'cat':
+                if (!isset($args[1])) {
+                    $output = 'cat: missing operand';
+                } else {
+                    $output = cmdCat($args[1], $currentDir, $root);
+                }
+                break;
+                
+            case 'mkdir':
+                if (!isset($args[1])) {
+                    $output = 'mkdir: missing operand';
+                } else {
+                    $output = cmdMkdir($args[1], $currentDir, $root);
+                }
+                break;
+                
+            case 'rm':
+                // Check delete authorization
+                $deleteEnabled = isset($_COOKIE['delete_enabled']) && $_COOKIE['delete_enabled'] === '1';
+                if (!$deleteEnabled) {
+                    $output = 'rm: Permission denied. Delete functionality is disabled.';
+                } elseif (!isset($args[1])) {
+                    $output = 'rm: missing operand';
+                } else {
+                    $output = cmdRm($args[1], $currentDir, $root);
+                }
+                break;
+                
+            case 'rmdir':
+                // Check delete authorization
+                $deleteEnabled = isset($_COOKIE['delete_enabled']) && $_COOKIE['delete_enabled'] === '1';
+                if (!$deleteEnabled) {
+                    $output = 'rmdir: Permission denied. Delete functionality is disabled.';
+                } elseif (!isset($args[1])) {
+                    $output = 'rmdir: missing operand';
+                } else {
+                    $output = cmdRmdir($args[1], $currentDir, $root);
+                }
+                break;
+                
+            case 'cp':
+                if (!isset($args[1]) || !isset($args[2])) {
+                    $output = 'cp: missing operand';
+                } else {
+                    $output = cmdCp($args[1], $args[2], $currentDir, $root);
+                }
+                break;
+                
+            case 'mv':
+                if (!isset($args[1]) || !isset($args[2])) {
+                    $output = 'mv: missing operand';
+                } else {
+                    $output = cmdMv($args[1], $args[2], $currentDir, $root);
+                }
+                break;
+                
+            default:
+                $output = "Command not found: {$cmd}";
+        }
+        
+        // Convert filesystem path back to web path for the response
+        // $newDir is a filesystem path like /var/www/html/videos/action
+        // We need to convert it to web path like /videos/action
+        $relativePath = str_replace($root, '', $newDir);
+        $relativePath = ltrim($relativePath, '/');
+        $webDir = '/volumes' . ($relativePath ? '/' . $relativePath : '');
+        
+        echo json_encode([
+            'output' => $output,
+            'currentDir' => $webDir
+        ]);
         break;
 
     default:

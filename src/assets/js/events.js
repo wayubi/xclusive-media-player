@@ -6,17 +6,9 @@ import { initSearch, setupSearchListeners } from './search.js';
 import { runAudit, auditCurrentView } from './audit.js';
 import { setupUnauditedFilter } from './filter.js';
 import { toggleTileSelection, confirmDelete, selectAllFiles, clearAllSelections, isSelectAllMode, getSelectedTileCount, syncMuteIcons } from './ui.js';
+import { toggleTerminal, isTerminalActive, hideTerminal } from './terminal.js';
 
 let scrollDebounce = false;
-
-// Boss Screen state variables (must be defined before setupDeleteHotkeys is called)
-let bossScreenActive = false;
-let bossScreenElement = null;
-let bossOutputElement = null;
-let bossInputElement = null;
-let bossCommandHistory = [];
-let bossHistoryIndex = -1;
-let bossPreviousMuteStates = new Map();
 
 export function setupEventListeners() {
   // Initialize search
@@ -194,6 +186,9 @@ function setupObjectFitToggle() {
 
   // Listen for "c" key
   document.addEventListener('keydown', (e) => {
+    // Don't process if terminal is active
+    if (isTerminalActive()) return;
+    
     if (e.key.toLowerCase() === 'c') {
       toggleObjectFit();
     }
@@ -213,13 +208,12 @@ function toggleObjectFit() {
 
 function setupDeleteHotkeys() {
   document.addEventListener('keydown', (e) => {
-    // If boss screen is active, don't process other hotkeys
-    if (bossScreenActive) {
-      // ESC is handled by the boss screen itself
+    // If terminal is active, only handle ESC to close it
+    if (isTerminalActive()) {
       if (e.key === 'Escape') {
         e.preventDefault();
         e.stopPropagation();
-        hideBossScreen();
+        hideTerminal();
       }
       return;
     }
@@ -290,373 +284,26 @@ function setupDeleteHotkeys() {
       }
     }
     
-    // 'b' key - boss screen
+    // '~' key (backtick/tilde) - toggle terminal (transparent mode)
+    if (key === '`' || key === '~') {
+      // Only block if fullscreen is active (delete mode is fine)
+      if (isFullscreenActive) return;
+      e.preventDefault();
+      // Pass the current web path (relative to /volumes) with transparent mode
+      toggleTerminal(state.currentPath || '', 'transparent');
+      return;
+    }
+    
+    // 'b' key - toggle terminal (privacy mode / boss screen style)
     if (key.toLowerCase() === 'b') {
       // Only block if fullscreen is active (delete mode is fine)
       if (isFullscreenActive) return;
       e.preventDefault();
-      toggleBossScreen();
+      // Pass the current web path (relative to /volumes) with privacy mode
+      toggleTerminal(state.currentPath || '', 'privacy');
       return;
     }
   });
 }
 
-// Boss Screen functionality
-
-function toggleBossScreen() {
-  if (bossScreenActive) {
-    hideBossScreen();
-  } else {
-    showBossScreen();
-  }
-}
-
-function showBossScreen() {
-  if (!bossScreenElement) {
-    createBossScreen();
-  }
-
-  bossScreenElement.classList.add('active');
-  bossScreenActive = true;
-
-  // Mute all video/audio elements and save their previous state
-  // Include both grid videos AND fullscreen videos
-  bossPreviousMuteStates.clear();
-  document.querySelectorAll('video, audio').forEach(media => {
-    bossPreviousMuteStates.set(media, media.muted);
-    media.muted = true;
-  });
-
-  // Focus the input
-  setTimeout(() => {
-    if (bossInputElement) {
-      bossInputElement.focus();
-    }
-  }, 100);
-
-  // Add initial welcome message
-  clearBossOutput();
-  printToBoss('XCLUSIVE SECURE TERMINAL v9.0', 'success');
-  printToBoss('Type "help" for available commands', 'info');
-  printToBoss('');
-}
-
-function hideBossScreen() {
-  if (bossScreenElement) {
-    bossScreenElement.classList.remove('active');
-  }
-  bossScreenActive = false;
-
-  // Restore previous mute states
-  bossPreviousMuteStates.forEach((wasMuted, media) => {
-    media.muted = wasMuted;
-  });
-  bossPreviousMuteStates.clear();
-
-  // Update mute icons
-  syncMuteIcons();
-}
-
-function createBossScreen() {
-  bossScreenElement = document.createElement('div');
-  bossScreenElement.id = 'boss-screen';
-  bossScreenElement.innerHTML = `
-    <div class="boss-terminal">
-      <pre class="boss-ascii">
-█████████████████████████████████████████████████████████████████████████████████████████████████
-██                                                                              ██
-██   ▓▓▓▓▓▓▓▓  ▓▓   ▓▓ ▓▓▓▓▓▓ ▓▓      ▓▓ ▓▓▓▓▓▓▓▓▓ ▓▓      ▓▓ ▓▓▓▓▓▓▓▓▓   ██
-██   ▓▓    ▓▓  ▓▓ ▓▓   ▓▓    ▓▓      ▓▓ ▓▓       ▓▓      ▓▓ ▓▓         ██
-██   ▓▓    ▓▓   ▓▓▓    ▓▓    ▓▓      ▓▓ ▓▓▓▓▓▓   ▓▓      ▓▓ ▓▓▓▓▓▓     ██
-██   ▓▓▓▓▓▓▓▓    ▓▓     ▓▓    ▓▓      ▓▓ ▓▓       ▓▓      ▓▓ ▓▓         ██
-██   ▓▓          ▓▓  ▓▓▓▓▓▓   ▓▓▓▓▓▓▓ ▓▓ ▓▓▓▓▓▓▓▓▓ ▓▓▓▓▓▓▓ ▓▓ ▓▓▓▓▓▓▓▓▓   ██
-██   ▓▓         ▓▓▓                                                       ██
-██                                                                              ██
-███████████████████████████████████████████████████████████████████████████████████████████████████████████
-      </pre>
-      <div class="boss-output"></div>
-      <div class="boss-input-line">
-        <span class="boss-prompt">root@xclusive:~$</span>
-        <input type="text" class="boss-input" spellcheck="false" autocomplete="off">
-        <span class="boss-cursor"></span>
-      </div>
-      <div class="boss-help-text">Press ESC to exit | Type 'help' for commands</div>
-    </div>
-  `;
-  
-  document.body.appendChild(bossScreenElement);
-  
-  bossOutputElement = bossScreenElement.querySelector('.boss-output');
-  bossInputElement = bossScreenElement.querySelector('.boss-input');
-  
-  // Handle input
-  bossInputElement.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      const command = bossInputElement.value.trim();
-      if (command) {
-        bossCommandHistory.push(command);
-        bossHistoryIndex = bossCommandHistory.length;
-        processBossCommand(command);
-      }
-      bossInputElement.value = '';
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      if (bossHistoryIndex > 0) {
-        bossHistoryIndex--;
-        bossInputElement.value = bossCommandHistory[bossHistoryIndex];
-      }
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      if (bossHistoryIndex < bossCommandHistory.length - 1) {
-        bossHistoryIndex++;
-        bossInputElement.value = bossCommandHistory[bossHistoryIndex];
-      } else {
-        bossHistoryIndex = bossCommandHistory.length;
-        bossInputElement.value = '';
-      }
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopPropagation();
-      hideBossScreen();
-    }
-  });
-  
-  // Handle ESC on the boss screen container
-  bossScreenElement.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopPropagation();
-      hideBossScreen();
-    }
-  });
-}
-
-function printToBoss(text, type = '') {
-  if (!bossOutputElement) return;
-  
-  const line = document.createElement('div');
-  line.className = 'output-line';
-  if (type) line.classList.add(type);
-  line.textContent = text;
-  bossOutputElement.appendChild(line);
-  bossOutputElement.scrollTop = bossOutputElement.scrollHeight;
-}
-
-function clearBossOutput() {
-  if (!bossOutputElement) return;
-  bossOutputElement.innerHTML = '';
-}
-
-function processBossCommand(command) {
-  const cmd = command.toLowerCase().trim();
-  const args = cmd.split(' ');
-  const mainCmd = args[0];
-  
-  // Echo the command
-  printToBoss(`root@xclusive:~$ ${command}`);
-  
-  switch (mainCmd) {
-    case 'help':
-    case '?':
-      printToBoss('');
-      printToBoss('AVAILABLE COMMANDS:', 'success');
-      printToBoss('  help      - Show this help message');
-      printToBoss('  status    - Display system status');
-      printToBoss('  clear     - Clear terminal screen');
-      printToBoss('  exit      - Exit terminal');
-      printToBoss('  matrix    - Enable matrix mode');
-      printToBoss('  whoami    - Display user information');
-      printToBoss('  ls        - List directory contents');
-      printToBoss('  decrypt   - Decrypt classified data');
-      printToBoss('  hack      - Initiate hack sequence');
-      printToBoss('  fortune   - Read your fortune');
-      printToBoss('  selfdestruct - [WARNING] System self-destruct');
-      printToBoss('');
-      break;
-      
-    case 'status':
-      const totalVideos = state.originalVideos.length;
-      const totalSize = Math.floor(Math.random() * 500) + 100;
-      const uptime = Math.floor(Math.random() * 100);
-      printToBoss('');
-      printToBoss('SYSTEM STATUS:', 'info');
-      printToBoss(`  Videos:      ${totalVideos} files`);
-      printToBoss(`  Storage:     ${totalSize}TB`);
-      printToBoss(`  CPU Usage:   ${Math.floor(Math.random() * 30) + 10}%`);
-      printToBoss(`  Memory:      ${Math.floor(Math.random() * 40) + 30}%`);
-      printToBoss(`  Uptime:      ${uptime} days`);
-      printToBoss(`  Encryption:  AES-4096 [ACTIVE]`);
-      printToBoss(`  Proxy:       TOR+VPN [ENABLED]`);
-      printToBoss('');
-      break;
-      
-    case 'clear':
-    case 'cls':
-      clearBossOutput();
-      break;
-      
-    case 'exit':
-    case 'quit':
-    case 'q':
-      printToBoss('Logging out...', 'info');
-      setTimeout(() => hideBossScreen(), 500);
-      break;
-      
-    case 'matrix':
-      printToBoss('Initiating matrix visualization...', 'success');
-      startMatrixRain();
-      break;
-      
-    case 'whoami':
-      printToBoss('');
-      printToBoss('USER PROFILE:', 'info');
-      printToBoss('  User:     root');
-      printToBoss('  Group:    xclusive');
-      printToBoss('  Clearance: Level 9 (Top Secret)');
-      printToBoss('  Status:   Active');
-      printToBoss('  Location: Classified');
-      printToBoss('');
-      break;
-      
-    case 'ls':
-    case 'dir':
-      printToBoss('');
-      printToBoss('DIRECTORY CONTENTS:', 'info');
-      printToBoss('  drwxr-xr-x  classified/');
-      printToBoss('  drwxr-xr-x  encrypted/');
-      printToBoss('  -rw-r--r--  README.txt');
-      printToBoss('  -rw-------  secrets.key');
-      printToBoss('  -rwxr-xr-x  launch.sh');
-      printToBoss('  -rw-r--r--  data.bin');
-      printToBoss('');
-      break;
-      
-    case 'decrypt':
-      printToBoss('');
-      printToBoss('Attempting decryption...', 'warning');
-      setTimeout(() => {
-        printToBoss('Decrypting layer 1... [OK]', 'success');
-      }, 300);
-      setTimeout(() => {
-        printToBoss('Decrypting layer 2... [OK]', 'success');
-      }, 600);
-      setTimeout(() => {
-        printToBoss('Decrypting layer 3... [OK]', 'success');
-      }, 900);
-      setTimeout(() => {
-        printToBoss('');
-        printToBoss('DECRYPTION COMPLETE:', 'success');
-        printToBoss('  "The cake is a lie."', 'info');
-        printToBoss('  -- Anonymous, 2007', 'info');
-        printToBoss('');
-      }, 1200);
-      break;
-      
-    case 'hack':
-      printToBoss('');
-      printToBoss('INITIATING HACK SEQUENCE...', 'warning');
-      let progress = 0;
-      const hackInterval = setInterval(() => {
-        progress += Math.floor(Math.random() * 15) + 5;
-        if (progress >= 100) {
-          progress = 100;
-          clearInterval(hackInterval);
-          printToBoss(`Progress: [${'█'.repeat(20)}] 100%`, 'success');
-          printToBoss('');
-          printToBoss('ACCESS GRANTED!', 'success');
-          printToBoss('  You found the Easter egg!', 'info');
-          printToBoss('  sudo access: DENIED (nice try though)', 'error');
-          printToBoss('');
-        } else {
-          const bars = Math.floor(progress / 5);
-          printToBoss(`Progress: [${'█'.repeat(bars)}${'░'.repeat(20 - bars)}] ${progress}%`);
-        }
-      }, 200);
-      break;
-      
-    case 'fortune':
-      const fortunes = [
-        'The early bird gets the worm, but the second mouse gets the cheese.',
-        'A journey of a thousand miles begins with a single step.',
-        'Your code will compile on the first try... eventually.',
-        'The bugs you fear are the ones you created yesterday.',
-        'He who laughs last probably didn\'t get the joke.',
-        'Your next feature will be someone\'s favorite bug.',
-        'The cloud is just someone else\'s computer.',
-        'rm -rf / is not a valid debugging strategy.',
-        'git commit -m "fix stuff" will haunt you later.',
-        'Stack Overflow is down. Good luck.'
-      ];
-      const fortune = fortunes[Math.floor(Math.random() * fortunes.length)];
-      printToBoss('');
-      printToBoss('☯ FORTUNE COOKIE:', 'success');
-      printToBoss(`  "${fortune}"`, 'info');
-      printToBoss('');
-      break;
-      
-    case 'selfdestruct':
-    case 'self-destruct':
-      printToBoss('');
-      printToBoss('☠ WARNING: SELF-DESTRUCT SEQUENCE INITIATED ☠', 'error');
-      printToBoss('');
-      let countdown = 10;
-      const countdownInterval = setInterval(() => {
-        if (countdown <= 0) {
-          clearInterval(countdownInterval);
-          printToBoss('');
-          printToBoss('JUST KIDDING! ☺', 'success');
-          printToBoss('System self-destruct is disabled.', 'info');
-          printToBoss('(But nice reflexes!)', 'info');
-          printToBoss('');
-        } else {
-          printToBoss(`  ${countdown}...`, 'warning');
-          countdown--;
-        }
-      }, 1000);
-      break;
-      
-    case 'konami':
-      printToBoss('');
-      printToBoss('↑ ↑ ↓ ↓ ← → ← → B A', 'success');
-      printToBoss('CHEAT CODE ACTIVATED!', 'success');
-      printToBoss('You have unlocked: absolutely nothing.', 'info');
-      printToBoss('But you get +10 internet points! ✨', 'info');
-      printToBoss('');
-      break;
-      
-    default:
-      if (cmd) {
-        printToBoss(`Command not found: ${mainCmd}`, 'error');
-        printToBoss('Type "help" for available commands', 'info');
-      }
-  }
-}
-
-function startMatrixRain() {
-  const rain = document.createElement('div');
-  rain.className = 'matrix-rain';
-  bossScreenElement.appendChild(rain);
-  
-  const chars = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモャヤユヨラリルレロヲンメートリックス★☠☯☺☻♠♣♥♦';
-  const columns = Math.floor(window.innerWidth / 14);
-  
-  for (let i = 0; i < columns; i++) {
-    const column = document.createElement('div');
-    column.className = 'matrix-column';
-    column.style.left = `${i * 14}px`;
-    column.style.animationDuration = `${Math.random() * 3 + 2}s`;
-    column.style.animationDelay = `${Math.random() * 2}s`;
-    
-    let text = '';
-    for (let j = 0; j < 50; j++) {
-      text += chars[Math.floor(Math.random() * chars.length)] + '\n';
-    }
-    column.textContent = text;
-    rain.appendChild(column);
-  }
-  
-  // Remove after 5 seconds
-  setTimeout(() => {
-    rain.remove();
-  }, 5000);
-}
+// Terminal interface is now handled by terminal.js module
