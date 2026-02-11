@@ -10,6 +10,8 @@ Perfect for media professionals, content curators, and anyone managing large col
 
 ### Media Management
 - **Multi-format support**: MP3, WAV, OGG, FLAC, MP4, WebM, MKV, MOV, AVI, and common image formats (JPG, PNG, GIF, WebP, SVG)
+- **Smart codec detection**: Automatically detects unsupported codecs (WMV3, FLV1, MPEG4, etc.) and FLV container formats
+- **Unsupported video handling**: Videos with unsupported codecs or FLV containers are shown with visual indicators and helpful error messages
 - **Smart folder navigation**: Browse nested directories with breadcrumb-style path indicators
 - **Rich metadata display**: View codec, resolution (width×height), duration, bitrate, file size, FPS, and folder path
 - **Advanced search**: Filter by filename or folder path with instant results
@@ -26,6 +28,9 @@ Perfect for media professionals, content curators, and anyone managing large col
 - **Auto-generated covers**: Audio files display embedded artwork with fallback placeholders
 - **Object-fit toggle**: Press 'C' to switch between cover and contain display modes
 - **Mute management**: Single unmuted video policy (prevents audio chaos)
+- **Mouse hover unmuting**: Move mouse over videos to unmute them automatically (when not globally muted)
+- **CTRL+SCROLL seek**: Hold CTRL and scroll to seek video/audio forward/backward by 5 seconds
+- **Boss screen**: Press 'B' for cyberpunk terminal interface with interactive commands
 
 ### Audit System
 - **SQLite-based tracking**: Persistent audit status with optimistic UI updates
@@ -60,6 +65,8 @@ Perfect for media professionals, content curators, and anyone managing large col
 - **File descriptor caching**: Nginx open_file_cache for frequently accessed videos
 - **HTTP/2 multiplexing**: Single connection streams multiple videos simultaneously
 - **Hybrid caching**: Small files cached in RAM, large files streamed directly
+- **Metadata caching**: ffprobe results cached in `/tmp/.metadata/` for fast reloading
+- **Smart codec detection**: Container format detection (FLV, MP4, etc.) prevents failed playback attempts
 
 ---
 
@@ -292,7 +299,9 @@ The configuration already includes throttling to protect drives:
 | `/` | Open search overlay | Global |
 | `Esc` | Close search / Exit fullscreen / Clear delete selections | Search/Fullscreen/Grid (delete mode) |
 | `c` | Toggle object-fit (cover/contain) | Global |
+| `b` | Open/close boss screen (cyberpunk terminal) | Global |
 | `Delete` | Delete current file | Fullscreen (when enabled) |
+| `CTRL` + `Scroll` | Seek video/audio ±5 seconds | Grid (on media items) |
 | `←` / `→` | Navigate playlist | Fullscreen |
 | `↑` / `↓` | Exit fullscreen | Fullscreen |
 | `Enter` | Execute search | Search overlay |
@@ -333,9 +342,11 @@ When delete mode is enabled (`?delete=your_secret_code`), use these hotkeys for 
 **Entry Points**:
 - Click ⛶ (fullscreen icon) on any media item
 - Click directly on video/audio/image in grid
-- Use `▶️` Play All button (plays from current position)
-- Use `🔀` Shuffle Play button (random order)
+- Use `▶️` Play All button (plays ALL files in folder from beginning)
+- Use `🔀` Shuffle Play button (shuffles ALL files in folder)
 - Use `❤️` Play Favorites button (favorites only)
+
+**Note**: Play All and Shuffle always play ALL videos in the current folder, regardless of active filters or grid pagination. Files with unsupported codecs or FLV containers are automatically skipped.
 
 **Navigation**:
 - **Arrow Left/Right**: Previous/next file in playlist
@@ -353,6 +364,21 @@ When delete mode is enabled (`?delete=your_secret_code`), use these hotkeys for 
 - Shows metadata overlay (filename, codec, resolution, duration)
 - Works with videos, audio (shows cover art), and images
 - **Android ExoPlayer support**: Native fullscreen on Android WebView via `window.AndroidPlayer` bridge
+
+### Grid Interaction Features
+
+**Mouse Hover Unmuting**:
+- When videos are not globally muted, hovering over any video/audio item will automatically unmute it
+- Previous video mutes automatically (only one unmuted at a time)
+- Mute icons update in real-time on the central overlay
+- Works seamlessly with existing mute management
+
+**CTRL+SCROLL Seeking**:
+- Hold `CTRL` and scroll up/down on any video/audio item to seek
+- Seeks forward/backward by 5 seconds (configurable in `state.js`)
+- Visual feedback shows seek direction and amount (⏩ +5s / ⏪ -5s)
+- Works on both grid items and fullscreen videos
+- Non-intrusive overlay positioned to avoid blocking controls
 
 ### Batch Operations
 
@@ -400,6 +426,24 @@ When delete mode is enabled (`?delete=your_secret_code`), use these hotkeys for 
 1. ✓ Nginx throttling not too aggressive (currently 50MB/s)
 2. ✓ `preload="auto"` set before `src` (fixed in recent update)
 3. ✓ Video files accessible: `ls -lh volumes/`
+4. ✓ Check codec support: Files with "FLV" badge are FLV containers (not supported in browsers)
+
+### FLV Files Show "FLV" Badge and Won't Play
+
+**Cause**: FLV (Flash Video) container format is not supported in modern web browsers, even if the video codec (H264) is compatible
+
+**Solution**:
+- Convert FLV files to MP4 format using ffmpeg:
+  ```bash
+  ffmpeg -i input.flv -c copy output.mp4
+  ```
+- Or download and play locally in VLC media player
+- MP4 files with `.flv` extension will play normally (they're actually MP4 containers)
+
+**Technical Details**:
+- The app detects true FLV containers via ffprobe's `format_name` field
+- Files showing "FLV" badge have `format_name: "flv"` (true FLV containers)
+- Files with `.flv` extension but `format_name: "mov,mp4..."` will play normally
 4. ✓ Nginx error logs: `docker-compose logs nginx`
 
 ### Slow Grid Loading (5x2, 6x6)
@@ -507,9 +551,10 @@ This frees up browser connections for the fullscreen video to seek efficiently.
 
 **Metadata Extraction**:
 - Uses `ffprobe` for video/audio metadata
-- Extracts: codec, resolution, duration, bitrate, FPS, file size, folder path
+- Extracts: codec, resolution, duration, bitrate, FPS, file size, folder path, **container format**
 - Cached in `/tmp/.metadata/` (SHA1 hash filenames, 7-day TTL)
 - Audio cover art extracted via `getID3` library, cached in `cache/audio-covers/`
+- Container format detection (FLV, MP4, MKV, etc.) for unsupported format identification
 
 ### Hidden Features & Easter Eggs
 
@@ -536,6 +581,39 @@ This frees up browser connections for the fullscreen video to seek efficiently.
 - Touch swipe detection for navigation
 - Reduced grid gap (8px vs 16px)
 - Simplified folder selector (120-160px vs 240-400px)
+
+### Boss Screen (Cyberpunk Terminal)
+
+**Activation**: Press `b` anywhere to open the interactive terminal overlay
+
+**Features**:
+- Full-screen cyberpunk-themed terminal interface
+- Blocks all grid/video interaction while active
+- Mutes all audio automatically when opened
+- Restores previous mute states when closed
+
+**Terminal Commands**:
+
+| Command | Description |
+|---------|-------------|
+| `help` | Show available commands |
+| `status` | Display system status (videos, storage, CPU, memory) |
+| `clear` | Clear terminal screen |
+| `exit` / `quit` | Close boss screen |
+| `matrix` | Trigger matrix rain animation |
+| `whoami` | Display user profile information |
+| `ls` | List fake directory contents |
+| `decrypt` | Multi-layer decryption animation |
+| `hack` | Progress bar hack simulation |
+| `fortune` | Random fortune cookie message |
+| `selfdestruct` | Fake self-destruct countdown (joke) |
+| `konami` | Konami code Easter egg |
+
+**Controls**:
+- **Open**: `b` key
+- **Close**: `ESC` key or type `exit`
+- **Command History**: Up/Down arrow keys
+- **Input**: Type commands and press Enter
 
 ---
 
