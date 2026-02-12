@@ -10,11 +10,29 @@ let historyIndex = -1;
 let previousMuteStates = new Map();
 let currentDirectory = '/volumes';  // Web path like "/volumes" or "/videos/action"
 let terminalMode = 'transparent'; // 'privacy' or 'transparent'
+let availableScripts = []; // Store available script names
 
 const ALLOWED_COMMANDS = ['ls', 'cd', 'pwd', 'rm', 'rmdir', 'cat', 'mkdir', 'cp', 'mv', 'clear', 'help', 'exit', 'whoami'];
 
 export function initTerminal() {
-  // Terminal is created on first use
+  // Load available scripts
+  loadScripts();
+}
+
+async function loadScripts() {
+  try {
+    const response = await fetch('/post-handler.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'list_scripts' })
+    });
+    const data = await response.json();
+    if (data.status === 'ok' && data.scripts) {
+      availableScripts = data.scripts;
+    }
+  } catch (error) {
+    console.error('Failed to load scripts:', error);
+  }
 }
 
 export function toggleTerminal(startWebPath = null, mode = 'transparent') {
@@ -242,6 +260,12 @@ async function processCommand(commandLine) {
       return;
   }
   
+  // Check if it's a script
+  if (availableScripts.includes(cmd)) {
+    await runScript(cmd, args.slice(1));
+    return;
+  }
+  
   // Validate command
   if (!ALLOWED_COMMANDS.includes(cmd)) {
     printToTerminal(`Command not found: ${cmd}`, 'error');
@@ -339,6 +363,52 @@ function showHelp() {
   printToTerminal('  - rm/rmdir requires delete authorization');
   printToTerminal('  - Use quotes for paths with spaces: cd "my folder"');
   printToTerminal('');
+  
+  // Show available scripts if any
+  if (availableScripts.length > 0) {
+    printToTerminal('Available Scripts:', 'info');
+    availableScripts.forEach(script => {
+      printToTerminal(`  ${script}`);
+    });
+    printToTerminal('');
+  }
+}
+
+async function runScript(scriptName, args) {
+  printToTerminal(`Running script: ${scriptName}...`, 'info');
+  printToTerminal('');
+  
+  try {
+    const response = await fetch('/post-handler.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'run_script',
+        script: scriptName,
+        args: args,
+        currentDir: currentDirectory
+      })
+    });
+    
+    // Read the stream
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      const text = decoder.decode(value, { stream: true });
+      if (text) {
+        printToTerminal(text);
+      }
+    }
+    
+    printToTerminal('');
+    printToTerminal(`Script completed: ${scriptName}`, 'success');
+  } catch (error) {
+    printToTerminal(`Error running script: ${error.message}`, 'error');
+  }
 }
 
 function startMatrixRain() {
@@ -420,10 +490,8 @@ async function handleTabCompletion() {
   const args = parseCommand(textBeforeCursor);
   const cmd = args[0]?.toLowerCase();
   
-  // Commands that accept directory/file paths
-  const pathCommands = ['cd', 'ls', 'cat', 'mkdir', 'rm', 'rmdir', 'cp', 'mv'];
-  
-  if (!pathCommands.includes(cmd)) return;
+  // Commands that accept directory/file paths (including scripts)
+  const pathCommands = ['cd', 'ls', 'cat', 'mkdir', 'rm', 'rmdir', 'cp', 'mv', ...availableScripts];
   
   // Get the last argument (what we're trying to complete)
   let partial = '';
@@ -432,7 +500,34 @@ async function handleTabCompletion() {
   // Find the last space to determine the partial text
   const lastSpaceIndex = textBeforeCursor.lastIndexOf(' ');
   if (lastSpaceIndex === -1) {
-    // No space found, we're completing the command itself
+    // No space found, we're completing the command/script itself
+    partial = textBeforeCursor.toLowerCase();
+    
+    // Combine built-in commands, scripts, and path commands for completion
+    const allCommands = [...ALLOWED_COMMANDS, ...availableScripts, ...pathCommands];
+    const uniqueCommands = [...new Set(allCommands)];
+    
+    const matches = uniqueCommands.filter(c => 
+      c.toLowerCase().startsWith(partial)
+    );
+    
+    if (matches.length === 0) return;
+    
+    if (matches.length === 1) {
+      inputElement.value = matches[0] + ' ';
+      inputElement.selectionStart = inputElement.selectionEnd = inputElement.value.length;
+    } else {
+      // Find common prefix
+      const commonPrefix = findCommonPrefix(matches);
+      if (commonPrefix.length > partial.length) {
+        inputElement.value = commonPrefix;
+        inputElement.selectionStart = inputElement.selectionEnd = commonPrefix.length;
+      } else {
+        printToTerminal('');
+        printToTerminal(`Commands: ${matches.join('  ')}`, 'info');
+        printToTerminal('');
+      }
+    }
     return;
   }
   

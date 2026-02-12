@@ -63,6 +63,51 @@ switch ($data['action']) {
         ];
         break;
 
+    case 'run_script':
+        // Script execution requires streaming - handle differently
+        if (empty($data['script'])) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Missing script parameter']);
+            exit;
+        }
+
+        // Forward directly to php-cli for streaming
+        $ch = curl_init('http://php-cli:8080/api.php');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => false,  // Don't buffer - stream directly
+            CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+            CURLOPT_POSTFIELDS => json_encode([
+                'action' => 'run_script',
+                'script' => $data['script'],
+                'args' => $data['args'] ?? [],
+                'currentDir' => $data['currentDir'] ?? '/volumes',
+            ]),
+            CURLOPT_COOKIE => http_build_query($_COOKIE, '', '; '),
+            CURLOPT_WRITEFUNCTION => function($ch, $data) {
+                echo $data;
+                flush();
+                return strlen($data);
+            },
+        ]);
+
+        curl_exec($ch);
+        
+        if (curl_errno($ch)) {
+            http_response_code(500);
+            echo json_encode(['error' => curl_error($ch)]);
+        }
+        
+        curl_close($ch);
+        exit;
+
+    case 'list_scripts':
+        // Just forward to php-cli
+        $payload = [
+            'action' => 'list_scripts',
+        ];
+        break;
+
     default:
         http_response_code(400);
         echo json_encode(['error' => 'Unknown action']);

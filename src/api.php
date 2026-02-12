@@ -923,6 +923,184 @@ switch ($action) {
         ]);
         break;
 
+    case 'list_scripts':
+        // Scan scripts directory and return available script names (without extensions)
+        $scriptsDir = __DIR__ . '/scripts';
+        $scripts = [];
+        
+        if (is_dir($scriptsDir)) {
+            $files = scandir($scriptsDir);
+            foreach ($files as $file) {
+                if ($file === '.' || $file === '..') continue;
+                // Extract name without extension
+                $name = pathinfo($file, PATHINFO_FILENAME);
+                if (!empty($name)) {
+                    $scripts[] = $name;
+                }
+            }
+        }
+        
+        echo json_encode([
+            'status' => 'ok',
+            'scripts' => $scripts
+        ]);
+        break;
+
+    case 'run_script':
+        // Execute a script with real-time streaming output
+        $scriptName = $data['script'] ?? '';
+        $scriptArgs = $data['args'] ?? [];
+        $currentDir = $data['currentDir'] ?? '/volumes';
+        
+        if (empty($scriptName)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'No script name provided']);
+            exit;
+        }
+        
+        // Find the script file (check various extensions)
+        $scriptsDir = __DIR__ . '/scripts';
+        $scriptFile = null;
+        $extensions = ['sh', 'py', 'pl', 'rb', 'bash'];
+        
+        foreach ($extensions as $ext) {
+            $candidate = $scriptsDir . '/' . $scriptName . '.' . $ext;
+            if (file_exists($candidate)) {
+                $scriptFile = $candidate;
+                break;
+            }
+        }
+        
+        // Also check for exact match (no extension)
+        if ($scriptFile === null) {
+            $candidate = $scriptsDir . '/' . $scriptName;
+            if (file_exists($candidate)) {
+                $scriptFile = $candidate;
+            }
+        }
+        
+        if ($scriptFile === null) {
+            http_response_code(404);
+            echo json_encode(['error' => "Script not found: {$scriptName}"]);
+            exit;
+        }
+        
+        // Convert web path to filesystem path for working directory
+        $cleanDir = ltrim(preg_replace('#^/volumes/?#i', '', $currentDir), '/');
+        $workingDir = $root . ($cleanDir ? '/' . $cleanDir : '');
+        $workingDir = realpath($workingDir) ?: $root;
+        
+        // Security check
+        if (!str_starts_with($workingDir, $root)) {
+            $workingDir = $root;
+        }
+        
+        // Build command
+        $escapedScript = escapeshellarg($scriptFile);
+        $escapedArgs = [];
+        foreach ($scriptArgs as $arg) {
+            $escapedArgs[] = escapeshellarg($arg);
+        }
+        $argString = implode(' ', $escapedArgs);
+        
+        // Determine interpreter based on extension
+        $ext = pathinfo($scriptFile, PATHINFO_EXTENSION);
+        switch ($ext) {
+            case 'py':
+                $interpreter = 'python3';
+                break;
+            case 'pl':
+                $interpreter = 'perl';
+                break;
+            case 'rb':
+                $interpreter = 'ruby';
+                break;
+            default:
+                $interpreter = 'bash';
+        }
+        
+        $command = "cd " . escapeshellarg($workingDir) . " && {$interpreter} {$escapedScript}";
+        if (!empty($argString)) {
+            $command .= " {$argString}";
+        }
+        
+        // Set headers for streaming
+        header('Content-Type: text/plain; charset=utf-8');
+        header('Cache-Control: no-cache');
+        header('X-Accel-Buffering: no');
+        
+        // Execute with streaming output
+        $descriptors = [
+            0 => ['pipe', 'r'],  // stdin
+            1 => ['pipe', 'w'],  // stdout
+            2 => ['pipe', 'w']   // stderr
+        ];
+        
+        $process = proc_open($command, $descriptors, $pipes);
+        
+        if (!is_resource($process)) {
+            echo "Error: Failed to start script\n";
+            exit;
+        }
+        
+        // Close stdin
+        fclose($pipes[0]);
+        
+        // Stream output
+        stream_set_blocking($pipes[1], false);
+        stream_set_blocking($pipes[2], false);
+        
+        $exitCode = null;
+        while (true) {
+            $status = proc_get_status($process);
+            
+            // Read stdout
+            $stdout = fread($pipes[1], 8192);
+            if ($stdout !== false && $stdout !== '') {
+                echo $stdout;
+                flush();
+            }
+            
+            // Read stderr
+            $stderr = fread($pipes[2], 8192);
+            if ($stderr !== false && $stderr !== '') {
+                echo $stderr;
+                flush();
+            }
+            
+            // Check if process has finished
+            if (!$status['running']) {
+                $exitCode = $status['exitcode'];
+                break;
+            }
+            
+            // Small delay to prevent CPU spinning
+            usleep(10000); // 10ms
+        }
+        
+        // Get any remaining output
+        while (!feof($pipes[1])) {
+            $stdout = fread($pipes[1], 8192);
+            if ($stdout !== false && $stdout !== '') {
+                echo $stdout;
+                flush();
+            }
+        }
+        while (!feof($pipes[2])) {
+            $stderr = fread($pipes[2], 8192);
+            if ($stderr !== false && $stderr !== '') {
+                echo $stderr;
+                flush();
+            }
+        }
+        
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        proc_close($process);
+        
+        // Exit with script's exit code
+        exit($exitCode);
+
     default:
         http_response_code(400);
         echo json_encode(['error' => 'Unknown action']);
