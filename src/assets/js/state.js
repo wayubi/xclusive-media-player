@@ -29,12 +29,16 @@ export const state = {
   coverEnabled: true,
   unauditedFilter: false,
   favoritesFilter: false, // NEW: Track favorites filter state
+  optimizationFilter: false, // NEW: Track optimization filter state
   
   // Audit context tracking to prevent race conditions
   currentAuditContext: null,
   
   // File metadata cache
   fileMetadataMap: {},
+  
+  // Optimization status cache
+  optimizationStatusMap: {},
   
   // Unsupported video codecs (these don't play in browsers)
   unsupportedCodecs: ['wmv3', 'flv1', 'wmv2', 'mpeg4', 'wmv1', 'mpeg1video'],
@@ -54,6 +58,7 @@ export const state = {
     this.audioThumbs = config.audioThumbs;
     this.auditStatusMap = config.auditStatusMap;
     this.favoritesMap = config.favoritesMap || {};
+    this.optimizationStatusMap = config.optimizationStatusMap || {};
     this.muted = config.muted;
     this.totalCells = config.totalCells;
     this.selectedColumns = config.selectedColumns;
@@ -195,11 +200,28 @@ export const state = {
         }
         break;
         
+      case 'optimization':
+        this.optimizationFilter = !this.optimizationFilter;
+        this.unauditedFilter = false;
+        this.favoritesFilter = false;
+        this.currentSearch = '';
+        
+        if (this.optimizationFilter) {
+          this.allVideos = this.originalVideos.filter(file => {
+            const status = this.getOptimizationStatus(file);
+            return status && !status.isOptimized;
+          });
+        } else {
+          this.allVideos = [...this.originalVideos];
+        }
+        break;
+        
       case null:
       case 'clear':
         // Clear all filters
         this.unauditedFilter = false;
         this.favoritesFilter = false;
+        this.optimizationFilter = false;
         this.currentSearch = '';
         this.allVideos = [...this.originalVideos];
         break;
@@ -277,5 +299,55 @@ export const state = {
 
     // Check if codec is unsupported
     return this.unsupportedCodecs.includes(meta.video.codec.toLowerCase());
+  },
+
+  // Store optimization status for a file
+  setOptimizationStatus(file, status) {
+    this.optimizationStatusMap[file] = status;
+  },
+
+  // Get optimization status for a file
+  getOptimizationStatus(file) {
+    // First check cached optimization status
+    if (this.optimizationStatusMap[file]) {
+      return this.optimizationStatusMap[file];
+    }
+    
+    // Otherwise check metadata
+    const meta = this.fileMetadataMap[file];
+    if (meta && meta.optimizationStatus) {
+      return meta.optimizationStatus;
+    }
+    
+    return null;
+  },
+
+  // Check if a file is streaming optimized
+  isOptimized(file) {
+    const status = this.getOptimizationStatus(file);
+    return status ? status.isOptimized : true; // Default to true if unknown
+  },
+
+  // Get count of optimized vs unoptimized files
+  getOptimizationStats() {
+    let optimized = 0;
+    let unoptimized = 0;
+    let noStatus = 0;
+    
+    
+    this.originalVideos.forEach(file => {
+      const status = this.getOptimizationStatus(file);
+      if (status) {
+        if (status.isOptimized) {
+          optimized++;
+        } else {
+          unoptimized++;
+        }
+      } else {
+        noStatus++;
+      }
+    });
+    
+    return { optimized, unoptimized, total: this.originalVideos.length };
   }
 };

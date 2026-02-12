@@ -31,3 +31,23 @@ export function setupUnauditedFilter() {
     });
   }
 }
+
+export function toggleOptimizationFilter() {
+  state.setFilter('optimization');
+  renderGrid();
+  updateFileCount();
+}
+
+export function setupOptimizationFilter() {
+  const optimizationCount = document.getElementById('optimization-count');
+  const optimizationText = document.getElementById('optimization-text');
+  
+  const clickTarget = optimizationCount || optimizationText;
+  if (clickTarget) {
+    clickTarget.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleOptimizationFilter();
+    });
+  }
+}

@@ -1,6 +1,6 @@
 // main.js - Entry point and initialization
 import { state } from './state.js';
-import { renderGrid } from './grid.js';
+import { renderGrid, updateOptimizationDisplay } from './grid.js';
 import { setupEventListeners } from './events.js';
 import { setVhUnit } from './utils.js';
 import { initTerminal } from './terminal.js';
@@ -12,6 +12,7 @@ const {
   audioThumbs,
   auditStatusMap,
   favoritesMap,
+  optimizationStatusMap,
   muted,
   totalCells,
   selectedColumns,
@@ -28,6 +29,7 @@ state.init({
   audioThumbs,
   auditStatusMap,
   favoritesMap,
+  optimizationStatusMap,
   muted,
   totalCells,
   selectedColumns,
@@ -49,6 +51,14 @@ document.addEventListener('DOMContentLoaded', () => {
     module.updateFavoritesDisplay();
     module.setupFavoritesFilter();
   });
+  
+  // Initialize optimization filter
+  import('./filter.js').then(module => {
+    module.setupOptimizationFilter();
+  });
+  
+  // Update optimization display with initial cached data
+  updateOptimizationDisplay();
 });
 
 window.addEventListener('resize', setVhUnit);

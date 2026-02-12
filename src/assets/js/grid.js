@@ -115,15 +115,30 @@ function fetchMetadataBatch(grid, visibleFiles) {
       files: visibleFilesDecoded
     })
   })
-  .then(r => r.json())
+  .then(r => {
+    if (!r.ok) {
+    }
+    return r.json();
+  })
   .then(metas => {
+    
+    // Update optimization status display after metadata is loaded
+    updateOptimizationDisplay();
+    
     Array.from(grid.children).forEach((container, idx) => {
       const file = visibleFiles[idx];
       const decodedFile = decodeURIComponent(file);
       const meta = metas[decodedFile] || {};
+      
 
       // Store metadata in state
       state.setFileMetadata(file, meta);
+      
+      // Store optimization status separately
+      if (meta.optimizationStatus) {
+        state.setOptimizationStatus(file, meta.optimizationStatus);
+      } else {
+      }
 
       const filenameElem = container.querySelector('.overlay > div:first-child');
       const metaElem = container.querySelector('.overlay > div:last-child');
@@ -146,7 +161,7 @@ function fetchMetadataBatch(grid, visibleFiles) {
       }
     });
   })
-  .catch(() => {
+  .catch((err) => {
     // Fallback: show filenames only
   });
 }
@@ -346,6 +361,16 @@ function buildMetadataParts(meta) {
     parts.push(Math.round(meta.bitrate / 1000) + ' kbps');
   }
 
+  // Add optimization status icon
+  if (meta.optimizationStatus) {
+    if (meta.optimizationStatus.isOptimized) {
+      parts.push(`<span class="optimization-icon optimized" title="✅ Streaming optimized">⚡</span>`);
+    } else {
+      const issues = meta.optimizationStatus.issues.join('; ');
+      parts.push(`<span class="optimization-icon unoptimized" title="🔧 Not optimized: ${issues}">🔧</span>`);
+    }
+  }
+
   return parts;
 }
 
@@ -444,5 +469,38 @@ function updateFileCount() {
     countElem.innerText = `Filtered: ${state.startIndex + 1} / ${state.allVideos.length} (of ${state.originalVideos.length})`;
   } else {
     countElem.innerText = `${state.startIndex + 1} / ${state.allVideos.length}`;
+  }
+}
+
+/**
+ * Update the optimization status display in the menu bar
+ * Called after metadata is fetched
+ */
+export function updateOptimizationDisplay() {
+  const stats = state.getOptimizationStats();
+  const optimizationText = document.getElementById('optimization-status-text');
+  const optimizationContainer = document.getElementById('optimization-text');
+  
+  if (!optimizationText || !optimizationContainer) return;
+  
+  
+  if (stats.unoptimized === 0 && stats.optimized === 0) {
+    // No data yet
+    optimizationText.textContent = '⏳ Scanning...';
+    optimizationText.title = 'Checking optimization status...';
+    optimizationContainer.style.background = 'rgba(107, 114, 128, 0.1)';
+    optimizationContainer.style.borderColor = 'rgba(107, 114, 128, 0.2)';
+  } else if (stats.unoptimized === 0) {
+    // All optimized
+    optimizationText.textContent = '⚡ All optimized';
+    optimizationText.title = 'All videos are streaming optimized';
+    optimizationContainer.style.background = 'rgba(34, 197, 94, 0.1)';
+    optimizationContainer.style.borderColor = 'rgba(34, 197, 94, 0.2)';
+  } else {
+    // Some unoptimized
+    optimizationText.textContent = `🔧 ${stats.unoptimized} need optimization`;
+    optimizationText.title = 'Click to filter unoptimized files';
+    optimizationContainer.style.background = 'rgba(249, 115, 22, 0.1)';
+    optimizationContainer.style.borderColor = 'rgba(249, 115, 22, 0.2)';
   }
 }

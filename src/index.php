@@ -387,6 +387,30 @@ foreach ($auditStatuses as $status) {
 }
 $unAuditedCount = $allFilesCount - $auditedCount;
 
+// Get optimization status counts from metadata cache
+$optimizedCount = 0;
+$unoptimizedCount = 0;
+$optimizationStatusMap = [];
+$cacheDir = '/tmp/.metadata';
+
+foreach ($allFilesRaw as $i => $fsPath) {
+    $webPath = $allFiles[$i];
+    $hash = sha1($fsPath);
+    $cacheFile = $cacheDir . '/' . $hash . '.json';
+    
+    if (file_exists($cacheFile)) {
+        $cachedMeta = json_decode(file_get_contents($cacheFile), true);
+        if ($cachedMeta && isset($cachedMeta['optimizationStatus'])) {
+            $optimizationStatusMap[$webPath] = $cachedMeta['optimizationStatus'];
+            if ($cachedMeta['optimizationStatus']['isOptimized']) {
+                $optimizedCount++;
+            } else {
+                $unoptimizedCount++;
+            }
+        }
+    }
+}
+
 // Create a map of web path -> audit status for JS
 $auditStatusMap = [];
 foreach ($allFilesRaw as $i => $fsPath) {
@@ -533,6 +557,21 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
                     <span id="unaudited-count" title="Click to filter unaudited files">⚠️ Not audited</span>
                 <?php endif; ?>
             </span>
+            
+            <!-- Optimization status -->
+            <span id="optimization-text" style="
+                background: rgba(107, 114, 128, 0.1);
+                border: 1px solid rgba(107, 114, 128, 0.2);
+                padding: 6px 12px;
+                border-radius: 12px;
+                font-size: 0.8rem;
+                font-weight: 600;
+                color: var(--text-secondary);
+                white-space: nowrap;
+                cursor: pointer;
+            " data-initial-unoptimized="<?= $unoptimizedCount ?>" data-initial-optimized="<?= $optimizedCount ?>">
+                <span id="optimization-status-text" title="Checking optimization status...">⏳ Scanning...</span>
+            </span>
         </form>
 
         <!-- Main grid -->
@@ -559,6 +598,7 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
                 auditStatusMap: <?= json_encode($auditStatusMap, JSON_UNESCAPED_SLASHES) ?>,
                 favoritesMap: <?= json_encode($favoritesMap, JSON_UNESCAPED_SLASHES) ?>,
                 favoritesCount: <?= $favoritesCount ?>,
+                optimizationStatusMap: <?= json_encode($optimizationStatusMap, JSON_UNESCAPED_SLASHES) ?>,
                 muted: <?= $muted ? 'true' : 'false' ?>,
                 totalCells: <?= $total_cells ?>,
                 selectedColumns: <?= $selected_columns ?>,

@@ -39,9 +39,8 @@ if (!is_array($files)) {
 
 $root = realpath(__DIR__ . '/volumes');
 $cacheDir = '/tmp/.metadata';
-
 if (!is_dir($cacheDir)) {
-    mkdir($cacheDir, 0777, true);
+    @mkdir($cacheDir, 0777, true);
 }
 
 function countFolderContents(string $path): array {
@@ -105,22 +104,78 @@ function deleteRecursive(string $path): bool {
     return false;
 }
 
+/**
+ * Check if MP4/MOV/M4V file has faststart enabled (moov atom before mdat)
+ * Returns: true = faststart OK, false = needs faststart, null = error or not MP4
+ */
+function checkMoovAtomPosition(string $filepath): ?bool
+{
+    $fh = fopen($filepath, 'rb');
+    if (!$fh) return null;
+    
+    try {
+        while (!feof($fh)) {
+            $header = fread($fh, 8);
+            if (strlen($header) < 8) break;
+            
+            list(, $size) = unpack('N', substr($header, 0, 4));
+            $type = substr($header, 4, 4);
+            
+            if ($type === 'moov') {
+                return true;  // moov before mdat = faststart OK
+            }
+            if ($type === 'mdat') {
+                return false; // mdat before moov = needs faststart
+            }
+            
+            // Skip atom body
+            if ($size === 0) break;
+            if ($size === 1) {
+                // Extended 64-bit size - skip extended size field
+                fseek($fh, 8, SEEK_CUR);
+            } else {
+                // Normal size - skip atom body (size includes 8-byte header)
+                fseek($fh, $size - 8, SEEK_CUR);
+            }
+        }
+    } finally {
+        if (is_resource($fh)) {
+            fclose($fh);
+        }
+    }
+    return null;
+}
+
 function getMetadataForFile(string $webPath, string $root, string $cacheDir): ?array
 {
+    
     $cleanFile = ltrim(preg_replace('#^/volumes/#i', '', $webPath), '/');
     $fsPath = realpath($root . '/' . $cleanFile);
+    
 
-    if (!$fsPath || !str_starts_with($fsPath, $root) || !is_file($fsPath)) {
-        return null;
+    if (!$fsPath) {
+        return ['file' => basename($webPath), 'folder' => '', 'optimizationStatus' => ['isOptimized' => true, 'issues' => []]];
     }
+    
+    if (!str_starts_with($fsPath, $root)) {
+        return ['file' => basename($webPath), 'folder' => '', 'optimizationStatus' => ['isOptimized' => true, 'issues' => []]];
+    }
+    
+    if (!is_file($fsPath)) {
+        return ['file' => basename($webPath), 'folder' => '', 'optimizationStatus' => ['isOptimized' => true, 'issues' => []]];
+    }
+    
 
     $hash = sha1($fsPath);
     $cacheFile = $cacheDir . '/' . $hash . '.json';
-
+    
+    
     if (file_exists($cacheFile)) {
         $json = file_get_contents($cacheFile);
-        return json_decode($json, true) ?: null;
+        $cached = json_decode($json, true);
+        return $cached ?: null;
     }
+    
 
     $ext = strtolower(pathinfo($fsPath, PATHINFO_EXTENSION));
     $textExtensions = ['txt', 'nfo', 'sfv', 'md', 'log', 'json', 'xml', 'csv', 'yaml', 'yml', 'conf', 'cfg', 'ini'];
@@ -134,62 +189,140 @@ function getMetadataForFile(string $webPath, string $root, string $cacheDir): ?a
             'text'     => [
                 'encoding' => detectTextEncoding($fsPath),
             ],
+            'optimizationStatus' => [
+                'isOptimized' => true,
+                'issues' => []
+            ],
         ];
 
         file_put_contents($cacheFile, json_encode($output, JSON_PRETTY_PRINT));
         return $output;
     }
 
-    $cmd = sprintf(
-        'ffprobe -v quiet -print_format json -show_format -show_streams %s',
-        escapeshellarg($fsPath)
-    );
+    try {
+        $cmd = sprintf(
+            'ffprobe -v quiet -print_format json -show_format -show_streams %s 2>&1',
+            escapeshellarg($fsPath)
+        );
+        
 
-    $raw = shell_exec($cmd);
-    if ($raw === null || $raw === '') {
-        return null;
-    }
-
-    $meta = json_decode($raw, true) ?? [];
-
-    $video = null;
-    $audio = null;
-
-    foreach ($meta['streams'] ?? [] as $stream) {
-        if ($stream['codec_type'] === 'video' && !$video) {
-            $video = $stream;
+        $raw = shell_exec($cmd);
+        if ($raw === null || $raw === '') {
+            // Return basic metadata even if ffprobe fails
+            return [
+                'file'     => basename($fsPath),
+                'folder'   => basename(dirname($fsPath)),
+                'filesize' => filesize($fsPath),
+                'optimizationStatus' => [
+                    'isOptimized' => true,
+                    'issues' => []
+                ],
+            ];
         }
-        if ($stream['codec_type'] === 'audio' && !$audio) {
-            $audio = $stream;
+        
+
+        $meta = json_decode($raw, true);
+        if ($meta === null) {
+            return [
+                'file'     => basename($fsPath),
+                'folder'   => basename(dirname($fsPath)),
+                'filesize' => filesize($fsPath),
+                'optimizationStatus' => [
+                    'isOptimized' => true,
+                    'issues' => []
+                ],
+            ];
         }
+
+        $video = null;
+        $audio = null;
+
+        foreach ($meta['streams'] ?? [] as $stream) {
+            if ($stream['codec_type'] === 'video' && !$video) {
+                $video = $stream;
+            }
+            if ($stream['codec_type'] === 'audio' && !$audio) {
+                $audio = $stream;
+            }
+        }
+
+        // Determine optimization status
+        $isOptimized = true;
+        $issues = [];
+
+        // Check container format
+        $nonStreamingContainers = ['avi', 'flv', 'wmv', 'mkv', 'mpeg', 'mpg'];
+        if (in_array($ext, $nonStreamingContainers)) {
+            $isOptimized = false;
+            $issues[] = 'Non-streaming container: ' . strtoupper($ext);
+        }
+
+        // Check video codec
+        $nonStreamingCodecs = ['wmv3', 'flv1', 'wmv2', 'mpeg4', 'wmv1', 'mpeg1video'];
+        if ($video && in_array($video['codec_name'] ?? '', $nonStreamingCodecs)) {
+            $isOptimized = false;
+            $issues[] = 'Non-streaming codec: ' . ($video['codec_name'] ?? 'unknown');
+        }
+
+        // Check faststart for MP4/MOV/M4V files
+        if (in_array($ext, ['mp4', 'mov', 'm4v'])) {
+            $hasFaststart = checkMoovAtomPosition($fsPath);
+            if ($hasFaststart === false) {
+                $isOptimized = false;
+                $issues[] = 'Faststart not enabled (moov atom not at start)';
+            }
+        }
+        
+        // Calculate FPS safely
+        $fps = null;
+        if ($video && isset($video['avg_frame_rate']) && $video['avg_frame_rate'] !== '0/0') {
+            $fpsParts = explode('/', $video['avg_frame_rate']);
+            if (count($fpsParts) === 2 && $fpsParts[1] != 0) {
+                $fps = (float)$fpsParts[0] / (float)$fpsParts[1];
+            }
+        }
+
+        $output = [
+            'file'     => basename($fsPath),
+            'folder'   => basename(dirname($fsPath)),
+            'filesize' => filesize($fsPath),
+            'duration' => $meta['format']['duration'] ?? null,
+            'bitrate'  => isset($meta['format']['bit_rate']) ? (int)$meta['format']['bit_rate'] : null,
+            'container'=> $meta['format']['format_name'] ?? null,
+            'video'    => $video ? [
+                'codec'   => $video['codec_name'] ?? null,
+                'width'   => $video['width'] ?? null,
+                'height'  => $video['height'] ?? null,
+                'fps'     => $fps,
+                'pix_fmt' => $video['pix_fmt'] ?? null,
+            ] : null,
+            'audio'    => $audio ? [
+                'codec'       => $audio['codec_name'] ?? null,
+                'channels'    => $audio['channels'] ?? null,
+                'sample_rate' => $audio['sample_rate'] ?? null,
+            ] : null,
+            'optimizationStatus' => [
+                'isOptimized' => $isOptimized,
+                'issues' => $issues
+            ],
+        ];
+
+        file_put_contents($cacheFile, json_encode($output, JSON_PRETTY_PRINT));
+
+        return $output;
+        
+    } catch (Exception $e) {
+        // Return basic metadata on error
+        return [
+            'file'     => basename($fsPath),
+            'folder'   => basename(dirname($fsPath)),
+            'filesize' => filesize($fsPath),
+            'optimizationStatus' => [
+                'isOptimized' => true,
+                'issues' => []
+            ],
+        ];
     }
-
-    $output = [
-        'file'     => basename($fsPath),
-        'folder'   => basename(dirname($fsPath)),
-        'filesize' => filesize($fsPath),
-        'duration' => $meta['format']['duration'] ?? null,
-        'bitrate'  => isset($meta['format']['bit_rate']) ? (int)$meta['format']['bit_rate'] : null,
-        'container'=> $meta['format']['format_name'] ?? null,
-        'video'    => $video ? [
-            'codec'   => $video['codec_name'] ?? null,
-            'width'   => $video['width'] ?? null,
-            'height'  => $video['height'] ?? null,
-            'fps'     => isset($video['avg_frame_rate']) && $video['avg_frame_rate'] !== '0/0'
-                ? eval('return ' . $video['avg_frame_rate'] . ';')
-                : null,
-            'pix_fmt' => $video['pix_fmt'] ?? null,
-        ] : null,
-        'audio'    => $audio ? [
-            'codec'       => $audio['codec_name'] ?? null,
-            'channels'    => $audio['channels'] ?? null,
-            'sample_rate' => $audio['sample_rate'] ?? null,
-        ] : null,
-    ];
-
-    file_put_contents($cacheFile, json_encode($output, JSON_PRETTY_PRINT));
-
-    return $output;
 }
 
 /**
@@ -690,6 +823,7 @@ switch ($action) {
         break;
 
     case 'metadata_batch':
+        
         if (empty($files)) {
             http_response_code(400);
             echo json_encode(['error' => 'No files provided']);
@@ -704,6 +838,9 @@ switch ($action) {
 
         foreach ($files as $file) {
             $meta = getMetadataForFile($file, $root, $cacheDir);
+            if ($meta === null) {
+            } else {
+            }
             $results[$file] = $meta;  // null if failed/invalid
         }
 
