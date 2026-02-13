@@ -56,14 +56,28 @@ function countFolderContents(string $path): array {
     );
     
     foreach ($iterator as $file) {
+        $pathname = $file->getPathname();
+        $filename = $file->getFilename();
+        
+        // Skip hidden directories and their contents
+        $pathParts = explode('/', dirname($pathname));
+        foreach ($pathParts as $part) {
+            if (!empty($part) && $part[0] === '.') {
+                continue 2; // Skip this entry if in a hidden directory
+            }
+        }
+        
         if ($file->isFile()) {
             $stats['files']++;
             // Check if hidden (starts with .)
-            if ($file->getFilename()[0] === '.') {
+            if ($filename[0] === '.') {
                 $stats['hidden_files']++;
             }
         } elseif ($file->isDir()) {
-            $stats['subfolders']++;
+            // Skip hidden directories
+            if ($filename[0] !== '.') {
+                $stats['subfolders']++;
+            }
         }
     }
     

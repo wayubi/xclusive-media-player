@@ -151,7 +151,10 @@ function getSubfolders(string $path): array {
     $excluded = getExcludedFolders();
 
     $filtered = array_filter($folders, function($d) use ($path, $excluded) {
-        return $d !== '.' && $d !== '..' && !in_array($d, $excluded) && is_dir("$path/$d");
+        // Skip ., .., excluded folders, and any hidden directories (starting with .)
+        if ($d === '.' || $d === '..' || in_array($d, $excluded)) return false;
+        if ($d[0] === '.') return false; // Hidden directory
+        return is_dir("$path/$d");
     });
 
     usort($filtered, 'strcasecmp');
@@ -172,6 +175,14 @@ function getFiles(string $path): array {
         $name = $file->getFilename();
         if (!$file->isFile() || $name[0] === '.') continue;
         $pathname = $file->getPathname();
+
+        // Skip files in hidden directories (directories starting with .)
+        $pathParts = explode('/', dirname($pathname));
+        foreach ($pathParts as $part) {
+            if (!empty($part) && $part[0] === '.') {
+                continue 2; // Skip this file if in a hidden directory
+            }
+        }
 
         foreach ($excluded as $folder) {
             if (strpos($pathname, "/$folder/") !== false) {
@@ -242,6 +253,14 @@ function getFolderAuditStatus(string $folderPath, $auditDb): string {
         if (!$file->isFile() || $name[0] === '.') continue;
         $pathname = $file->getPathname();
 
+        // Skip files in hidden directories (directories starting with .)
+        $pathParts = explode('/', dirname($pathname));
+        foreach ($pathParts as $part) {
+            if (!empty($part) && $part[0] === '.') {
+                continue 2;
+            }
+        }
+
         foreach ($excluded as $folder) {
             if (strpos($pathname, "/$folder/") !== false) {
                 continue 2;
@@ -293,6 +312,14 @@ function countFilesInFolder(string $folderPath): int {
         $name = $file->getFilename();
         if (!$file->isFile() || $name[0] === '.') continue;
         $pathname = $file->getPathname();
+
+        // Skip files in hidden directories (directories starting with .)
+        $pathParts = explode('/', dirname($pathname));
+        foreach ($pathParts as $part) {
+            if (!empty($part) && $part[0] === '.') {
+                continue 2;
+            }
+        }
 
         foreach ($excluded as $folder) {
             if (strpos($pathname, "/$folder/") !== false) {
