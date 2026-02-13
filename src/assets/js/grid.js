@@ -122,9 +122,6 @@ function fetchMetadataBatch(grid, visibleFiles) {
   })
   .then(metas => {
     
-    // Update optimization status display after metadata is loaded
-    updateOptimizationDisplay();
-    
     Array.from(grid.children).forEach((container, idx) => {
       const file = visibleFiles[idx];
       const decodedFile = decodeURIComponent(file);
@@ -160,6 +157,9 @@ function fetchMetadataBatch(grid, visibleFiles) {
         transformToUnsupportedVideo(container, file);
       }
     });
+    
+    // Update optimization status display after all metadata is stored
+    updateOptimizationDisplay();
   })
   .catch((err) => {
     // Fallback: show filenames only

@@ -141,7 +141,7 @@ $muted = !isset($_GET['muted']) || $_GET['muted'] === 'true';
 // FILESYSTEM HELPERS
 // ================================
 function getExcludedFolders(): array {
-    return ['.metadata', '.trash'];
+    return ['.trash'];
 }
 
 function getSubfolders(string $path): array {
@@ -393,6 +393,10 @@ $auditDb = new AuditDatabase();
 require_once __DIR__ . '/lib/FavoritesDatabase.php';
 $favDb = new FavoritesDatabase();
 
+// NEW: Use SQLite for metadata
+require_once __DIR__ . '/lib/MetadataDatabase.php';
+$metaDb = new MetadataDatabase();
+
 $allFilesRaw = getFiles($current_path);
 $webRoot = '/' . trim($root_directory, './');
 $allFiles = array_map(fn($f) => filesystemToWebPath($f, $root_directory_absolute, $webRoot), $allFilesRaw);
@@ -414,27 +418,18 @@ foreach ($auditStatuses as $status) {
 }
 $unAuditedCount = $allFilesCount - $auditedCount;
 
-// Get optimization status counts from metadata cache
-$optimizedCount = 0;
-$unoptimizedCount = 0;
-$optimizationStatusMap = [];
-$cacheDir = '/tmp/.metadata';
+// Get optimization status counts from metadata database
+$optimizationStats = $metaDb->getOptimizationStats($current_path);
+$optimizedCount = $optimizationStats['optimized'];
+$unoptimizedCount = $optimizationStats['unoptimized'];
 
+// Build optimization status map for JavaScript
+$optimizationStatusMap = [];
 foreach ($allFilesRaw as $i => $fsPath) {
     $webPath = $allFiles[$i];
-    $hash = sha1($fsPath);
-    $cacheFile = $cacheDir . '/' . $hash . '.json';
-    
-    if (file_exists($cacheFile)) {
-        $cachedMeta = json_decode(file_get_contents($cacheFile), true);
-        if ($cachedMeta && isset($cachedMeta['optimizationStatus'])) {
-            $optimizationStatusMap[$webPath] = $cachedMeta['optimizationStatus'];
-            if ($cachedMeta['optimizationStatus']['isOptimized']) {
-                $optimizedCount++;
-            } else {
-                $unoptimizedCount++;
-            }
-        }
+    $metadata = $metaDb->getMetadata($webPath, $fsPath);
+    if ($metadata && isset($metadata['optimizationStatus'])) {
+        $optimizationStatusMap[$webPath] = $metadata['optimizationStatus'];
     }
 }
 

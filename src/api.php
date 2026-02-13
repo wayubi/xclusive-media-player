@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/lib/AuditDatabase.php';
 require_once __DIR__ . '/lib/FavoritesDatabase.php';
+require_once __DIR__ . '/lib/MetadataDatabase.php';
 
 header('Content-Type: application/json');
 
@@ -38,10 +39,9 @@ if (!is_array($files)) {
 }
 
 $root = realpath(__DIR__ . '/volumes');
-$cacheDir = '/tmp/.metadata';
-if (!is_dir($cacheDir)) {
-    @mkdir($cacheDir, 0777, true);
-}
+
+// Initialize metadata database
+$metaDb = new MetadataDatabase();
 
 function countFolderContents(string $path): array {
     $stats = ['files' => 0, 'hidden_files' => 0, 'subfolders' => 0];
@@ -160,37 +160,22 @@ function checkMoovAtomPosition(string $filepath): ?bool
     return null;
 }
 
-function getMetadataForFile(string $webPath, string $root, string $cacheDir): ?array
+function getMetadataForFile(string $webPath, string $root, MetadataDatabase $metaDb): ?array
 {
-    
     $cleanFile = ltrim(preg_replace('#^/volumes/#i', '', $webPath), '/');
     $fsPath = realpath($root . '/' . $cleanFile);
-    
 
-    if (!$fsPath) {
+    if (!$fsPath || !str_starts_with($fsPath, $root) || !is_file($fsPath)) {
         return ['file' => basename($webPath), 'folder' => '', 'optimizationStatus' => ['isOptimized' => true, 'issues' => []]];
     }
-    
-    if (!str_starts_with($fsPath, $root)) {
-        return ['file' => basename($webPath), 'folder' => '', 'optimizationStatus' => ['isOptimized' => true, 'issues' => []]];
-    }
-    
-    if (!is_file($fsPath)) {
-        return ['file' => basename($webPath), 'folder' => '', 'optimizationStatus' => ['isOptimized' => true, 'issues' => []]];
-    }
-    
 
-    $hash = sha1($fsPath);
-    $cacheFile = $cacheDir . '/' . $hash . '.json';
-    
-    
-    if (file_exists($cacheFile)) {
-        $json = file_get_contents($cacheFile);
-        $cached = json_decode($json, true);
-        return $cached ?: null;
+    // Check database first
+    $metadata = $metaDb->getMetadata($webPath, $fsPath);
+    if ($metadata !== null) {
+        return $metadata;
     }
-    
 
+    // Generate new metadata
     $ext = strtolower(pathinfo($fsPath, PATHINFO_EXTENSION));
     $textExtensions = ['txt', 'nfo', 'sfv', 'md', 'log', 'json', 'xml', 'csv', 'yaml', 'yml', 'conf', 'cfg', 'ini'];
 
@@ -209,7 +194,7 @@ function getMetadataForFile(string $webPath, string $root, string $cacheDir): ?a
             ],
         ];
 
-        file_put_contents($cacheFile, json_encode($output, JSON_PRETTY_PRINT));
+        $metaDb->saveMetadata($webPath, $fsPath, $output);
         return $output;
     }
 
@@ -218,12 +203,10 @@ function getMetadataForFile(string $webPath, string $root, string $cacheDir): ?a
             'ffprobe -v quiet -print_format json -show_format -show_streams %s 2>&1',
             escapeshellarg($fsPath)
         );
-        
 
         $raw = shell_exec($cmd);
         if ($raw === null || $raw === '') {
-            // Return basic metadata even if ffprobe fails
-            return [
+            $output = [
                 'file'     => basename($fsPath),
                 'folder'   => basename(dirname($fsPath)),
                 'filesize' => filesize($fsPath),
@@ -232,12 +215,13 @@ function getMetadataForFile(string $webPath, string $root, string $cacheDir): ?a
                     'issues' => []
                 ],
             ];
+            $metaDb->saveMetadata($webPath, $fsPath, $output);
+            return $output;
         }
-        
 
         $meta = json_decode($raw, true);
         if ($meta === null) {
-            return [
+            $output = [
                 'file'     => basename($fsPath),
                 'folder'   => basename(dirname($fsPath)),
                 'filesize' => filesize($fsPath),
@@ -246,6 +230,8 @@ function getMetadataForFile(string $webPath, string $root, string $cacheDir): ?a
                     'issues' => []
                 ],
             ];
+            $metaDb->saveMetadata($webPath, $fsPath, $output);
+            return $output;
         }
 
         $video = null;
@@ -286,7 +272,7 @@ function getMetadataForFile(string $webPath, string $root, string $cacheDir): ?a
                 $issues[] = 'Faststart not enabled (moov atom not at start)';
             }
         }
-        
+
         // Calculate FPS safely
         $fps = null;
         if ($video && isset($video['avg_frame_rate']) && $video['avg_frame_rate'] !== '0/0') {
@@ -321,13 +307,11 @@ function getMetadataForFile(string $webPath, string $root, string $cacheDir): ?a
             ],
         ];
 
-        file_put_contents($cacheFile, json_encode($output, JSON_PRETTY_PRINT));
-
+        $metaDb->saveMetadata($webPath, $fsPath, $output);
         return $output;
-        
+
     } catch (Exception $e) {
-        // Return basic metadata on error
-        return [
+        $output = [
             'file'     => basename($fsPath),
             'folder'   => basename(dirname($fsPath)),
             'filesize' => filesize($fsPath),
@@ -336,6 +320,8 @@ function getMetadataForFile(string $webPath, string $root, string $cacheDir): ?a
                 'issues' => []
             ],
         ];
+        $metaDb->saveMetadata($webPath, $fsPath, $output);
+        return $output;
     }
 }
 
@@ -825,7 +811,7 @@ switch ($action) {
             exit;
         }
 
-        $meta = getMetadataForFile($file, $root, $cacheDir);
+        $meta = getMetadataForFile($file, $root, $metaDb);
 
         if ($meta === null) {
             http_response_code(400);
@@ -837,7 +823,7 @@ switch ($action) {
         break;
 
     case 'metadata_batch':
-        
+
         if (empty($files)) {
             http_response_code(400);
             echo json_encode(['error' => 'No files provided']);
@@ -851,11 +837,8 @@ switch ($action) {
         $results = [];
 
         foreach ($files as $file) {
-            $meta = getMetadataForFile($file, $root, $cacheDir);
-            if ($meta === null) {
-            } else {
-            }
-            $results[$file] = $meta;  // null if failed/invalid
+            $meta = getMetadataForFile($file, $root, $metaDb);
+            $results[$file] = $meta;
         }
 
         echo json_encode($results);
