@@ -74,3 +74,7 @@ for f in *.flv; do
     echo "FAILED: $f" >> "$log"
   fi
 done
+
+echo ""
+echo "Refreshing metadata for new MP4 files..."
+"$(dirname "$0")/refresh_metadata.sh"

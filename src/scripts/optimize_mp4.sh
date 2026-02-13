@@ -41,3 +41,7 @@ done
 echo ""
 echo "Optimization complete. Originals moved to: $trashDir"
 [[ -f "$log" ]] && echo "Check $log for any errors."
+
+echo ""
+echo "Refreshing metadata for optimized files..."
+"$(dirname "$0")/refresh_metadata.sh"
