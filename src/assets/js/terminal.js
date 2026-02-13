@@ -260,12 +260,18 @@ async function processCommand(commandLine) {
       return;
   }
   
+  // Check if it's ffmpeg or ffprobe
+  if (cmd === 'ffmpeg' || cmd === 'ffprobe') {
+    await runFfmpegCommand(cmd, args.slice(1), commandLine);
+    return;
+  }
+
   // Check if it's a script
   if (availableScripts.includes(cmd)) {
     await runScript(cmd, args.slice(1));
     return;
   }
-  
+
   // Validate command
   if (!ALLOWED_COMMANDS.includes(cmd)) {
     printToTerminal(`Command not found: ${cmd}`, 'error');
@@ -358,6 +364,10 @@ function showHelp() {
   printToTerminal('  whoami             - Display current user');
   printToTerminal('  matrix             - Matrix rain effect');
   printToTerminal('');
+  printToTerminal('Media Tools:', 'info');
+  printToTerminal('  ffmpeg <args>      - Execute ffmpeg command');
+  printToTerminal('  ffprobe <args>     - Execute ffprobe command');
+  printToTerminal('');
   printToTerminal('Notes:', 'warning');
   printToTerminal('  - All paths are relative to /volumes');
   printToTerminal('  - rm/rmdir requires delete authorization');
@@ -408,6 +418,43 @@ async function runScript(scriptName, args) {
     printToTerminal(`Script completed: ${scriptName}`, 'success');
   } catch (error) {
     printToTerminal(`Error running script: ${error.message}`, 'error');
+  }
+}
+
+async function runFfmpegCommand(cmd, args, fullCommandLine) {
+  printToTerminal(`Running ${cmd}...`, 'info');
+  
+  try {
+    const response = await fetch('/post-handler.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'run_ffmpeg',
+        command: cmd,
+        args: args,
+        fullCommand: fullCommandLine,
+        currentDir: currentDirectory
+      })
+    });
+    
+    // Read the stream
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      const text = decoder.decode(value, { stream: true });
+      if (text) {
+        printToTerminal(text);
+      }
+    }
+    
+    printToTerminal('');
+    printToTerminal(`${cmd} completed`, 'success');
+  } catch (error) {
+    printToTerminal(`Error running ${cmd}: ${error.message}`, 'error');
   }
 }
 

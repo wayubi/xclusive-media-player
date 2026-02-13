@@ -108,6 +108,44 @@ switch ($data['action']) {
         ];
         break;
 
+    case 'run_ffmpeg':
+        if (empty($data['command'])) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Missing command parameter']);
+            exit;
+        }
+
+        // Forward directly to php-cli for streaming
+        $ch = curl_init('http://php-cli:8080/api.php');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => false,  // Don't buffer - stream directly
+            CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+            CURLOPT_POSTFIELDS => json_encode([
+                'action' => 'run_ffmpeg',
+                'command' => $data['command'],
+                'args' => $data['args'] ?? [],
+                'fullCommand' => $data['fullCommand'] ?? '',
+                'currentDir' => $data['currentDir'] ?? '/volumes',
+            ]),
+            CURLOPT_COOKIE => http_build_query($_COOKIE, '', '; '),
+            CURLOPT_WRITEFUNCTION => function($ch, $data) {
+                echo $data;
+                flush();
+                return strlen($data);
+            },
+        ]);
+
+        curl_exec($ch);
+        
+        if (curl_errno($ch)) {
+            http_response_code(500);
+            echo json_encode(['error' => curl_error($ch)]);
+        }
+        
+        curl_close($ch);
+        exit;
+
     default:
         http_response_code(400);
         echo json_encode(['error' => 'Unknown action']);

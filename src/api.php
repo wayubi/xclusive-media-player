@@ -1238,6 +1238,118 @@ switch ($action) {
         // Exit with script's exit code
         exit($exitCode);
 
+    case 'run_ffmpeg':
+        // Execute ffmpeg or ffprobe with real-time streaming output
+        $cmd = $data['command'] ?? '';  // 'ffmpeg' or 'ffprobe'
+        $args = $data['args'] ?? [];
+        $fullCommand = $data['fullCommand'] ?? '';
+        $currentDir = $data['currentDir'] ?? '/volumes';
+        
+        if (empty($cmd) || !in_array($cmd, ['ffmpeg', 'ffprobe'])) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid command. Only ffmpeg and ffprobe are supported.']);
+            exit;
+        }
+        
+        // Convert web path to filesystem path for working directory
+        $cleanDir = ltrim(preg_replace('#^/volumes/?#i', '', $currentDir), '/');
+        $workingDir = $root . ($cleanDir ? '/' . $cleanDir : '');
+        $workingDir = realpath($workingDir) ?: $root;
+        
+        // Security check
+        if (!str_starts_with($workingDir, $root)) {
+            $workingDir = $root;
+        }
+        
+        // Build the full command
+        $escapedArgs = [];
+        foreach ($args as $arg) {
+            $escapedArgs[] = escapeshellarg($arg);
+        }
+        $argString = implode(' ', $escapedArgs);
+        
+        $command = "cd " . escapeshellarg($workingDir) . " && /usr/bin/{$cmd}";
+        if (!empty($argString)) {
+            $command .= " {$argString}";
+        }
+        
+        // Set headers for streaming
+        header('Content-Type: text/plain; charset=utf-8');
+        header('Cache-Control: no-cache');
+        header('X-Accel-Buffering: no');
+        
+        // Execute with streaming output
+        $descriptors = [
+            0 => ['pipe', 'r'],  // stdin
+            1 => ['pipe', 'w'],  // stdout
+            2 => ['pipe', 'w']   // stderr
+        ];
+        
+        $process = proc_open($command, $descriptors, $pipes);
+        
+        if (!is_resource($process)) {
+            echo "Error: Failed to start {$cmd}\n";
+            exit;
+        }
+        
+        // Close stdin
+        fclose($pipes[0]);
+        
+        // Stream output
+        stream_set_blocking($pipes[1], false);
+        stream_set_blocking($pipes[2], false);
+        
+        $exitCode = null;
+        while (true) {
+            $status = proc_get_status($process);
+            
+            // Read stdout
+            $stdout = fread($pipes[1], 8192);
+            if ($stdout !== false && $stdout !== '') {
+                echo $stdout;
+                flush();
+            }
+            
+            // Read stderr
+            $stderr = fread($pipes[2], 8192);
+            if ($stderr !== false && $stderr !== '') {
+                echo $stderr;
+                flush();
+            }
+            
+            // Check if process has finished
+            if (!$status['running']) {
+                $exitCode = $status['exitcode'];
+                break;
+            }
+            
+            // Small delay to prevent CPU spinning
+            usleep(10000); // 10ms
+        }
+        
+        // Get any remaining output
+        while (!feof($pipes[1])) {
+            $stdout = fread($pipes[1], 8192);
+            if ($stdout !== false && $stdout !== '') {
+                echo $stdout;
+                flush();
+            }
+        }
+        while (!feof($pipes[2])) {
+            $stderr = fread($pipes[2], 8192);
+            if ($stderr !== false && $stderr !== '') {
+                echo $stderr;
+                flush();
+            }
+        }
+        
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        proc_close($process);
+        
+        // Exit with command's exit code
+        exit($exitCode);
+
     default:
         http_response_code(400);
         echo json_encode(['error' => 'Unknown action']);

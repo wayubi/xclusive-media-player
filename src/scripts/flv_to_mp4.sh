@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 shopt -s nullglob
 
-mkdir -p .trash
+trashDir=".trash-$(date +%s)"
+mkdir -p "$trashDir"
 log="flv_to_mp4_errors.log"
 
 files=( *.flv )
@@ -34,7 +35,7 @@ for f in *.flv; do
   if [[ "$vcodec" == "h264" && "$acodec" == "aac" ]]; then
     if ffmpeg -nostdin -i "$f" -c copy "$mp4"; then
       touch -r "$f" "$mp4"
-      mv "$f" .trash/
+      mv "$f" "$trashDir/"
       echo "Remuxed: $f"
       continue
     fi
@@ -68,7 +69,7 @@ for f in *.flv; do
       "$mp4"; then
 
     touch -r "$f" "$mp4"
-    mv "$f" .trash/
+    mv "$f" "$trashDir/"
   else
     echo "FAILED: $f" >> "$log"
   fi

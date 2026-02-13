@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+shopt -s nullglob
+
+trashDir=".trash-$(date +%s)"
+mkdir -p "$trashDir"
+log="optimize_mp4_errors.log"
+
+files=( *.mp4 *.m4v *.mov )
+(( ${#files[@]} == 0 )) && {
+  echo "No MP4/MOV/M4V files found. Nothing to do."
+  exit 0
+}
+
+for f in "${files[@]}"; do
+  # Skip if file doesn't exist (in case of no matches)
+  [[ -f "$f" ]] || continue
+  
+  base="${f%.*}"
+  ext="${f##*.}"
+  
+  echo "Processing: $f"
+  
+  # Move the original file to the trash directory
+  mv "$f" "${trashDir}/${base}.${ext}"
+  
+  # Re-encode with faststart on the moved file
+  if ffmpeg -nostdin -i "${trashDir}/${base}.${ext}" \
+      -c:v copy \
+      -c:a copy \
+      -movflags +faststart \
+      "${base}.${ext}"; then
+    
+    touch -r "${trashDir}/${base}.${ext}" "${base}.${ext}"
+    echo "Optimized: $f"
+  else
+    echo "FAILED: $f" >> "$log"
+    echo "Failed to optimize: $f"
+  fi
+done
+
+echo ""
+echo "Optimization complete. Originals moved to: $trashDir"
+[[ -f "$log" ]] && echo "Check $log for any errors."
