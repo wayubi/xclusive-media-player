@@ -44,4 +44,4 @@ echo "Optimization complete. Originals moved to: $trashDir"
 
 echo ""
 echo "Refreshing metadata for optimized files..."
-"$(dirname "$0")/refresh_metadata.sh"
+refresh_metadata

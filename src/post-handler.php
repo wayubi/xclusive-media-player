@@ -63,6 +63,20 @@ switch ($data['action']) {
         ];
         break;
 
+    case 'shell':
+        if (empty($data['command'])) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Missing command parameter']);
+            exit;
+        }
+
+        $payload = [
+            'action' => 'shell',
+            'command' => $data['command'],
+            'currentDir' => $data['currentDir'] ?? '/volumes',
+        ];
+        break;
+
     case 'run_script':
         // Script execution requires streaming - handle differently
         if (empty($data['script'])) {

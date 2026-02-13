@@ -1057,6 +1057,94 @@ switch ($action) {
         ]);
         break;
 
+    case 'shell':
+        // Direct shell passthrough - execute raw command with bash
+        $commandLine = $data['command'] ?? '';
+        $currentDir = $data['currentDir'] ?? '/volumes';
+        
+        if (empty($commandLine)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'No command provided']);
+            exit;
+        }
+        
+        // Convert web path to filesystem path
+        $cleanDir = ltrim(preg_replace('#^/volumes/?#i', '', $currentDir), '/');
+        $fsDir = $root . ($cleanDir ? '/' . $cleanDir : '');
+        
+        // Validate current directory
+        $fsDir = realpath($fsDir) ?: $root;
+        if (!str_starts_with($fsDir, $root)) {
+            $fsDir = $root;
+        }
+        
+        // Check if this is a cd command (we need to track directory changes)
+        $trimmedCmd = trim($commandLine);
+        $isCdCommand = (strpos($trimmedCmd, 'cd ') === 0 || $trimmedCmd === 'cd');
+        
+        if ($isCdCommand) {
+            // Handle cd specially to track directory changes
+            $output = '';
+            $newDir = $fsDir;
+            
+            // Parse cd arguments
+            preg_match('/^cd\s*(.*)$/', $trimmedCmd, $matches);
+            $target = isset($matches[1]) ? trim($matches[1]) : '';
+            
+            if (empty($target) || $target === '~') {
+                $newDir = $root;
+            } elseif ($target === '-') {
+                // cd - not supported, stay in current directory
+                $output = '';
+            } elseif (str_starts_with($target, '/')) {
+                // Absolute path
+                $targetPath = realpath($root . $target);
+                if ($targetPath && str_starts_with($targetPath, $root) && is_dir($targetPath)) {
+                    $newDir = $targetPath;
+                } else {
+                    $output = "bash: cd: {$target}: No such file or directory";
+                }
+            } else {
+                // Relative path
+                $targetPath = realpath($fsDir . '/' . $target);
+                if ($targetPath && str_starts_with($targetPath, $root) && is_dir($targetPath)) {
+                    $newDir = $targetPath;
+                } else {
+                    $output = "bash: cd: {$target}: No such file or directory";
+                }
+            }
+            
+            // Convert filesystem path back to web path
+            $relativePath = str_replace($root, '', $newDir);
+            $relativePath = ltrim($relativePath, '/');
+            $webDir = '/volumes' . ($relativePath ? '/' . $relativePath : '');
+            
+            echo json_encode([
+                'output' => $output,
+                'currentDir' => $webDir
+            ]);
+        } else {
+            // Execute command with bash, adding scripts directory to PATH
+            $scriptsDir = '/var/www/html/scripts';
+            $fullCommand = "cd " . escapeshellarg($fsDir) . " && export PATH=" . escapeshellarg($scriptsDir) . ":\$PATH && " . $commandLine . " 2>&1";
+            
+            $output = shell_exec($fullCommand);
+            if ($output === null) {
+                $output = '';
+            }
+            
+            // Convert filesystem path back to web path
+            $relativePath = str_replace($root, '', $fsDir);
+            $relativePath = ltrim($relativePath, '/');
+            $webDir = '/volumes' . ($relativePath ? '/' . $relativePath : '');
+            
+            echo json_encode([
+                'output' => $output,
+                'currentDir' => $webDir
+            ]);
+        }
+        break;
+
     case 'list_scripts':
         // Scan scripts directory and return available script names (without extensions)
         $scriptsDir = __DIR__ . '/scripts';

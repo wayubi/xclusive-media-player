@@ -12,7 +12,7 @@ let currentDirectory = '/volumes';  // Web path like "/volumes" or "/videos/acti
 let terminalMode = 'transparent'; // 'privacy' or 'transparent'
 let availableScripts = []; // Store available script names
 
-const ALLOWED_COMMANDS = ['ls', 'cd', 'pwd', 'rm', 'rmdir', 'cat', 'mkdir', 'cp', 'mv', 'clear', 'help', 'exit', 'whoami'];
+// No command whitelist - all commands go directly to shell
 
 export function initTerminal() {
   // Load available scripts
@@ -225,14 +225,14 @@ function clearOutput() {
 }
 
 async function processCommand(commandLine) {
-  const args = parseCommand(commandLine);
-  const cmd = args[0]?.toLowerCase();
-  
   // Echo the command
   printToTerminal(`${terminalElement.querySelector('.terminal-prompt').textContent} ${commandLine}`);
   
-  // Handle local commands that don't need API
-  switch (cmd) {
+  // Handle local commands that don't need shell
+  const trimmedCmd = commandLine.trim().toLowerCase();
+  const firstWord = trimmedCmd.split(/\s+/)[0];
+  
+  switch (firstWord) {
     case 'help':
     case '?':
       showHelp();
@@ -254,29 +254,6 @@ async function processCommand(commandLine) {
       printToTerminal('Initiating matrix visualization...', 'success');
       startMatrixRain();
       return;
-      
-    case 'whoami':
-      printToTerminal('root', 'info');
-      return;
-  }
-  
-  // Check if it's ffmpeg or ffprobe
-  if (cmd === 'ffmpeg' || cmd === 'ffprobe') {
-    await runFfmpegCommand(cmd, args.slice(1), commandLine);
-    return;
-  }
-
-  // Check if it's a script
-  if (availableScripts.includes(cmd)) {
-    await runScript(cmd, args.slice(1));
-    return;
-  }
-
-  // Validate command
-  if (!ALLOWED_COMMANDS.includes(cmd)) {
-    printToTerminal(`Command not found: ${cmd}`, 'error');
-    printToTerminal('Type "help" for available commands', 'info');
-    return;
   }
   
   // Execute command via API through post-handler (routes to root-privileged php-cli)
@@ -285,7 +262,7 @@ async function processCommand(commandLine) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        action: 'terminal',
+        action: 'shell',
         command: commandLine,
         currentDir: currentDirectory
       })
@@ -364,14 +341,22 @@ function showHelp() {
   printToTerminal('  whoami             - Display current user');
   printToTerminal('  matrix             - Matrix rain effect');
   printToTerminal('');
-  printToTerminal('Media Tools:', 'info');
-  printToTerminal('  ffmpeg <args>      - Execute ffmpeg command');
-  printToTerminal('  ffprobe <args>     - Execute ffprobe command');
+  printToTerminal('SHELL COMMANDS:', 'info');
+  printToTerminal('  Any bash command works: ls -la, cat file.txt, grep pattern files');
+  printToTerminal('  Pipes and redirects: ls -la | grep mp4, cat file > output.txt');
+  printToTerminal('  ffmpeg, ffprobe, and custom scripts available');
+  printToTerminal('');
+  printToTerminal('Built-in Commands:', 'info');
+  printToTerminal('  cd <path>          - Change directory');
+  printToTerminal('  pwd                - Print working directory');
+  printToTerminal('  clear              - Clear terminal screen');
+  printToTerminal('  exit               - Close terminal');
+  printToTerminal('  help               - Show this help message');
   printToTerminal('');
   printToTerminal('Notes:', 'warning');
-  printToTerminal('  - All paths are relative to /volumes');
-  printToTerminal('  - rm/rmdir requires delete authorization');
-  printToTerminal('  - Use quotes for paths with spaces: cd "my folder"');
+  printToTerminal('  - Full bash shell with pipes, wildcards, and redirects');
+  printToTerminal('  - All paths relative to current directory');
+  printToTerminal('  - Jailed to /volumes for security');
   printToTerminal('');
   
   // Show available scripts if any
@@ -537,9 +522,6 @@ async function handleTabCompletion() {
   const args = parseCommand(textBeforeCursor);
   const cmd = args[0]?.toLowerCase();
   
-  // Commands that accept directory/file paths (including scripts)
-  const pathCommands = ['cd', 'ls', 'cat', 'mkdir', 'rm', 'rmdir', 'cp', 'mv', ...availableScripts];
-  
   // Get the last argument (what we're trying to complete)
   let partial = '';
   let prefix = '';
@@ -550,11 +532,8 @@ async function handleTabCompletion() {
     // No space found, we're completing the command/script itself
     partial = textBeforeCursor.toLowerCase();
     
-    // Combine built-in commands, scripts, and path commands for completion
-    const allCommands = [...ALLOWED_COMMANDS, ...availableScripts, ...pathCommands];
-    const uniqueCommands = [...new Set(allCommands)];
-    
-    const matches = uniqueCommands.filter(c => 
+    // Scripts available for completion
+    const matches = availableScripts.filter(c => 
       c.toLowerCase().startsWith(partial)
     );
     
@@ -571,26 +550,27 @@ async function handleTabCompletion() {
         inputElement.selectionStart = inputElement.selectionEnd = commonPrefix.length;
       } else {
         printToTerminal('');
-        printToTerminal(`Commands: ${matches.join('  ')}`, 'info');
+        printToTerminal(`Scripts: ${matches.join('  ')}`, 'info');
         printToTerminal('');
       }
     }
     return;
   }
   
+  // We have a space, complete file/directory names
   prefix = textBeforeCursor.substring(0, lastSpaceIndex + 1);
   partial = textBeforeCursor.substring(lastSpaceIndex + 1);
   
-  if (!partial && cmd !== 'cd') return;
+  if (!partial) return;
   
-  // Get directory contents via API through post-handler (routes to root-privileged php-cli)
+  // Get directory contents via API
   try {
     const response = await fetch('/post-handler.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        action: 'terminal',
-        command: 'ls',
+        action: 'shell',
+        command: 'ls -la',
         currentDir: currentDirectory
       })
     });
