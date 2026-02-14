@@ -1,30 +1,17 @@
 <?php
 // lib/AuditDatabase.php - Global audit state management with SQLite
 
-class AuditDatabase {
-    private $db;
-    private $dbPath;
-    
+require_once __DIR__ . '/Database.php';
+
+class AuditDatabase extends Database
+{
     public function __construct($dbPath = null) {
-        $this->dbPath = $dbPath ?? __DIR__ . '/../../db/audit.db';
-        $this->initDatabase();
+        $dbPath = $dbPath ?? __DIR__ . '/../../db/audit.db';
+        parent::__construct($dbPath);
     }
-    
-    private function initDatabase() {
-        // Ensure directory exists
-        $dir = dirname($this->dbPath);
-        if (!is_dir($dir)) {
-            mkdir($dir, 0777, true);
-        }
-        
-        // Open SQLite database
-        $this->db = new SQLite3($this->dbPath);
-        
-        // Enable WAL mode for better concurrency
-        $this->db->exec('PRAGMA journal_mode = WAL;');
-        $this->db->exec('PRAGMA busy_timeout = 5000;');
-        
-        // Create tables if they don't exist
+
+    protected function createTables(): void
+    {
         $this->db->exec('
             CREATE TABLE IF NOT EXISTS files (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -209,6 +196,73 @@ class AuditDatabase {
         
         return $results;
     }
+
+    /**
+     * Get audit status for multiple folders at once (batch operation)
+     * Returns array with folder paths as keys and status as values
+     * This is much more efficient than calling getFolderAuditStatus for each folder
+     */
+    public function getFolderStatsBatch(array $folderPaths): array
+    {
+        $results = [];
+        
+        // Collect all files from all folders
+        $allFiles = [];
+        $fileToFolder = [];
+        
+        foreach ($folderPaths as $folderPath) {
+            if (!is_dir($folderPath)) {
+                $results[$folderPath] = ['status' => 'all_audited', 'total' => 0, 'audited' => 0];
+                continue;
+            }
+            
+            $files = Utils::getFilesRecursively($folderPath);
+            foreach ($files as $file) {
+                $allFiles[] = $file;
+                $fileToFolder[$file] = $folderPath;
+            }
+        }
+        
+        if (empty($allFiles)) {
+            foreach ($folderPaths as $folderPath) {
+                $results[$folderPath] = ['status' => 'all_audited', 'total' => 0, 'audited' => 0];
+            }
+            return $results;
+        }
+        
+        // Get audit status for all files at once
+        $statuses = $this->getAuditStatusBatch($allFiles);
+        
+        // Group results by folder
+        $folderCounts = [];
+        foreach ($allFiles as $file) {
+            $folder = $fileToFolder[$file];
+            if (!isset($folderCounts[$folder])) {
+                $folderCounts[$folder] = ['total' => 0, 'audited' => 0];
+            }
+            $folderCounts[$folder]['total']++;
+            if (!empty($statuses[$file]['audited'])) {
+                $folderCounts[$folder]['audited']++;
+            }
+        }
+        
+        // Determine status for each folder
+        foreach ($folderPaths as $folderPath) {
+            $counts = $folderCounts[$folderPath] ?? ['total' => 0, 'audited' => 0];
+            
+            if ($counts['total'] === 0) {
+                $results[$folderPath] = ['status' => 'all_audited', 'total' => 0, 'audited' => 0];
+            } elseif ($counts['audited'] === $counts['total']) {
+                $results[$folderPath] = ['status' => 'all_audited', 'total' => $counts['total'], 'audited' => $counts['audited']];
+            } elseif ($counts['audited'] === 0) {
+                $results[$folderPath] = ['status' => 'none_audited', 'total' => $counts['total'], 'audited' => 0];
+            } else {
+                $results[$folderPath] = ['status' => 'some_audited', 'total' => $counts['total'], 'audited' => $counts['audited']];
+            }
+        }
+        
+        return $results;
+    }
     
     /**
      * Batch audit multiple files
@@ -250,52 +304,5 @@ class AuditDatabase {
             'audited_files' => $audited,
             'unaudited_files' => $total - $audited
         ];
-    }
-    
-    /**
-     * Clean up deleted files from database
-     */
-    public function cleanupDeletedFiles() {
-        $stmt = $this->db->query('SELECT id, file_path FROM files');
-        $deleted = 0;
-        
-        while ($row = $stmt->fetchArray(SQLITE3_ASSOC)) {
-            if (!file_exists($row['file_path'])) {
-                $delStmt = $this->db->prepare('DELETE FROM files WHERE id = :id');
-                $delStmt->bindValue(':id', $row['id'], SQLITE3_INTEGER);
-                $delStmt->execute();
-                $deleted++;
-            }
-        }
-        
-        return $deleted;
-    }
-    
-    /**
-     * Normalize file path for consistent storage
-     */
-    private function normalizePath($path) {
-        // Get real path (resolves symlinks, removes ./ and ../)
-        $real = realpath($path);
-        if ($real === false) {
-            // If file doesn't exist yet, normalize the path string
-            $real = str_replace('\\', '/', $path);
-        } else {
-            $real = str_replace('\\', '/', $real);
-        }
-        return $real;
-    }
-    
-    /**
-     * Close database connection
-     */
-    public function close() {
-        if ($this->db) {
-            $this->db->close();
-        }
-    }
-    
-    public function __destruct() {
-        $this->close();
     }
 }

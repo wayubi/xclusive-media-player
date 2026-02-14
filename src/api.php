@@ -1,5 +1,6 @@
 <?php
 
+require_once __DIR__ . '/lib/Utils.php';
 require_once __DIR__ . '/lib/AuditDatabase.php';
 require_once __DIR__ . '/lib/FavoritesDatabase.php';
 require_once __DIR__ . '/lib/MetadataDatabase.php';
@@ -7,55 +8,23 @@ require_once __DIR__ . '/lib/MetadataDatabase.php';
 header('Content-Type: application/json');
 
 function decodeBase64Path($path) {
-    if ($path === null || $path === '') {
-        return $path;
-    }
-    $decoded = base64_decode($path, true);
-    return $decoded !== false ? $decoded : $path;
+    return Utils::decodeBase64Path($path);
 }
 
 function decodeBase64Paths($paths) {
-    if (!is_array($paths)) {
-        return $paths;
-    }
-    return array_map('decodeBase64Path', $paths);
+    return Utils::decodeBase64Paths($paths);
 }
 
 function fsPathToWebPath(string $fsPath, string $root, string $webRoot = '/volumes'): string {
-    $relative = str_replace($root, '', $fsPath);
-    return $webRoot . $relative;
+    return Utils::filesystemToWebPath($fsPath, $root, $webRoot);
 }
 
 function encodeArrayKeysBase64(array $arr): array {
-    $result = [];
-    foreach ($arr as $key => $value) {
-        $result[base64_encode($key)] = $value;
-    }
-    return $result;
+    return Utils::encodeArrayKeysBase64($arr);
 }
 
 function executeCommand(string $command, ?string $cwd = null): string {
-    $descriptors = [
-        0 => ['pipe', 'r'],
-        1 => ['pipe', 'w'],
-        2 => ['pipe', 'w'],
-    ];
-    
-    $process = proc_open($command, $descriptors, $pipes, $cwd);
-    
-    if (!is_resource($process)) {
-        return '';
-    }
-    
-    fclose($pipes[0]);
-    
-    $output = stream_get_contents($pipes[1]);
-    fclose($pipes[1]);
-    fclose($pipes[2]);
-    
-    proc_close($process);
-    
-    return $output;
+    return Utils::executeCommand($command, $cwd);
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -218,6 +187,7 @@ function checkMoovAtomPosition(string $filepath): ?bool
 function getMetadataForFile(string $webPath, string $root, MetadataDatabase $metaDb): ?array
 {
     $cleanFile = ltrim(preg_replace('#^/volumes/#i', '', $webPath), '/');
+    $cleanFile = urldecode($cleanFile);
     $fsPath = realpath($root . '/' . $cleanFile);
 
     if (!$fsPath || !str_starts_with($fsPath, $root) || !is_file($fsPath)) {
@@ -961,7 +931,7 @@ switch ($action) {
         
         // $file is already a filesystem path (base64 decoded from JS)
         // Just validate it's within root
-        $fsPath = $file;
+        $fsPath = urldecode($file);
         
         if (!$fsPath || !str_starts_with($fsPath, $root) || !file_exists($fsPath)) {
             http_response_code(400);
@@ -1024,7 +994,7 @@ switch ($action) {
         }
         
         // Convert web path to filesystem path
-        $cleanFolder = ltrim(preg_replace('#^/volumes/#i', '', $folderPath), '/');
+        $cleanFolder = ltrim(preg_replace('#^/volumes/#i', '', urldecode($folderPath)), '/');
         $fsFolderPath = realpath($root . '/' . $cleanFolder);
         
         try {
@@ -1062,6 +1032,7 @@ switch ($action) {
         // $currentDir comes in as web path (e.g., "/videos/action" or "/volumes/videos/action")
         // We need to convert it to filesystem path (e.g., "/var/www/volumes/videos/action")
         $cleanDir = ltrim(preg_replace('#^/volumes/?#i', '', $currentDir), '/');
+        $cleanDir = urldecode($cleanDir);
         $fsDir = $root . ($cleanDir ? '/' . $cleanDir : '');
         
         // Validate current directory
@@ -1184,6 +1155,7 @@ switch ($action) {
         
         // Convert web path to filesystem path
         $cleanDir = ltrim(preg_replace('#^/volumes/?#i', '', $currentDir), '/');
+        $cleanDir = urldecode($cleanDir);
         $fsDir = $root . ($cleanDir ? '/' . $cleanDir : '');
         
         // Validate current directory
@@ -1212,6 +1184,7 @@ switch ($action) {
                 $output = '';
             } elseif (str_starts_with($target, '/')) {
                 // Absolute path
+                $target = urldecode($target);
                 $targetPath = realpath($root . $target);
                 if ($targetPath && str_starts_with($targetPath, $root) && is_dir($targetPath)) {
                     $newDir = $targetPath;
@@ -1220,6 +1193,7 @@ switch ($action) {
                 }
             } else {
                 // Relative path
+                $target = urldecode($target);
                 $targetPath = realpath($fsDir . '/' . $target);
                 if ($targetPath && str_starts_with($targetPath, $root) && is_dir($targetPath)) {
                     $newDir = $targetPath;
@@ -1238,6 +1212,28 @@ switch ($action) {
                 'currentDir' => $webDir
             ]);
         } else {
+            // Validate command to prevent obvious injection attempts
+            // Block command chaining, piping, backgrounding, and subshell execution
+            $dangerousPatterns = [
+                '/\brm\s+-rf\b/i',
+                '/;\s*\w+/',
+                '/\|\s*\w+/',
+                '/&\s*\w+/',
+                '/\$\(/',
+                '/`/',
+                '/>\s*\/dev\//',
+                '/\bcurl\b.*\|/',
+                '/\bwget\b.*\|/',
+            ];
+            
+            foreach ($dangerousPatterns as $pattern) {
+                if (preg_match($pattern, $commandLine)) {
+                    http_response_code(400);
+                    echo json_encode(['error' => 'Command contains disallowed patterns']);
+                    exit;
+                }
+            }
+            
             // Execute command with bash, adding scripts directory to PATH
             $scriptsDir = '/var/www/html/scripts';
             $fullCommand = "cd " . escapeshellarg($fsDir) . " && export PATH=" . escapeshellarg($scriptsDir) . ":\$PATH && " . $commandLine . " 2>&1";
@@ -1323,6 +1319,7 @@ switch ($action) {
         
         // Convert web path to filesystem path for working directory
         $cleanDir = ltrim(preg_replace('#^/volumes/?#i', '', $currentDir), '/');
+        $cleanDir = urldecode($cleanDir);
         $workingDir = $root . ($cleanDir ? '/' . $cleanDir : '');
         $workingDir = realpath($workingDir) ?: $root;
         
@@ -1452,6 +1449,7 @@ switch ($action) {
         
         // Convert web path to filesystem path for working directory
         $cleanDir = ltrim(preg_replace('#^/volumes/?#i', '', $currentDir), '/');
+        $cleanDir = urldecode($cleanDir);
         $workingDir = $root . ($cleanDir ? '/' . $cleanDir : '');
         $workingDir = realpath($workingDir) ?: $root;
         

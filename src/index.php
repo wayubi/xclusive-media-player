@@ -138,206 +138,22 @@ $total_cells = $selected_columns * $selected_rows;
 $muted = !isset($_GET['muted']) || $_GET['muted'] === 'true';
 
 // ================================
-// FILESYSTEM HELPERS
+// FILESYSTEM HELPERS (using Utils)
 // ================================
-function getExcludedFolders(): array {
-    return ['.trash'];
-}
 
-function getSubfolders(string $path): array {
-    if (!is_dir($path)) return [];
-
-    $folders = scandir($path);
-    $excluded = getExcludedFolders();
-
-    $filtered = array_filter($folders, function($d) use ($path, $excluded) {
-        // Skip ., .., excluded folders, and any hidden directories (starting with .)
-        if ($d === '.' || $d === '..' || in_array($d, $excluded)) return false;
-        if ($d[0] === '.') return false; // Hidden directory
-        return is_dir("$path/$d");
-    });
-
-    usort($filtered, 'strcasecmp');
-    return array_values($filtered);
-}
-
-function getFiles(string $path): array {
-    if (!is_dir($path)) return [];
-    $files = [];
-    $it = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::SELF_FIRST
-    );
-
-    $excluded = getExcludedFolders();
-
-    foreach ($it as $file) {
-        $name = $file->getFilename();
-        if (!$file->isFile() || $name[0] === '.') continue;
-        $pathname = $file->getPathname();
-
-        // Skip files in hidden directories (directories starting with .)
-        $pathParts = explode('/', dirname($pathname));
-        foreach ($pathParts as $part) {
-            if (!empty($part) && $part[0] === '.') {
-                continue 2; // Skip this file if in a hidden directory
-            }
-        }
-
-        foreach ($excluded as $folder) {
-            if (strpos($pathname, "/$folder/") !== false) {
-                continue 2; // Skip this file if any excluded folder is in the path
-            }
-        }
-
-        if (!file_exists($pathname)) {
-            error_log("Missing file: $pathname");
-        }
-        $files[] = $pathname;
-    }
-
-    $mtimes = array_map(function($file) {
-        $realPath = htmlspecialchars_decode($file, ENT_QUOTES | ENT_HTML5);
-        return @filemtime($realPath) ?: 0;
-    }, $files);
-    array_multisort($mtimes, SORT_DESC, $files);
-    return array_values($files);
-}
-
-function filesystemToWebPath(string $fsPath, string $rootFs, string $rootWeb): string {
-    static $rootFsReal = null;
-    
-    if ($rootFsReal === null) {
-        $rootFsReal = realpath($rootFs);
-    }
-
-    $fsPath = str_replace('\\', '/', $fsPath);
-    $relative = str_starts_with($fsPath, $rootFsReal) 
-        ? substr($fsPath, strlen($rootFsReal)) 
-        : $fsPath;
-    
-    $segments = array_map('rawurlencode', explode('/', ltrim($relative, '/')));
-    return rtrim($rootWeb, '/') . '/' . implode('/', $segments);
-}
-
-function getCurrentPath(string $root, string $selected_path): string {
-    static $cachedRoot = null;
-    if ($cachedRoot === null) {
-        $cachedRoot = realpath($root) ?: $root;
-    }
-    // Block path traversal: .. at start/end or as a directory component
-    if (preg_match('#(^|/)\.\.(/|$)#', $selected_path)) {
-        return $cachedRoot;
-    }
-    $fullPath = $cachedRoot . DIRECTORY_SEPARATOR . ltrim($selected_path, '/\\');
-    $real = realpath($fullPath);
-    return ($real && str_starts_with($real, $cachedRoot)) ? $real : $cachedRoot;
-}
-
-function getFolderAuditStatus(string $folderPath, $auditDb): string {
-    if (!is_dir($folderPath)) return 'all_audited';
-    
-    $files = [];
-    $it = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($folderPath, FilesystemIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::SELF_FIRST
-    );
-    
-    $excluded = getExcludedFolders();
-    
-    foreach ($it as $file) {
-        $name = $file->getFilename();
-        if (!$file->isFile() || $name[0] === '.') continue;
-        $pathname = $file->getPathname();
-
-        // Skip files in hidden directories (directories starting with .)
-        $pathParts = explode('/', dirname($pathname));
-        foreach ($pathParts as $part) {
-            if (!empty($part) && $part[0] === '.') {
-                continue 2;
-            }
-        }
-
-        foreach ($excluded as $folder) {
-            if (strpos($pathname, "/$folder/") !== false) {
-                continue 2;
-            }
-        }
-
-        $files[] = $pathname;
-    }
-    
-    // If no files found, consider it all audited
-    if (empty($files)) {
-        return 'all_audited';
-    }
-    
-    // Check all files at once
-    $statuses = $auditDb->getAuditStatusBatch($files);
-    
-    $totalFiles = count($statuses);
-    $auditedCount = 0;
-    
-    foreach ($statuses as $status) {
-        if ($status['audited']) {
-            $auditedCount++;
-        }
-    }
-    
-    // Determine status
-    if ($auditedCount === $totalFiles) {
-        return 'all_audited';  // All files are audited
-    } elseif ($auditedCount === 0) {
-        return 'none_audited'; // No files are audited
-    } else {
-        return 'some_audited'; // Some files are audited
-    }
-}
-
-function countFilesInFolder(string $folderPath): int {
-    if (!is_dir($folderPath)) return 0;
-    
-    $count = 0;
-    $it = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($folderPath, FilesystemIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::SELF_FIRST
-    );
-    
-    $excluded = getExcludedFolders();
-    
-    foreach ($it as $file) {
-        $name = $file->getFilename();
-        if (!$file->isFile() || $name[0] === '.') continue;
-        $pathname = $file->getPathname();
-
-        // Skip files in hidden directories (directories starting with .)
-        $pathParts = explode('/', dirname($pathname));
-        foreach ($pathParts as $part) {
-            if (!empty($part) && $part[0] === '.') {
-                continue 2;
-            }
-        }
-
-        foreach ($excluded as $folder) {
-            if (strpos($pathname, "/$folder/") !== false) {
-                continue 2;
-            }
-        }
-
-        $count++;
-    }
-    
-    return $count;
-}
-
-function renderSingleFolderSelect(array $selected_parts, string $current_abs_path, $auditDb): void {
+function renderSingleFolderSelect(array $selected_parts, string $current_abs_path, $auditDb, array $folderStats = [], array $subfolders = []): void {
     $is_root = empty($selected_parts);
-    $subfolders = getSubfolders(path: $current_abs_path);
     $has_children = !empty($subfolders);
     
-    // Get current folder name, audit status, and file count
-    $current_status = getFolderAuditStatus($current_abs_path, $auditDb);
-    $current_file_count = countFilesInFolder($current_abs_path);
+    // Get file count from pre-calculated stats if available
+    $current_file_count = 0;
+    if (isset($folderStats[$current_abs_path])) {
+        $current_file_count = $folderStats[$current_abs_path]['total'] ?? 0;
+    } else {
+        // Fallback: count files if not in pre-calculated stats
+        $current_file_count = count(Utils::getFilesRecursively($current_abs_path));
+    }
+    
     $current_icon = $is_root ? '🏠' : '📂';
     $current_folder_name = $current_icon . ' ' . ($is_root ? 'Root' : basename($current_abs_path)) . ' (' . $current_file_count . ')';
     ?>
@@ -351,19 +167,27 @@ function renderSingleFolderSelect(array $selected_parts, string $current_abs_pat
         <?php foreach ($subfolders as $folder): ?>
             <?php
                 $subfolderPath = $current_abs_path . DIRECTORY_SEPARATOR . $folder;
-                $subfolder_status = getFolderAuditStatus($subfolderPath, $auditDb);
-                $subfolder_file_count = countFilesInFolder($subfolderPath);
                 
-                // Choose icon based on audit status
+                // Use pre-calculated stats if available
+                if (isset($folderStats[$subfolderPath])) {
+                    $stats = $folderStats[$subfolderPath];
+                    $subfolder_status = $stats['status'];
+                    $subfolder_file_count = $stats['total'];
+                } else {
+                    // Fallback: calculate if not in pre-calculated stats
+                    $subfolder_status = 'all_audited';
+                    $subfolder_file_count = count(Utils::getFilesRecursively($subfolderPath));
+                }
+                
                 switch ($subfolder_status) {
                     case 'all_audited':
-                        $subfolder_icon = '✅';  // All files audited
+                        $subfolder_icon = '✅';
                         break;
                     case 'some_audited':
-                        $subfolder_icon = '⚠️';  // Some files audited (yellow warning)
+                        $subfolder_icon = '⚠️';
                         break;
                     case 'none_audited':
-                        $subfolder_icon = '🆕';  // No files audited (new/unaudited)
+                        $subfolder_icon = '🆕';
                         break;
                     default:
                         $subfolder_icon = '📁';
@@ -380,23 +204,20 @@ function renderSingleFolderSelect(array $selected_parts, string $current_abs_pat
 // ================================
 // MAIN LOGIC
 // ================================
-$current_path = getCurrentPath($root_directory_absolute, $selected_path);
-
-// NEW: Use SQLite for audit status
+require_once __DIR__ . '/lib/Utils.php';
 require_once __DIR__ . '/lib/AuditDatabase.php';
-$auditDb = new AuditDatabase();
-
-// NEW: Use SQLite for favorites
 require_once __DIR__ . '/lib/FavoritesDatabase.php';
-$favDb = new FavoritesDatabase();
-
-// NEW: Use SQLite for metadata
 require_once __DIR__ . '/lib/MetadataDatabase.php';
+
+$current_path = Utils::getCurrentPath($root_directory_absolute, $selected_path);
+
+$auditDb = new AuditDatabase();
+$favDb = new FavoritesDatabase();
 $metaDb = new MetadataDatabase();
 
-$allFilesRaw = getFiles($current_path);
+$allFilesRaw = Utils::getFilesRecursively($current_path);
 $webRoot = '/' . trim($root_directory, './');
-$allFiles = array_map(fn($f) => filesystemToWebPath($f, $root_directory_absolute, $webRoot), $allFilesRaw);
+$allFiles = array_map(fn($f) => Utils::filesystemToWebPath($f, $root_directory_absolute, $webRoot), $allFilesRaw);
 $allFilesCount = count($allFiles);
 
 // Get audit statuses for all files
@@ -450,13 +271,21 @@ foreach ($allFilesRaw as $i => $fsPath) {
 // Get total favorites count in this folder
 $favoritesCount = $favDb->getFavoritesCountInFolder($current_path);
 
+// Pre-calculate folder stats for dropdown (O(n) instead of O(n²))
+$subfolders = Utils::getSubfolders($current_path);
+$folderStats = [];
+if (!empty($subfolders)) {
+    $folderPaths = array_map(fn($f) => $current_path . DIRECTORY_SEPARATOR . $f, $subfolders);
+    $folderStats = $auditDb->getFolderStatsBatch($folderPaths);
+}
+
 require_once __DIR__ . '/lib/audioCovers.php';
 $audioThumbsRaw = generateAudioCovers($allFilesRaw);
 
 $audioThumbs = [];
 $docRoot = realpath($_SERVER['DOCUMENT_ROOT'] ?? '');
 foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
-    $audioWeb = filesystemToWebPath($audioFs, $root_directory_absolute, $webRoot);
+    $audioWeb = Utils::filesystemToWebPath($audioFs, $root_directory_absolute, $webRoot);
     $thumbWeb = $docRoot ? '/' . ltrim(str_replace('\\', '/', str_replace($docRoot, '', realpath($thumbFs))), '/') : '';
     $audioThumbs[$audioWeb] = $thumbWeb ?: 'cache/no-cover.jpg';
 }
@@ -515,7 +344,7 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
                         ← Back
                     </button>
                 <?php endif; ?>
-                <?php renderSingleFolderSelect($selected_path_parts_final, $current_path, $auditDb); ?>
+                <?php renderSingleFolderSelect($selected_path_parts_final, $current_path, $auditDb, $folderStats, $subfolders); ?>
             </div>
 
             <!-- Grid controls -->

@@ -1,30 +1,17 @@
 <?php
 // lib/FavoritesDatabase.php - Global favorites management with SQLite
 
-class FavoritesDatabase {
-    private $db;
-    private $dbPath;
-    
+require_once __DIR__ . '/Database.php';
+
+class FavoritesDatabase extends Database
+{
     public function __construct($dbPath = null) {
-        $this->dbPath = $dbPath ?? __DIR__ . '/../../db/favorites.db';
-        $this->initDatabase();
+        $dbPath = $dbPath ?? __DIR__ . '/../../db/favorites.db';
+        parent::__construct($dbPath);
     }
-    
-    private function initDatabase() {
-        // Ensure directory exists
-        $dir = dirname($this->dbPath);
-        if (!is_dir($dir)) {
-            mkdir($dir, 0777, true);
-        }
-        
-        // Open SQLite database
-        $this->db = new SQLite3($this->dbPath);
-        
-        // Enable WAL mode for better concurrency
-        $this->db->exec('PRAGMA journal_mode = WAL;');
-        $this->db->exec('PRAGMA busy_timeout = 5000;');
-        
-        // Create tables if they don't exist
+
+    protected function createTables(): void
+    {
         $this->db->exec('
             CREATE TABLE IF NOT EXISTS files (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -286,52 +273,5 @@ class FavoritesDatabase {
         $row = $result->fetchArray(SQLITE3_ASSOC);
         
         return $row ? (int)$row['count'] : 0;
-    }
-    
-    /**
-     * Clean up deleted files from database
-     */
-    public function cleanupDeletedFiles() {
-        $stmt = $this->db->query('SELECT id, file_path FROM files');
-        $deleted = 0;
-        
-        while ($row = $stmt->fetchArray(SQLITE3_ASSOC)) {
-            if (!file_exists($row['file_path'])) {
-                $delStmt = $this->db->prepare('DELETE FROM files WHERE id = :id');
-                $delStmt->bindValue(':id', $row['id'], SQLITE3_INTEGER);
-                $delStmt->execute();
-                $deleted++;
-            }
-        }
-        
-        return $deleted;
-    }
-    
-    /**
-     * Normalize file path for consistent storage
-     */
-    private function normalizePath($path) {
-        // Get real path (resolves symlinks, removes ./ and ../)
-        $real = realpath($path);
-        if ($real === false) {
-            // If file doesn't exist yet, normalize the path string
-            $real = str_replace('\\', '/', $path);
-        } else {
-            $real = str_replace('\\', '/', $real);
-        }
-        return $real;
-    }
-    
-    /**
-     * Close database connection
-     */
-    public function close() {
-        if ($this->db) {
-            $this->db->close();
-        }
-    }
-    
-    public function __destruct() {
-        $this->close();
     }
 }

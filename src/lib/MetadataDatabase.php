@@ -1,54 +1,22 @@
 <?php
 // lib/MetadataDatabase.php - File metadata management with SQLite
 
-class MetadataDatabase {
-    private $db;
-    private $dbPath;
-    
+require_once __DIR__ . '/Database.php';
+require_once __DIR__ . '/Utils.php';
+
+class MetadataDatabase extends Database
+{
     private static function executeCommand(string $command, ?string $cwd = null): string {
-        $descriptors = [
-            0 => ['pipe', 'r'],
-            1 => ['pipe', 'w'],
-            2 => ['pipe', 'w'],
-        ];
-        
-        $process = proc_open($command, $descriptors, $pipes, $cwd);
-        
-        if (!is_resource($process)) {
-            return '';
-        }
-        
-        fclose($pipes[0]);
-        
-        $output = stream_get_contents($pipes[1]);
-        fclose($pipes[1]);
-        fclose($pipes[2]);
-        
-        proc_close($process);
-        
-        return $output;
+        return Utils::executeCommand($command, $cwd);
     }
     
     public function __construct($dbPath = null) {
-        $this->dbPath = $dbPath ?? __DIR__ . '/../../db/metadata.db';
-        $this->initDatabase();
+        $dbPath = $dbPath ?? __DIR__ . '/../../db/metadata.db';
+        parent::__construct($dbPath);
     }
-    
-    private function initDatabase() {
-        // Ensure directory exists
-        $dir = dirname($this->dbPath);
-        if (!is_dir($dir)) {
-            mkdir($dir, 0777, true);
-        }
-        
-        // Open SQLite database
-        $this->db = new SQLite3($this->dbPath);
-        
-        // Enable WAL mode for better concurrency
-        $this->db->exec('PRAGMA journal_mode = WAL;');
-        $this->db->exec('PRAGMA busy_timeout = 5000;');
-        
-        // Create tables if they don't exist
+
+    protected function createTables(): void
+    {
         $this->db->exec('
             CREATE TABLE IF NOT EXISTS files (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -271,25 +239,6 @@ class MetadataDatabase {
     }
     
     /**
-     * Clean up entries for deleted files
-     */
-    public function cleanupDeletedFiles() {
-        $stmt = $this->db->query('SELECT id, file_path FROM files');
-        $deleted = 0;
-        
-        while ($row = $stmt->fetchArray(SQLITE3_ASSOC)) {
-            if (!file_exists($row['file_path'])) {
-                $delStmt = $this->db->prepare('DELETE FROM files WHERE id = :id');
-                $delStmt->bindValue(':id', $row['id'], SQLITE3_INTEGER);
-                $delStmt->execute();
-                $deleted++;
-            }
-        }
-        
-        return $deleted;
-    }
-    
-    /**
      * Delete metadata for a specific file
      */
     public function deleteMetadata($fsPath) {
@@ -373,32 +322,14 @@ class MetadataDatabase {
      */
     private function webToFilesystemPath($webPath, $root, $webRoot) {
         $cleanFile = ltrim(preg_replace('#^/volumes/#i', '', $webPath), '/');
+        $cleanFile = urldecode($cleanFile);
         return realpath($root . '/' . $cleanFile);
     }
     
     /**
      * Normalize file path for consistent storage
      */
-    private function normalizePath($path) {
-        $real = realpath($path);
-        if ($real === false) {
-            $real = str_replace('\\', '/', $path);
-        } else {
-            $real = str_replace('\\', '/', $real);
-        }
-        return $real;
-    }
-    
-    /**
-     * Close database connection
-     */
-    public function close() {
-        if ($this->db) {
-            $this->db->close();
-        }
-    }
-    
-    public function __destruct() {
-        $this->close();
+    public function normalizePath(string $path): string {
+        return parent::normalizePath($path);
     }
 }

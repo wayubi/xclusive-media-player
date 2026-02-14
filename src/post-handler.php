@@ -12,11 +12,10 @@ if (!is_array($data) || empty($data['action'])) {
     exit;
 }
 
-$ch = curl_init('http://php-cli:8080/api.php');
+$cookieHeader = http_build_query($_COOKIE, '', '; ');
 
 switch ($data['action']) {
     case 'delete':
-        // Check for recursive folder deletion
         if (!empty($data['recursive']) && !empty($data['delete_folder']) && !empty($data['folder'])) {
             $payload = [
                 'action' => 'delete',
@@ -25,7 +24,6 @@ switch ($data['action']) {
                 'folder' => $data['folder'],
             ];
         } elseif (!empty($data['files'])) {
-            // Original file deletion
             $payload = [
                 'action' => 'delete',
                 'files'  => $data['files'],
@@ -78,17 +76,15 @@ switch ($data['action']) {
         break;
 
     case 'run_script':
-        // Script execution requires streaming - handle differently
         if (empty($data['script'])) {
             http_response_code(400);
             echo json_encode(['error' => 'Missing script parameter']);
             exit;
         }
 
-        // Forward directly to php-cli for streaming
         $ch = curl_init('http://php-cli:8080/api.php');
         curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => false,  // Don't buffer - stream directly
+            CURLOPT_RETURNTRANSFER => false,
             CURLOPT_POST => true,
             CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
             CURLOPT_POSTFIELDS => json_encode([
@@ -97,7 +93,7 @@ switch ($data['action']) {
                 'args' => $data['args'] ?? [],
                 'currentDir' => $data['currentDir'] ?? '/volumes',
             ]),
-            CURLOPT_COOKIE => http_build_query($_COOKIE, '', '; '),
+            CURLOPT_COOKIE => $cookieHeader,
             CURLOPT_WRITEFUNCTION => function($ch, $data) {
                 echo $data;
                 flush();
@@ -116,7 +112,6 @@ switch ($data['action']) {
         exit;
 
     case 'list_scripts':
-        // Just forward to php-cli
         $payload = [
             'action' => 'list_scripts',
         ];
@@ -129,10 +124,9 @@ switch ($data['action']) {
             exit;
         }
 
-        // Forward directly to php-cli for streaming
         $ch = curl_init('http://php-cli:8080/api.php');
         curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => false,  // Don't buffer - stream directly
+            CURLOPT_RETURNTRANSFER => false,
             CURLOPT_POST => true,
             CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
             CURLOPT_POSTFIELDS => json_encode([
@@ -142,7 +136,7 @@ switch ($data['action']) {
                 'fullCommand' => $data['fullCommand'] ?? '',
                 'currentDir' => $data['currentDir'] ?? '/volumes',
             ]),
-            CURLOPT_COOKIE => http_build_query($_COOKIE, '', '; '),
+            CURLOPT_COOKIE => $cookieHeader,
             CURLOPT_WRITEFUNCTION => function($ch, $data) {
                 echo $data;
                 flush();
@@ -166,12 +160,13 @@ switch ($data['action']) {
         exit;
 }
 
+$ch = curl_init('http://php-cli:8080/api.php');
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_POST           => true,
     CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
     CURLOPT_POSTFIELDS     => json_encode($payload),
-    CURLOPT_COOKIE         => http_build_query($_COOKIE, '', '; '),
+    CURLOPT_COOKIE         => $cookieHeader,
 ]);
 
 $response = curl_exec($ch);
