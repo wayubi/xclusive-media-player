@@ -48,6 +48,33 @@ function setupGridNavigation() {
     if (Math.abs(delta) > 50) delta < 0 ? nextGrid() : prevGrid();
   }, { passive: true });
   
+  // Arrow key navigation
+  document.addEventListener('keydown', (e) => {
+    // Don't process if terminal is active
+    if (isTerminalActive()) return;
+    
+    // Don't process if fullscreen is active
+    if (document.querySelector('div[style*="z-index:9999"]')) return;
+    
+    // Don't process if search overlay is open
+    const searchOverlay = document.getElementById('search-overlay');
+    if (searchOverlay && searchOverlay.style.display === 'flex') return;
+    
+    // Don't process if delete modal is open
+    if (document.getElementById('scary-delete-modal')) return;
+    
+    switch(e.key) {
+      case 'ArrowRight':
+        e.preventDefault();
+        nextGrid();
+        break;
+      case 'ArrowLeft':
+        e.preventDefault();
+        prevGrid();
+        break;
+    }
+  });
+  
   // Options form wheel
   const optionsForm = document.getElementById('options-form');
   if (optionsForm) addWheelListener(optionsForm);
