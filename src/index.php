@@ -190,9 +190,6 @@ function getFiles(string $path): array {
             }
         }
 
-        if (!mb_check_encoding($pathname, 'UTF-8')) {
-            $pathname = iconv('UTF-8', 'UTF-8//IGNORE', $pathname);
-        }
         if (!file_exists($pathname)) {
             error_log("Missing file: $pathname");
         }
@@ -615,7 +612,7 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
         <script>
             window.APP = {
                 allVideos: <?= json_encode($allFiles, JSON_UNESCAPED_SLASHES) ?>,
-                allFilesWithPaths: <?= json_encode($allFilesRaw, JSON_UNESCAPED_SLASHES) ?>,
+                allFilesWithPaths: <?= json_encode(array_map('base64_encode', $allFilesRaw), JSON_UNESCAPED_SLASHES) ?>,
                 audioThumbs: <?= json_encode($audioThumbs, JSON_UNESCAPED_SLASHES) ?>,
                 auditStatusMap: <?= json_encode($auditStatusMap, JSON_UNESCAPED_SLASHES) ?>,
                 favoritesMap: <?= json_encode($favoritesMap, JSON_UNESCAPED_SLASHES) ?>,

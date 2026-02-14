@@ -101,7 +101,7 @@ export const state = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'toggle_favorite',
-          file: file
+          file: fsPath
         })
       });
       

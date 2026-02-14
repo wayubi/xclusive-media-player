@@ -252,8 +252,8 @@ export async function confirmDelete() {
   // If in select all mode, delete the entire folder recursively
   if (selectAllMode) {
     const currentFolder = getCurrentFolderPath();
-    if (!currentFolder) {
-      alert('Cannot determine current folder');
+    if (!currentFolder || currentFolder === '/volumes') {
+      alert('Cannot delete root volumes folder');
       return;
     }
     
@@ -358,20 +358,12 @@ export function clearAllSelections() {
 }
 
 function getCurrentFolderPath() {
-  // currentPath is an absolute filesystem path string (e.g., "/root/xclusive/volumes/MyFolder")
   if (!state.currentPath || state.currentPath === '') {
-    return '/volumes';
+    return null;
   }
   
-  // Convert filesystem path to web path
-  // e.g., "/root/xclusive/volumes/MyFolder" → "/volumes/MyFolder"
-  const volumesIndex = state.currentPath.indexOf('/volumes/');
-  if (volumesIndex !== -1) {
-    return state.currentPath.substring(volumesIndex);
-  }
-  
-  // If it doesn't contain /volumes/, just return /volumes
-  return '/volumes';
+  // Simply prepend /volumes
+  return '/volumes' + state.currentPath;
 }
 
 function navigateToFolder(path) {

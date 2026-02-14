@@ -274,7 +274,8 @@ async function processCommand(commandLine) {
       printToTerminal(data.error, 'error');
     } else {
       if (data.output) {
-        printToTerminal(data.output);
+        // Decode base64-encoded output
+        printToTerminal(atob(data.output));
       }
       // Update current directory if it changed
       if (data.currentDir) {

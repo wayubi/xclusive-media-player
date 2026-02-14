@@ -2,6 +2,30 @@
 <?php
 require_once '/var/www/html/lib/MetadataDatabase.php';
 
+function executeCommand(string $command, ?string $cwd = null): string {
+    $descriptors = [
+        0 => ['pipe', 'r'],
+        1 => ['pipe', 'w'],
+        2 => ['pipe', 'w'],
+    ];
+    
+    $process = proc_open($command, $descriptors, $pipes, $cwd);
+    
+    if (!is_resource($process)) {
+        return '';
+    }
+    
+    fclose($pipes[0]);
+    
+    $output = stream_get_contents($pipes[1]);
+    fclose($pipes[1]);
+    fclose($pipes[2]);
+    
+    proc_close($process);
+    
+    return $output;
+}
+
 // Parse arguments
 $options = getopt('', ['force', 'all', 'dry-run', 'xxhash', 'prune', 'help']);
 
@@ -91,7 +115,7 @@ if ($prune) {
                 // Check xxhash
                 $dbXxhash = $row['xxhash'] ?? null;
                 if ($dbXxhash) {
-                    $currentXxhashOutput = shell_exec('xxhsum ' . escapeshellarg($dbFilePath) . ' 2>/dev/null');
+                    $currentXxhashOutput = executeCommand('xxhsum ' . escapeshellarg($dbFilePath));
                     $currentXxhash = null;
                     if ($currentXxhashOutput) {
                         $parts = explode(' ', trim($currentXxhashOutput));
@@ -206,7 +230,7 @@ foreach ($files as $i => $fsPath) {
             // Check if xxhash has changed
             $dbXxhash = $metadata['xxhash'] ?? null;
             if ($dbXxhash) {
-                $currentXxhashOutput = shell_exec('xxhsum ' . escapeshellarg($fsPath) . ' 2>/dev/null');
+                $currentXxhashOutput = executeCommand('xxhsum ' . escapeshellarg($fsPath));
                 $currentXxhash = null;
                 if ($currentXxhashOutput) {
                     $xxhashParts = explode(' ', trim($currentXxhashOutput));
@@ -258,8 +282,33 @@ foreach ($files as $i => $fsPath) {
             $refreshed++;
         } else {
             // Video file metadata
-            $cmd = sprintf('ffprobe -v quiet -print_format json -show_format -show_streams %s 2>&1', escapeshellarg($fsPath));
-            $raw = shell_exec($cmd);
+            $cmd = [
+                'ffprobe',
+                '-v', 'quiet',
+                '-print_format', 'json',
+                '-show_format',
+                '-show_streams',
+                $fsPath
+            ];
+
+            $descriptors = [
+                0 => ['pipe', 'r'],
+                1 => ['pipe', 'w'],
+                2 => ['pipe', 'w'],
+            ];
+
+            $proc = proc_open($cmd, $descriptors, $pipes);
+
+            if (is_resource($proc)) {
+                $output = stream_get_contents($pipes[1]);
+                fclose($pipes[1]);
+                fclose($pipes[2]);
+                proc_close($proc);
+
+                $raw = $output;
+            } else {
+                $raw = '';
+            }
             
             if ($raw && $meta = json_decode($raw, true)) {
                 $video = null;

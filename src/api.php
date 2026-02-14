@@ -6,6 +6,58 @@ require_once __DIR__ . '/lib/MetadataDatabase.php';
 
 header('Content-Type: application/json');
 
+function decodeBase64Path($path) {
+    if ($path === null || $path === '') {
+        return $path;
+    }
+    $decoded = base64_decode($path, true);
+    return $decoded !== false ? $decoded : $path;
+}
+
+function decodeBase64Paths($paths) {
+    if (!is_array($paths)) {
+        return $paths;
+    }
+    return array_map('decodeBase64Path', $paths);
+}
+
+function fsPathToWebPath(string $fsPath, string $root, string $webRoot = '/volumes'): string {
+    $relative = str_replace($root, '', $fsPath);
+    return $webRoot . $relative;
+}
+
+function encodeArrayKeysBase64(array $arr): array {
+    $result = [];
+    foreach ($arr as $key => $value) {
+        $result[base64_encode($key)] = $value;
+    }
+    return $result;
+}
+
+function executeCommand(string $command, ?string $cwd = null): string {
+    $descriptors = [
+        0 => ['pipe', 'r'],
+        1 => ['pipe', 'w'],
+        2 => ['pipe', 'w'],
+    ];
+    
+    $process = proc_open($command, $descriptors, $pipes, $cwd);
+    
+    if (!is_resource($process)) {
+        return '';
+    }
+    
+    fclose($pipes[0]);
+    
+    $output = stream_get_contents($pipes[1]);
+    fclose($pipes[1]);
+    fclose($pipes[2]);
+    
+    proc_close($process);
+    
+    return $output;
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode(['error' => 'Method not allowed - POST required']);
@@ -37,6 +89,9 @@ $files = $data['files'] ?? $data['file'] ?? [];
 if (!is_array($files)) {
     $files = $files ? [$files] : [];
 }
+
+// Decode base64-encoded filesystem paths
+$files = decodeBase64Paths($files);
 
 $root = realpath(__DIR__ . '/volumes');
 
@@ -166,12 +221,16 @@ function getMetadataForFile(string $webPath, string $root, MetadataDatabase $met
     $fsPath = realpath($root . '/' . $cleanFile);
 
     if (!$fsPath || !str_starts_with($fsPath, $root) || !is_file($fsPath)) {
-        return ['file' => basename($webPath), 'folder' => '', 'optimizationStatus' => ['isOptimized' => true, 'issues' => []]];
+        return ['file' => base64_encode(basename($webPath)), 'folder' => '', 'optimizationStatus' => ['isOptimized' => true, 'issues' => []]];
     }
 
     // Check database first
     $metadata = $metaDb->getMetadata($webPath, $fsPath);
     if ($metadata !== null) {
+        // Encode the file field for JSON compatibility
+        if (isset($metadata['file'])) {
+            $metadata['file'] = base64_encode($metadata['file']);
+        }
         return $metadata;
     }
 
@@ -195,16 +254,41 @@ function getMetadataForFile(string $webPath, string $root, MetadataDatabase $met
         ];
 
         $metaDb->saveMetadata($webPath, $fsPath, $output);
+        
+        // Return base64_encoded for JSON compatibility
+        $output['file'] = base64_encode($output['file']);
         return $output;
     }
 
     try {
-        $cmd = sprintf(
-            'ffprobe -v quiet -print_format json -show_format -show_streams %s 2>&1',
-            escapeshellarg($fsPath)
-        );
+        $cmd = [
+            'ffprobe',
+            '-v', 'quiet',
+            '-print_format', 'json',
+            '-show_format',
+            '-show_streams',
+            $fsPath
+        ];
 
-        $raw = shell_exec($cmd);
+        $descriptors = [
+            0 => ['pipe', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w'],
+        ];
+
+        $proc = proc_open($cmd, $descriptors, $pipes);
+
+        if (is_resource($proc)) {
+            $output = stream_get_contents($pipes[1]);
+            fclose($pipes[1]);
+            fclose($pipes[2]);
+            proc_close($proc);
+
+            $raw = $output;
+        } else {
+            $raw = '';
+        }
+        
         if ($raw === null || $raw === '') {
             $output = [
                 'file'     => basename($fsPath),
@@ -216,6 +300,9 @@ function getMetadataForFile(string $webPath, string $root, MetadataDatabase $met
                 ],
             ];
             $metaDb->saveMetadata($webPath, $fsPath, $output);
+            
+            // Return base64_encoded for JSON compatibility
+            $output['file'] = base64_encode($output['file']);
             return $output;
         }
 
@@ -231,6 +318,9 @@ function getMetadataForFile(string $webPath, string $root, MetadataDatabase $met
                 ],
             ];
             $metaDb->saveMetadata($webPath, $fsPath, $output);
+            
+            // Return base64_encoded for JSON compatibility
+            $output['file'] = base64_encode($output['file']);
             return $output;
         }
 
@@ -308,6 +398,9 @@ function getMetadataForFile(string $webPath, string $root, MetadataDatabase $met
         ];
 
         $metaDb->saveMetadata($webPath, $fsPath, $output);
+        
+        // Return base64_encoded for JSON compatibility
+        $output['file'] = base64_encode($output['file']);
         return $output;
 
     } catch (Exception $e) {
@@ -321,6 +414,9 @@ function getMetadataForFile(string $webPath, string $root, MetadataDatabase $met
             ],
         ];
         $metaDb->saveMetadata($webPath, $fsPath, $output);
+        
+        // Return base64_encoded for JSON compatibility
+        $output['file'] = base64_encode($output['file']);
         return $output;
     }
 }
@@ -748,6 +844,9 @@ switch ($action) {
             exit;
         }
         
+        // Decode base64-encoded filesystem paths
+        $filePaths = decodeBase64Paths($filePaths);
+        
         try {
             $auditDb = new AuditDatabase();
             
@@ -787,13 +886,16 @@ switch ($action) {
             exit;
         }
         
+        // Decode base64-encoded filesystem paths
+        $filePaths = decodeBase64Paths($filePaths);
+        
         try {
             $auditDb = new AuditDatabase();
             $statuses = $auditDb->getAuditStatusBatch($filePaths);
             
             echo json_encode([
                 'status' => 'ok',
-                'audit_statuses' => $statuses
+                'audit_statuses' => encodeArrayKeysBase64($statuses)
             ]);
         } catch (Exception $e) {
             http_response_code(500);
@@ -811,11 +913,13 @@ switch ($action) {
             exit;
         }
 
-        $meta = getMetadataForFile($file, $root, $metaDb);
+        // Convert filesystem path to web path for getMetadataForFile
+        $webPath = fsPathToWebPath($file, $root);
+        $meta = getMetadataForFile($webPath, $root, $metaDb);
 
         if ($meta === null) {
             http_response_code(400);
-            echo json_encode(['error' => "Invalid file path: $file"]);
+            echo json_encode(['error' => "Invalid file path: " . base64_encode($file)]);
             exit;
         }
 
@@ -837,8 +941,11 @@ switch ($action) {
         $results = [];
 
         foreach ($files as $file) {
-            $meta = getMetadataForFile($file, $root, $metaDb);
-            $results[$file] = $meta;
+            // Convert filesystem path to web path for getMetadataForFile
+            $webPath = fsPathToWebPath($file, $root);
+            $meta = getMetadataForFile($webPath, $root, $metaDb);
+            // Use base64-encoded path as key to avoid UTF-8 issues in JSON
+            $results[base64_encode($file)] = $meta;
         }
 
         echo json_encode($results);
@@ -852,13 +959,13 @@ switch ($action) {
             exit;
         }
         
-        // Convert web path to filesystem path
-        $cleanFile = ltrim(preg_replace('#^/volumes/#i', '', urldecode($file)), '/');
-        $fsPath = realpath($root . '/' . $cleanFile);
+        // $file is already a filesystem path (base64 decoded from JS)
+        // Just validate it's within root
+        $fsPath = $file;
         
         if (!$fsPath || !str_starts_with($fsPath, $root) || !file_exists($fsPath)) {
             http_response_code(400);
-            echo json_encode(['error' => "Invalid file path: $file"]);
+            echo json_encode(['error' => "Invalid file path: " . base64_encode($file)]);
             exit;
         }
         
@@ -869,7 +976,7 @@ switch ($action) {
             echo json_encode([
                 'status' => 'ok',
                 'favorited' => $isFavorited,
-                'file' => $file
+                'file' => base64_encode($file)
             ]);
         } catch (Exception $e) {
             http_response_code(500);
@@ -887,13 +994,16 @@ switch ($action) {
             exit;
         }
         
+        // Decode base64-encoded filesystem paths
+        $filePaths = decodeBase64Paths($filePaths);
+        
         try {
             $favDb = new FavoritesDatabase();
             $statuses = $favDb->getFavoriteStatusBatch($filePaths);
             
             echo json_encode([
                 'status' => 'ok',
-                'favorite_statuses' => $statuses
+                'favorite_statuses' => encodeArrayKeysBase64($statuses)
             ]);
         } catch (Exception $e) {
             http_response_code(500);
@@ -913,9 +1023,13 @@ switch ($action) {
             exit;
         }
         
+        // Convert web path to filesystem path
+        $cleanFolder = ltrim(preg_replace('#^/volumes/#i', '', $folderPath), '/');
+        $fsFolderPath = realpath($root . '/' . $cleanFolder);
+        
         try {
             $favDb = new FavoritesDatabase();
-            $count = $favDb->getFavoritesCountInFolder($folderPath);
+            $count = $favDb->getFavoritesCountInFolder($fsFolderPath);
             
             echo json_encode([
                 'status' => 'ok',
@@ -1120,7 +1234,7 @@ switch ($action) {
             $webDir = '/volumes' . ($relativePath ? '/' . $relativePath : '');
             
             echo json_encode([
-                'output' => $output,
+                'output' => base64_encode($output),
                 'currentDir' => $webDir
             ]);
         } else {
@@ -1139,7 +1253,7 @@ switch ($action) {
             $webDir = '/volumes' . ($relativePath ? '/' . $relativePath : '');
             
             echo json_encode([
-                'output' => $output,
+                'output' => base64_encode($output),
                 'currentDir' => $webDir
             ]);
         }

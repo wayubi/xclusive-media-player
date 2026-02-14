@@ -105,14 +105,15 @@ function populateGridContainers(grid, visibleFiles) {
  * Returns a promise that resolves when metadata is processed
  */
 function fetchMetadataBatch(grid, visibleFiles) {
-  const visibleFilesDecoded = visibleFiles.map(f => decodeURIComponent(f));
+  // Use webToFsPathMap to get base64-encoded filesystem paths for API
+  const fsPaths = visibleFiles.map(webPath => state.webToFsPathMap[webPath]);
 
   return fetch('api.php', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       action: 'metadata_batch',
-      files: visibleFilesDecoded
+      files: fsPaths
     })
   })
   .then(r => {
@@ -124,8 +125,8 @@ function fetchMetadataBatch(grid, visibleFiles) {
     
     Array.from(grid.children).forEach((container, idx) => {
       const file = visibleFiles[idx];
-      const decodedFile = decodeURIComponent(file);
-      const meta = metas[decodedFile] || {};
+      const fsPath = fsPaths[idx];
+      const meta = metas[fsPath] || {};
       
 
       // Store metadata in state
@@ -141,7 +142,7 @@ function fetchMetadataBatch(grid, visibleFiles) {
       const metaElem = container.querySelector('.overlay > div:last-child');
 
       if (filenameElem) {
-        filenameElem.textContent = meta.file || decodeURIComponent(file.split('/').pop());
+        filenameElem.textContent = meta.file ? atob(meta.file) : decodeURIComponent(file.split('/').pop());
       }
 
       if (metaElem) {

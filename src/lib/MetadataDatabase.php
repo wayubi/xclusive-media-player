@@ -5,6 +5,30 @@ class MetadataDatabase {
     private $db;
     private $dbPath;
     
+    private static function executeCommand(string $command, ?string $cwd = null): string {
+        $descriptors = [
+            0 => ['pipe', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w'],
+        ];
+        
+        $process = proc_open($command, $descriptors, $pipes, $cwd);
+        
+        if (!is_resource($process)) {
+            return '';
+        }
+        
+        fclose($pipes[0]);
+        
+        $output = stream_get_contents($pipes[1]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        
+        proc_close($process);
+        
+        return $output;
+    }
+    
     public function __construct($dbPath = null) {
         $this->dbPath = $dbPath ?? __DIR__ . '/../../db/metadata.db';
         $this->initDatabase();
@@ -140,7 +164,7 @@ class MetadataDatabase {
         
         // Calculate xxhash
         $xxhash = null;
-        $xxhashOutput = shell_exec('xxhsum ' . escapeshellarg($fsPath) . ' 2>/dev/null');
+        $xxhashOutput = self::executeCommand('xxhsum ' . escapeshellarg($fsPath));
         if ($xxhashOutput) {
             $xxhashParts = explode(' ', trim($xxhashOutput));
             $xxhash = $xxhashParts[0] ?? null;
