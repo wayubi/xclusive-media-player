@@ -77,4 +77,4 @@ done
 
 echo ""
 echo "Refreshing metadata for new MP4 files..."
-refresh_metadata --cksum
+refresh_metadata --xxhash

@@ -3,7 +3,7 @@
 require_once '/var/www/html/lib/MetadataDatabase.php';
 
 // Parse arguments
-$options = getopt('', ['force', 'all', 'dry-run', 'cksum', 'prune', 'help']);
+$options = getopt('', ['force', 'all', 'dry-run', 'xxhash', 'prune', 'help']);
 
 // Show help if requested
 if (isset($options['help'])) {
@@ -22,7 +22,7 @@ Options:
                in scope unconditionally.
   --all        Operate on all files under /volumes instead of just current directory
   --dry-run    Preview changes without modifying database
-  --cksum      Verify file integrity using checksum (also calculates/stores cksum
+  --xxhash     Verify file integrity using xxhash (also calculates/stores xxhash
                during refresh)
   --prune      Enter prune mode (remove stale records instead of refreshing)
   --help       Display this help message
@@ -41,7 +41,7 @@ HELP;
 $force = isset($options['force']);
 $all = isset($options['all']);
 $dryRun = isset($options['dry-run']);
-$checkCksum = isset($options['cksum']);
+$checkXxhash = isset($options['xxhash']);
 $prune = isset($options['prune']);
 
 // Determine target directory
@@ -57,7 +57,7 @@ if ($prune) {
     $checked = 0;
     
     // Get all records from database
-    $stmt = $metaDb->query('SELECT id, file_path, cksum FROM files');
+    $stmt = $metaDb->query('SELECT id, file_path, xxhash FROM files');
     
     while ($row = $stmt->fetchArray(SQLITE3_ASSOC)) {
         $dbFilePath = $row['file_path'];
@@ -87,23 +87,23 @@ if ($prune) {
             if (!file_exists($dbFilePath)) {
                 $shouldPrune = true;
                 $reason = 'missing';
-            } elseif ($checkCksum) {
-                // Check cksum
-                $dbCksum = $row['cksum'] ?? null;
-                if ($dbCksum) {
-                    $currentCksumOutput = shell_exec('cksum ' . escapeshellarg($dbFilePath) . ' 2>/dev/null');
-                    $currentCksum = null;
-                    if ($currentCksumOutput) {
-                        $parts = explode(' ', trim($currentCksumOutput));
-                        $currentCksum = $parts[0] ?? null;
+            } elseif ($checkXxhash) {
+                // Check xxhash
+                $dbXxhash = $row['xxhash'] ?? null;
+                if ($dbXxhash) {
+                    $currentXxhashOutput = shell_exec('xxhsum ' . escapeshellarg($dbFilePath) . ' 2>/dev/null');
+                    $currentXxhash = null;
+                    if ($currentXxhashOutput) {
+                        $parts = explode(' ', trim($currentXxhashOutput));
+                        $currentXxhash = $parts[0] ?? null;
                     }
-                    if ($currentCksum !== $dbCksum) {
+                    if ($currentXxhash !== $dbXxhash) {
                         $shouldPrune = true;
-                        $reason = 'cksum mismatch';
+                        $reason = 'xxhash mismatch';
                     }
                 } else {
                     $shouldPrune = true;
-                    $reason = 'cksum missing';
+                    $reason = 'xxhash missing';
                 }
             }
         }
@@ -190,27 +190,27 @@ foreach ($files as $i => $fsPath) {
         if (!$metadata) {
             $needsRefresh = true;
             $reason = 'missing';
-        } elseif ($checkCksum) {
-            // Check if cksum has changed
-            $dbCksum = $metadata['cksum'] ?? null;
-            if ($dbCksum) {
-                $currentCksumOutput = shell_exec('cksum ' . escapeshellarg($fsPath) . ' 2>/dev/null');
-                $currentCksum = null;
-                if ($currentCksumOutput) {
-                    $cksumParts = explode(' ', trim($currentCksumOutput));
-                    $currentCksum = $cksumParts[0] ?? null;
+        } elseif ($checkXxhash) {
+            // Check if xxhash has changed
+            $dbXxhash = $metadata['xxhash'] ?? null;
+            if ($dbXxhash) {
+                $currentXxhashOutput = shell_exec('xxhsum ' . escapeshellarg($fsPath) . ' 2>/dev/null');
+                $currentXxhash = null;
+                if ($currentXxhashOutput) {
+                    $xxhashParts = explode(' ', trim($currentXxhashOutput));
+                    $currentXxhash = $xxhashParts[0] ?? null;
                 }
-                if ($currentCksum !== $dbCksum) {
+                if ($currentXxhash !== $dbXxhash) {
                     $needsRefresh = true;
-                    $reason = 'cksum mismatch';
+                    $reason = 'xxhash mismatch';
                 }
             } else {
-                // No cksum stored, needs refresh
+                // No xxhash stored, needs refresh
                 $needsRefresh = true;
-                $reason = 'cksum missing';
+                $reason = 'xxhash missing';
             }
         }
-        // If not force and metadata exists (and no cksum check or cksum matches), skip
+        // If not force and metadata exists (and no xxhash check or xxhash matches), skip
         if (!$needsRefresh) {
             $skipped++;
             continue;

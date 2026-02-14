@@ -55,7 +55,7 @@ class MetadataDatabase {
                 optimization_issues TEXT,
                 
                 -- File checksum for integrity verification
-                cksum TEXT,
+                xxhash TEXT,
                 
                 -- Timestamps
                 created_at INTEGER NOT NULL,
@@ -138,12 +138,12 @@ class MetadataDatabase {
         $result = $stmt->execute();
         $existing = $result->fetchArray(SQLITE3_ASSOC);
         
-        // Calculate cksum
-        $cksum = null;
-        $cksumOutput = shell_exec('cksum ' . escapeshellarg($fsPath) . ' 2>/dev/null');
-        if ($cksumOutput) {
-            $cksumParts = explode(' ', trim($cksumOutput));
-            $cksum = $cksumParts[0] ?? null;
+        // Calculate xxhash
+        $xxhash = null;
+        $xxhashOutput = shell_exec('xxhsum ' . escapeshellarg($fsPath) . ' 2>/dev/null');
+        if ($xxhashOutput) {
+            $xxhashParts = explode(' ', trim($xxhashOutput));
+            $xxhash = $xxhashParts[0] ?? null;
         }
         
         if ($existing) {
@@ -168,7 +168,7 @@ class MetadataDatabase {
                     text_encoding = :text_encoding,
                     is_optimized = :is_optimized,
                     optimization_issues = :optimization_issues,
-                    cksum = :cksum,
+                    xxhash = :xxhash,
                     updated_at = :updated_at
                 WHERE file_path = :file_path
             ');
@@ -180,14 +180,14 @@ class MetadataDatabase {
                     duration, bitrate, container,
                     video_codec, video_width, video_height, video_fps, video_pix_fmt,
                     audio_codec, audio_channels, audio_sample_rate,
-                    text_encoding, is_optimized, optimization_issues, cksum,
+                    text_encoding, is_optimized, optimization_issues, xxhash,
                     created_at, updated_at
                 ) VALUES (
                     :file_path, :web_path, :file_size, :modified_time, :extension,
                     :duration, :bitrate, :container,
                     :video_codec, :video_width, :video_height, :video_fps, :video_pix_fmt,
                     :audio_codec, :audio_channels, :audio_sample_rate,
-                    :text_encoding, :is_optimized, :optimization_issues, :cksum,
+                    :text_encoding, :is_optimized, :optimization_issues, :xxhash,
                     :created_at, :updated_at
                 )
             ');
@@ -214,7 +214,7 @@ class MetadataDatabase {
         $stmt->bindValue(':text_encoding', $metadata['text']['encoding'] ?? null, SQLITE3_TEXT);
         $stmt->bindValue(':is_optimized', $isOptimized, SQLITE3_INTEGER);
         $stmt->bindValue(':optimization_issues', $optimizationIssues, SQLITE3_TEXT);
-        $stmt->bindValue(':cksum', $cksum, SQLITE3_TEXT);
+        $stmt->bindValue(':xxhash', $xxhash, SQLITE3_TEXT);
         $stmt->bindValue(':updated_at', $now, SQLITE3_INTEGER);
         
         return $stmt->execute() !== false;
@@ -331,8 +331,8 @@ class MetadataDatabase {
         if ($row['container']) {
             $metadata['container'] = $row['container'];
         }
-        if ($row['cksum']) {
-            $metadata['cksum'] = $row['cksum'];
+        if ($row['xxhash']) {
+            $metadata['xxhash'] = $row['xxhash'];
         }
         
         // Add optimization status
