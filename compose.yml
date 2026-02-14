@@ -43,7 +43,6 @@ services:
       - ./.env:/var/www/.env:ro
       - ./data/db:/var/www/db
       - ./volumes:/var/www/html/volumes
-    command: ["php", "-S", "0.0.0.0:8080", "api.php"]
     networks:
       - app_network
 
