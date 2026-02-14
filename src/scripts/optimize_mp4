@@ -44,4 +44,4 @@ echo "Optimization complete. Originals moved to: $trashDir"
 
 echo ""
 echo "Refreshing metadata for optimized files..."
-refresh_metadata
+refresh_metadata --cksum

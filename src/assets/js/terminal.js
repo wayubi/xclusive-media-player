@@ -585,15 +585,18 @@ async function handleTabCompletion() {
     const isDirectory = {}; // Track which entries are directories
     
     for (const line of lines) {
-      if (line.trim() === '') continue;
+      if (line.trim() === '' || line.startsWith('total')) continue;
       
       // Check if it's a directory (starts with 'd')
       const isDir = line.startsWith('d');
       
-      // Extract entry name (last column)
-      const parts = line.split(/\s+/);
-      if (parts.length >= 5) {
-        const entryName = parts[parts.length - 1].replace(/\/$/, '');
+      // Extract entry name - ls -la format: permissions links owner group size month day time name
+      // Filename starts after the time field (8th field), handle filenames with spaces
+      const match = line.match(/^([-drwxsStTl+]{10})\s+(\d+)\s+(\S+)\s+(\S+)\s+(\d+)\s+(\w{3})\s+(\d{1,2})\s+(\d{1,2}:\d{2}|\d{4})\s+(.+)$/);
+      if (match) {
+        let entryName = match[9].replace(/\/$/, '');
+        // Skip . and .. directories
+        if (entryName === '.' || entryName === '..') continue;
         entries.push(entryName);
         isDirectory[entryName] = isDir;
       }

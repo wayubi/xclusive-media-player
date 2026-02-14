@@ -20,6 +20,10 @@ class MetadataDatabase {
         // Open SQLite database
         $this->db = new SQLite3($this->dbPath);
         
+        // Enable WAL mode for better concurrency
+        $this->db->exec('PRAGMA journal_mode = WAL;');
+        $this->db->exec('PRAGMA busy_timeout = 5000;');
+        
         // Create tables if they don't exist
         $this->db->exec('
             CREATE TABLE IF NOT EXISTS files (
@@ -49,6 +53,9 @@ class MetadataDatabase {
                 -- Optimization status
                 is_optimized INTEGER DEFAULT 1,
                 optimization_issues TEXT,
+                
+                -- File checksum for integrity verification
+                cksum TEXT,
                 
                 -- Timestamps
                 created_at INTEGER NOT NULL,
@@ -131,6 +138,14 @@ class MetadataDatabase {
         $result = $stmt->execute();
         $existing = $result->fetchArray(SQLITE3_ASSOC);
         
+        // Calculate cksum
+        $cksum = null;
+        $cksumOutput = shell_exec('cksum ' . escapeshellarg($fsPath) . ' 2>/dev/null');
+        if ($cksumOutput) {
+            $cksumParts = explode(' ', trim($cksumOutput));
+            $cksum = $cksumParts[0] ?? null;
+        }
+        
         if ($existing) {
             // Update existing
             $stmt = $this->db->prepare('
@@ -153,6 +168,7 @@ class MetadataDatabase {
                     text_encoding = :text_encoding,
                     is_optimized = :is_optimized,
                     optimization_issues = :optimization_issues,
+                    cksum = :cksum,
                     updated_at = :updated_at
                 WHERE file_path = :file_path
             ');
@@ -164,14 +180,14 @@ class MetadataDatabase {
                     duration, bitrate, container,
                     video_codec, video_width, video_height, video_fps, video_pix_fmt,
                     audio_codec, audio_channels, audio_sample_rate,
-                    text_encoding, is_optimized, optimization_issues,
+                    text_encoding, is_optimized, optimization_issues, cksum,
                     created_at, updated_at
                 ) VALUES (
                     :file_path, :web_path, :file_size, :modified_time, :extension,
                     :duration, :bitrate, :container,
                     :video_codec, :video_width, :video_height, :video_fps, :video_pix_fmt,
                     :audio_codec, :audio_channels, :audio_sample_rate,
-                    :text_encoding, :is_optimized, :optimization_issues,
+                    :text_encoding, :is_optimized, :optimization_issues, :cksum,
                     :created_at, :updated_at
                 )
             ');
@@ -198,6 +214,7 @@ class MetadataDatabase {
         $stmt->bindValue(':text_encoding', $metadata['text']['encoding'] ?? null, SQLITE3_TEXT);
         $stmt->bindValue(':is_optimized', $isOptimized, SQLITE3_INTEGER);
         $stmt->bindValue(':optimization_issues', $optimizationIssues, SQLITE3_TEXT);
+        $stmt->bindValue(':cksum', $cksum, SQLITE3_TEXT);
         $stmt->bindValue(':updated_at', $now, SQLITE3_INTEGER);
         
         return $stmt->execute() !== false;
@@ -261,6 +278,13 @@ class MetadataDatabase {
     }
     
     /**
+     * Execute a raw SQL query and return result
+     */
+    public function query($sql) {
+        return $this->db->query($sql);
+    }
+    
+    /**
      * Convert database row to metadata array
      */
     private function rowToMetadata($row) {
@@ -306,6 +330,9 @@ class MetadataDatabase {
         }
         if ($row['container']) {
             $metadata['container'] = $row['container'];
+        }
+        if ($row['cksum']) {
+            $metadata['cksum'] = $row['cksum'];
         }
         
         // Add optimization status

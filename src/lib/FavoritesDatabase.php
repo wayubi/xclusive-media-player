@@ -20,6 +20,10 @@ class FavoritesDatabase {
         // Open SQLite database
         $this->db = new SQLite3($this->dbPath);
         
+        // Enable WAL mode for better concurrency
+        $this->db->exec('PRAGMA journal_mode = WAL;');
+        $this->db->exec('PRAGMA busy_timeout = 5000;');
+        
         // Create tables if they don't exist
         $this->db->exec('
             CREATE TABLE IF NOT EXISTS files (

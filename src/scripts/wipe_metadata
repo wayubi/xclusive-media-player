@@ -2,10 +2,11 @@
 
 DB_PATH="/var/www/db/metadata.db"
 
-# Check if the database file exists before attempting to remove it
+# Check if the main database file exists before attempting to remove it
 if [[ -f "$DB_PATH" ]]; then
-  rm "$DB_PATH"
-  echo "$(date '+%Y-%m-%d %H:%M:%S') - Metadata database wiped successfully."
+  # Remove the database and its journal files safely
+  rm -f "${DB_PATH}" "${DB_PATH}-shm" "${DB_PATH}-wal"
+  echo "$(date '+%Y-%m-%d %H:%M:%S') - Metadata database and journal files wiped successfully."
 else
   echo "Metadata database does not exist at $DB_PATH."
 fi
