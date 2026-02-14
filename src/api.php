@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/lib/Utils.php';
+require_once __DIR__ . '/lib/MetadataExtractor.php';
 require_once __DIR__ . '/lib/AuditDatabase.php';
 require_once __DIR__ . '/lib/FavoritesDatabase.php';
 require_once __DIR__ . '/lib/MetadataDatabase.php';
@@ -123,47 +124,9 @@ function deleteRecursive(string $path): bool {
 }
 
 /**
- * Check if MP4/MOV/M4V file has faststart enabled (moov atom before mdat)
- * Returns: true = faststart OK, false = needs faststart, null = error or not MP4
+ * Get metadata for a file
+ * Uses MetadataExtractor for all extraction logic
  */
-function checkMoovAtomPosition(string $filepath): ?bool
-{
-    $fh = fopen($filepath, 'rb');
-    if (!$fh) return null;
-    
-    try {
-        while (!feof($fh)) {
-            $header = fread($fh, 8);
-            if (strlen($header) < 8) break;
-            
-            list(, $size) = unpack('N', substr($header, 0, 4));
-            $type = substr($header, 4, 4);
-            
-            if ($type === 'moov') {
-                return true;  // moov before mdat = faststart OK
-            }
-            if ($type === 'mdat') {
-                return false; // mdat before moov = needs faststart
-            }
-            
-            // Skip atom body
-            if ($size === 0) break;
-            if ($size === 1) {
-                // Extended 64-bit size - skip extended size field
-                fseek($fh, 8, SEEK_CUR);
-            } else {
-                // Normal size - skip atom body (size includes 8-byte header)
-                fseek($fh, $size - 8, SEEK_CUR);
-            }
-        }
-    } finally {
-        if (is_resource($fh)) {
-            fclose($fh);
-        }
-    }
-    return null;
-}
-
 function getMetadataForFile(string $webPath, string $root, MetadataDatabase $metaDb): ?array
 {
     $cleanFile = ltrim(preg_replace('#^/volumes/#i', '', $webPath), '/');
@@ -177,235 +140,21 @@ function getMetadataForFile(string $webPath, string $root, MetadataDatabase $met
     // Check database first
     $metadata = $metaDb->getMetadata($webPath, $fsPath);
     if ($metadata !== null) {
-        // Encode the file field for JSON compatibility
         if (isset($metadata['file'])) {
             $metadata['file'] = base64_encode($metadata['file']);
         }
         return $metadata;
     }
 
-    // Generate new metadata
-    $ext = strtolower(pathinfo($fsPath, PATHINFO_EXTENSION));
-    $textExtensions = ['txt', 'nfo', 'sfv', 'md', 'log', 'json', 'xml', 'csv', 'yaml', 'yml', 'conf', 'cfg', 'ini'];
+    // Extract metadata using MetadataExtractor
+    $output = MetadataExtractor::extract($fsPath);
 
-    // Handle text files specially - don't use ffprobe
-    if (in_array($ext, $textExtensions)) {
-        $output = [
-            'file'     => basename($fsPath),
-            'folder'   => basename(dirname($fsPath)),
-            'filesize' => filesize($fsPath),
-            'text'     => [
-                'encoding' => detectTextEncoding($fsPath),
-            ],
-            'optimizationStatus' => [
-                'isOptimized' => true,
-                'issues' => []
-            ],
-        ];
+    // Save to database
+    $metaDb->saveMetadata($webPath, $fsPath, $output);
 
-        $metaDb->saveMetadata($webPath, $fsPath, $output);
-        
-        // Return base64_encoded for JSON compatibility
-        $output['file'] = base64_encode($output['file']);
-        return $output;
-    }
-
-    try {
-        $cmd = [
-            'ffprobe',
-            '-v', 'quiet',
-            '-print_format', 'json',
-            '-show_format',
-            '-show_streams',
-            $fsPath
-        ];
-
-        $descriptors = [
-            0 => ['pipe', 'r'],
-            1 => ['pipe', 'w'],
-            2 => ['pipe', 'w'],
-        ];
-
-        $proc = proc_open($cmd, $descriptors, $pipes);
-
-        if (is_resource($proc)) {
-            $output = stream_get_contents($pipes[1]);
-            fclose($pipes[1]);
-            fclose($pipes[2]);
-            proc_close($proc);
-
-            $raw = $output;
-        } else {
-            $raw = '';
-        }
-        
-        if ($raw === null || $raw === '') {
-            $output = [
-                'file'     => basename($fsPath),
-                'folder'   => basename(dirname($fsPath)),
-                'filesize' => filesize($fsPath),
-                'optimizationStatus' => [
-                    'isOptimized' => true,
-                    'issues' => []
-                ],
-            ];
-            $metaDb->saveMetadata($webPath, $fsPath, $output);
-            
-            // Return base64_encoded for JSON compatibility
-            $output['file'] = base64_encode($output['file']);
-            return $output;
-        }
-
-        $meta = json_decode($raw, true);
-        if ($meta === null) {
-            $output = [
-                'file'     => basename($fsPath),
-                'folder'   => basename(dirname($fsPath)),
-                'filesize' => filesize($fsPath),
-                'optimizationStatus' => [
-                    'isOptimized' => true,
-                    'issues' => []
-                ],
-            ];
-            $metaDb->saveMetadata($webPath, $fsPath, $output);
-            
-            // Return base64_encoded for JSON compatibility
-            $output['file'] = base64_encode($output['file']);
-            return $output;
-        }
-
-        $video = null;
-        $audio = null;
-
-        foreach ($meta['streams'] ?? [] as $stream) {
-            if ($stream['codec_type'] === 'video' && !$video) {
-                $video = $stream;
-            }
-            if ($stream['codec_type'] === 'audio' && !$audio) {
-                $audio = $stream;
-            }
-        }
-
-        // Determine optimization status
-        $isOptimized = true;
-        $issues = [];
-
-        // Check container format
-        $nonStreamingContainers = ['avi', 'flv', 'wmv', 'mkv', 'mpeg', 'mpg'];
-        if (in_array($ext, $nonStreamingContainers)) {
-            $isOptimized = false;
-            $issues[] = 'Non-streaming container: ' . strtoupper($ext);
-        }
-
-        // Check video codec
-        $nonStreamingCodecs = ['wmv3', 'flv1', 'wmv2', 'mpeg4', 'wmv1', 'mpeg1video'];
-        if ($video && in_array($video['codec_name'] ?? '', $nonStreamingCodecs)) {
-            $isOptimized = false;
-            $issues[] = 'Non-streaming codec: ' . ($video['codec_name'] ?? 'unknown');
-        }
-
-        // Check faststart for MP4/MOV/M4V files
-        if (in_array($ext, ['mp4', 'mov', 'm4v'])) {
-            $hasFaststart = checkMoovAtomPosition($fsPath);
-            if ($hasFaststart === false) {
-                $isOptimized = false;
-                $issues[] = 'Faststart not enabled (moov atom not at start)';
-            }
-        }
-
-        // Calculate FPS safely
-        $fps = null;
-        if ($video && isset($video['avg_frame_rate']) && $video['avg_frame_rate'] !== '0/0') {
-            $fpsParts = explode('/', $video['avg_frame_rate']);
-            if (count($fpsParts) === 2 && $fpsParts[1] != 0) {
-                $fps = (float)$fpsParts[0] / (float)$fpsParts[1];
-            }
-        }
-
-        $output = [
-            'file'     => basename($fsPath),
-            'folder'   => basename(dirname($fsPath)),
-            'filesize' => filesize($fsPath),
-            'duration' => $meta['format']['duration'] ?? null,
-            'bitrate'  => isset($meta['format']['bit_rate']) ? (int)$meta['format']['bit_rate'] : null,
-            'container'=> $meta['format']['format_name'] ?? null,
-            'video'    => $video ? [
-                'codec'   => $video['codec_name'] ?? null,
-                'width'   => $video['width'] ?? null,
-                'height'  => $video['height'] ?? null,
-                'fps'     => $fps,
-                'pix_fmt' => $video['pix_fmt'] ?? null,
-            ] : null,
-            'audio'    => $audio ? [
-                'codec'       => $audio['codec_name'] ?? null,
-                'channels'    => $audio['channels'] ?? null,
-                'sample_rate' => $audio['sample_rate'] ?? null,
-            ] : null,
-            'optimizationStatus' => [
-                'isOptimized' => $isOptimized,
-                'issues' => $issues
-            ],
-        ];
-
-        $metaDb->saveMetadata($webPath, $fsPath, $output);
-        
-        // Return base64_encoded for JSON compatibility
-        $output['file'] = base64_encode($output['file']);
-        return $output;
-
-    } catch (Exception $e) {
-        $output = [
-            'file'     => basename($fsPath),
-            'folder'   => basename(dirname($fsPath)),
-            'filesize' => filesize($fsPath),
-            'optimizationStatus' => [
-                'isOptimized' => true,
-                'issues' => []
-            ],
-        ];
-        $metaDb->saveMetadata($webPath, $fsPath, $output);
-        
-        // Return base64_encoded for JSON compatibility
-        $output['file'] = base64_encode($output['file']);
-        return $output;
-    }
-}
-
-/**
- * Detect the encoding of a text file
- * Returns 'utf-8', 'ascii', 'iso-8859-1' (ANSI), or 'binary'
- */
-function detectTextEncoding(string $filePath): string
-{
-    $handle = fopen($filePath, 'rb');
-    if (!$handle) {
-        return 'binary';
-    }
-
-    // Read first 8KB for detection
-    $content = fread($handle, 8192);
-    fclose($handle);
-
-    // Check for UTF-8 BOM
-    if (substr($content, 0, 3) === "\xEF\xBB\xBF") {
-        return 'utf-8-bom';
-    }
-
-    // Try to detect encoding using mb_check_encoding
-    if (mb_check_encoding($content, 'UTF-8')) {
-        // Check if it's pure ASCII
-        if (preg_match('/^[\x00-\x7F]*$/', $content)) {
-            return 'ascii';
-        }
-        return 'utf-8';
-    }
-
-    // Check if it could be Windows-1252 / ISO-8859-1 (ANSI)
-    if (mb_check_encoding($content, 'Windows-1252') || mb_check_encoding($content, 'ISO-8859-1')) {
-        return 'ansi';
-    }
-
-    return 'binary';
+    // Return base64_encoded for JSON compatibility
+    $output['file'] = base64_encode($output['file']);
+    return $output;
 }
 
 // Terminal command helper functions

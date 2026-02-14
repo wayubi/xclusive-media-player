@@ -1,6 +1,7 @@
 #!/usr/bin/env php
 <?php
 require_once '/var/www/html/lib/Utils.php';
+require_once '/var/www/html/lib/MetadataExtractor.php';
 require_once '/var/www/html/lib/MetadataDatabase.php';
 
 // Parse arguments
@@ -236,151 +237,17 @@ foreach ($files as $i => $fsPath) {
         continue;
     }
     
-    // Determine file type
-    $ext = strtolower(pathinfo($fsPath, PATHINFO_EXTENSION));
-    $textExtensions = ['txt', 'nfo', 'sfv', 'md', 'log', 'json', 'xml', 'csv', 'yaml', 'yml', 'conf', 'cfg', 'ini'];
-    $isText = in_array($ext, $textExtensions);
-    
     try {
         // Delete existing metadata
         $metaDb->deleteMetadata($fsPath);
         
-        if ($isText) {
-            // Text file metadata
-            $output = [
-                'file' => basename($fsPath),
-                'folder' => basename(dirname($fsPath)),
-                'filesize' => filesize($fsPath),
-                'text' => ['encoding' => 'utf-8'],
-                'optimizationStatus' => ['isOptimized' => true, 'issues' => []]
-            ];
-            $metaDb->saveMetadata($webPath, $fsPath, $output);
-            echo "[$num/$total] $filename - Refreshed (text)\n";
-            $refreshed++;
-        } else {
-            // Video file metadata
-            $cmd = [
-                'ffprobe',
-                '-v', 'quiet',
-                '-print_format', 'json',
-                '-show_format',
-                '-show_streams',
-                $fsPath
-            ];
-
-            $descriptors = [
-                0 => ['pipe', 'r'],
-                1 => ['pipe', 'w'],
-                2 => ['pipe', 'w'],
-            ];
-
-            $proc = proc_open($cmd, $descriptors, $pipes);
-
-            if (is_resource($proc)) {
-                $output = stream_get_contents($pipes[1]);
-                fclose($pipes[1]);
-                fclose($pipes[2]);
-                proc_close($proc);
-
-                $raw = $output;
-            } else {
-                $raw = '';
-            }
-            
-            if ($raw && $meta = json_decode($raw, true)) {
-                $video = null;
-                $audio = null;
-                
-                foreach ($meta['streams'] ?? [] as $stream) {
-                    if ($stream['codec_type'] === 'video' && !$video) {
-                        $video = $stream;
-                    }
-                    if ($stream['codec_type'] === 'audio' && !$audio) {
-                        $audio = $stream;
-                    }
-                }
-                
-                // Calculate optimization status
-                $isOptimized = true;
-                $issues = [];
-                
-                $nonStreamingContainers = ['avi', 'flv', 'wmv', 'mkv', 'mpeg', 'mpg'];
-                if (in_array($ext, $nonStreamingContainers)) {
-                    $isOptimized = false;
-                    $issues[] = 'Non-streaming container: ' . strtoupper($ext);
-                }
-                
-                $nonStreamingCodecs = ['wmv3', 'flv1', 'wmv2', 'mpeg4', 'wmv1', 'mpeg1video'];
-                if ($video && in_array($video['codec_name'] ?? '', $nonStreamingCodecs)) {
-                    $isOptimized = false;
-                    $issues[] = 'Non-streaming codec: ' . ($video['codec_name'] ?? 'unknown');
-                }
-                
-                // Check faststart for MP4/MOV/M4V
-                if (in_array($ext, ['mp4', 'mov', 'm4v'])) {
-                    $hasFaststart = null;
-                    $fh = fopen($fsPath, 'rb');
-                    if ($fh) {
-                        while (!feof($fh)) {
-                            $header = fread($fh, 8);
-                            if (strlen($header) < 8) break;
-                            list(, $size) = unpack('N', substr($header, 0, 4));
-                            $type = substr($header, 4, 4);
-                            if ($type === 'moov') { $hasFaststart = true; break; }
-                            if ($type === 'mdat') { $hasFaststart = false; break; }
-                            if ($size === 0) break;
-                            if ($size === 1) { fseek($fh, 8, SEEK_CUR); }
-                            else { fseek($fh, $size - 8, SEEK_CUR); }
-                        }
-                        fclose($fh);
-                        if ($hasFaststart === false) {
-                            $isOptimized = false;
-                            $issues[] = 'Faststart not enabled (moov atom not at start)';
-                        }
-                    }
-                }
-                
-                // Calculate FPS
-                $fps = null;
-                if ($video && isset($video['avg_frame_rate']) && $video['avg_frame_rate'] !== '0/0') {
-                    $fpsParts = explode('/', $video['avg_frame_rate']);
-                    if (count($fpsParts) === 2 && $fpsParts[1] != 0) {
-                        $fps = (float)$fpsParts[0] / (float)$fpsParts[1];
-                    }
-                }
-                
-                $output = [
-                    'file' => basename($fsPath),
-                    'folder' => basename(dirname($fsPath)),
-                    'filesize' => filesize($fsPath),
-                    'duration' => $meta['format']['duration'] ?? null,
-                    'bitrate' => isset($meta['format']['bit_rate']) ? (int)$meta['format']['bit_rate'] : null,
-                    'container' => $meta['format']['format_name'] ?? null,
-                    'video' => $video ? [
-                        'codec' => $video['codec_name'] ?? null,
-                        'width' => $video['width'] ?? null,
-                        'height' => $video['height'] ?? null,
-                        'fps' => $fps,
-                        'pix_fmt' => $video['pix_fmt'] ?? null,
-                    ] : null,
-                    'audio' => $audio ? [
-                        'codec' => $audio['codec_name'] ?? null,
-                        'channels' => $audio['channels'] ?? null,
-                        'sample_rate' => $audio['sample_rate'] ?? null,
-                    ] : null,
-                    'optimizationStatus' => [
-                        'isOptimized' => $isOptimized,
-                        'issues' => $issues
-                    ],
-                ];
-                
-                $metaDb->saveMetadata($webPath, $fsPath, $output);
-                echo "[$num/$total] $filename - Refreshed (video)\n";
-                $refreshed++;
-            } else {
-                throw new Exception("Failed to extract metadata");
-            }
-        }
+        // Use MetadataExtractor to get metadata
+        $output = MetadataExtractor::extract($fsPath);
+        $metaDb->saveMetadata($webPath, $fsPath, $output);
+        
+        $type = MetadataExtractor::isTextFile($fsPath) ? 'text' : 'media';
+        echo "[$num/$total] $filename - Refreshed ($type)\n";
+        $refreshed++;
     } catch (Exception $e) {
         $failed++;
         $errors[] = "$filename: " . $e->getMessage();
