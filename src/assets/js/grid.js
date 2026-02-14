@@ -355,7 +355,7 @@ function buildMetadataParts(meta) {
   }
   if (meta.video) {
     if (meta.video.codec) parts.push(meta.video.codec);
-    if (meta.video.fps) parts.push(`${meta.video.fps} FPS`);
+    if (meta.video.fps) parts.push(`${meta.video.fps.toFixed(2)} FPS`);
   }
   if (meta.bitrate) {
     parts.push(Math.round(meta.bitrate / 1000) + ' kbps');
