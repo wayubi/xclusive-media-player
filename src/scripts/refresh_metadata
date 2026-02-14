@@ -145,12 +145,24 @@ if ($all) {
     );
     foreach ($iterator as $file) {
         if ($file->isFile()) {
-            $files[] = $file->getPathname();
+            $path = $file->getPathname();
+            // Skip if any directory component or filename starts with "."
+            $parts = explode('/', $path);
+            $shouldSkip = false;
+            foreach ($parts as $part) {
+                if (strlen($part) > 0 && $part[0] === '.') {
+                    $shouldSkip = true;
+                    break;
+                }
+            }
+            if (!$shouldSkip) {
+                $files[] = $path;
+            }
         }
     }
 } else {
     foreach (scandir($targetDir) as $f) {
-        if ($f !== '.' && $f !== '..' && is_file($targetDir . '/' . $f)) {
+        if ($f !== '.' && $f !== '..' && $f[0] !== '.' && is_file($targetDir . '/' . $f)) {
             $files[] = $targetDir . '/' . $f;
         }
     }
