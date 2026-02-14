@@ -129,7 +129,7 @@ class Utils
         ];
     }
 
-    public static function filesystemToWebPath(string $fsPath, string $rootFs, string $rootWeb): string
+    public static function filesystemToWebPath(string $fsPath, string $rootFs, string $rootWeb = '/volumes'): string
     {
         static $rootFsReal = null;
 

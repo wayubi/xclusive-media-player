@@ -7,26 +7,6 @@ require_once __DIR__ . '/lib/MetadataDatabase.php';
 
 header('Content-Type: application/json');
 
-function decodeBase64Path($path) {
-    return Utils::decodeBase64Path($path);
-}
-
-function decodeBase64Paths($paths) {
-    return Utils::decodeBase64Paths($paths);
-}
-
-function fsPathToWebPath(string $fsPath, string $root, string $webRoot = '/volumes'): string {
-    return Utils::filesystemToWebPath($fsPath, $root, $webRoot);
-}
-
-function encodeArrayKeysBase64(array $arr): array {
-    return Utils::encodeArrayKeysBase64($arr);
-}
-
-function executeCommand(string $command, ?string $cwd = null): string {
-    return Utils::executeCommand($command, $cwd);
-}
-
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode(['error' => 'Method not allowed - POST required']);
@@ -60,7 +40,7 @@ if (!is_array($files)) {
 }
 
 // Decode base64-encoded filesystem paths
-$files = decodeBase64Paths($files);
+$files = Utils::decodeBase64Paths($files);
 
 $root = realpath(__DIR__ . '/volumes');
 
@@ -815,7 +795,7 @@ switch ($action) {
         }
         
         // Decode base64-encoded filesystem paths
-        $filePaths = decodeBase64Paths($filePaths);
+        $filePaths = Utils::decodeBase64Paths($filePaths);
         
         try {
             $auditDb = new AuditDatabase();
@@ -857,7 +837,7 @@ switch ($action) {
         }
         
         // Decode base64-encoded filesystem paths
-        $filePaths = decodeBase64Paths($filePaths);
+        $filePaths = Utils::decodeBase64Paths($filePaths);
         
         try {
             $auditDb = new AuditDatabase();
@@ -865,7 +845,7 @@ switch ($action) {
             
             echo json_encode([
                 'status' => 'ok',
-                'audit_statuses' => encodeArrayKeysBase64($statuses)
+                'audit_statuses' => Utils::encodeArrayKeysBase64($statuses)
             ]);
         } catch (Exception $e) {
             http_response_code(500);
@@ -884,7 +864,7 @@ switch ($action) {
         }
 
         // Convert filesystem path to web path for getMetadataForFile
-        $webPath = fsPathToWebPath($file, $root);
+        $webPath = Utils::filesystemToWebPath($file, $root);
         $meta = getMetadataForFile($webPath, $root, $metaDb);
 
         if ($meta === null) {
@@ -912,7 +892,7 @@ switch ($action) {
 
         foreach ($files as $file) {
             // Convert filesystem path to web path for getMetadataForFile
-            $webPath = fsPathToWebPath($file, $root);
+            $webPath = Utils::filesystemToWebPath($file, $root);
             $meta = getMetadataForFile($webPath, $root, $metaDb);
             // Use base64-encoded path as key to avoid UTF-8 issues in JSON
             $results[base64_encode($file)] = $meta;
@@ -965,7 +945,7 @@ switch ($action) {
         }
         
         // Decode base64-encoded filesystem paths
-        $filePaths = decodeBase64Paths($filePaths);
+        $filePaths = Utils::decodeBase64Paths($filePaths);
         
         try {
             $favDb = new FavoritesDatabase();
@@ -973,7 +953,7 @@ switch ($action) {
             
             echo json_encode([
                 'status' => 'ok',
-                'favorite_statuses' => encodeArrayKeysBase64($statuses)
+                'favorite_statuses' => Utils::encodeArrayKeysBase64($statuses)
             ]);
         } catch (Exception $e) {
             http_response_code(500);

@@ -6,10 +6,6 @@ require_once __DIR__ . '/Utils.php';
 
 class MetadataDatabase extends Database
 {
-    private static function executeCommand(string $command, ?string $cwd = null): string {
-        return Utils::executeCommand($command, $cwd);
-    }
-    
     public function __construct($dbPath = null) {
         $dbPath = $dbPath ?? __DIR__ . '/../../db/metadata.db';
         parent::__construct($dbPath);
@@ -101,7 +97,7 @@ class MetadataDatabase extends Database
         $results = [];
         
         foreach ($webPaths as $webPath) {
-            $fsPath = $this->webToFilesystemPath($webPath, $root, $webRoot);
+            $fsPath = Utils::webToFilesystemPath($webPath, $root, $webRoot);
             $metadata = $this->getMetadata($webPath, $fsPath);
             $results[$webPath] = $metadata;
         }
@@ -132,7 +128,7 @@ class MetadataDatabase extends Database
         
         // Calculate xxhash
         $xxhash = null;
-        $xxhashOutput = self::executeCommand('xxhsum ' . escapeshellarg($fsPath));
+        $xxhashOutput = Utils::executeCommand('xxhsum ' . escapeshellarg($fsPath));
         if ($xxhashOutput) {
             $xxhashParts = explode(' ', trim($xxhashOutput));
             $xxhash = $xxhashParts[0] ?? null;
@@ -315,21 +311,5 @@ class MetadataDatabase extends Database
         ];
         
         return $metadata;
-    }
-    
-    /**
-     * Convert web path to filesystem path
-     */
-    private function webToFilesystemPath($webPath, $root, $webRoot) {
-        $cleanFile = ltrim(preg_replace('#^/volumes/#i', '', $webPath), '/');
-        $cleanFile = urldecode($cleanFile);
-        return realpath($root . '/' . $cleanFile);
-    }
-    
-    /**
-     * Normalize file path for consistent storage
-     */
-    public function normalizePath(string $path): string {
-        return parent::normalizePath($path);
     }
 }

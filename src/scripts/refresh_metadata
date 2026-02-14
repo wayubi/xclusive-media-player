@@ -1,30 +1,7 @@
 #!/usr/bin/env php
 <?php
+require_once '/var/www/html/lib/Utils.php';
 require_once '/var/www/html/lib/MetadataDatabase.php';
-
-function executeCommand(string $command, ?string $cwd = null): string {
-    $descriptors = [
-        0 => ['pipe', 'r'],
-        1 => ['pipe', 'w'],
-        2 => ['pipe', 'w'],
-    ];
-    
-    $process = proc_open($command, $descriptors, $pipes, $cwd);
-    
-    if (!is_resource($process)) {
-        return '';
-    }
-    
-    fclose($pipes[0]);
-    
-    $output = stream_get_contents($pipes[1]);
-    fclose($pipes[1]);
-    fclose($pipes[2]);
-    
-    proc_close($process);
-    
-    return $output;
-}
 
 // Parse arguments
 $options = getopt('', ['force', 'all', 'dry-run', 'xxhash', 'prune', 'help']);
@@ -115,7 +92,7 @@ if ($prune) {
                 // Check xxhash
                 $dbXxhash = $row['xxhash'] ?? null;
                 if ($dbXxhash) {
-                    $currentXxhashOutput = executeCommand('xxhsum ' . escapeshellarg($dbFilePath));
+                    $currentXxhashOutput = Utils::executeCommand('xxhsum ' . escapeshellarg($dbFilePath));
                     $currentXxhash = null;
                     if ($currentXxhashOutput) {
                         $parts = explode(' ', trim($currentXxhashOutput));
@@ -230,7 +207,7 @@ foreach ($files as $i => $fsPath) {
             // Check if xxhash has changed
             $dbXxhash = $metadata['xxhash'] ?? null;
             if ($dbXxhash) {
-                $currentXxhashOutput = executeCommand('xxhsum ' . escapeshellarg($fsPath));
+                $currentXxhashOutput = Utils::executeCommand('xxhsum ' . escapeshellarg($fsPath));
                 $currentXxhash = null;
                 if ($currentXxhashOutput) {
                     $xxhashParts = explode(' ', trim($currentXxhashOutput));
