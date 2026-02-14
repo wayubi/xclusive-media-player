@@ -191,4 +191,45 @@ class Utils
         $real = realpath($fullPath);
         return ($real && str_starts_with($real, $cachedRoot)) ? $real : $cachedRoot;
     }
+
+    public static function resolveWebPath(string $webPath, string $root, string $webRoot = '/volumes'): ?string
+    {
+        $relativePath = ltrim(preg_replace('#^' . preg_quote($webRoot, '#') . '/?#i', '', $webPath), '/');
+        
+        $candidates = [
+            $root . '/' . $relativePath,
+            $root . '/' . urldecode($relativePath),
+        ];
+
+        foreach ($candidates as $candidate) {
+            $resolved = realpath($candidate);
+            if ($resolved && str_starts_with($resolved, $root)) {
+                return $resolved;
+            }
+        }
+
+        return null;
+    }
+
+    public static function resolveWebPathForDir(string $webPath, string $root, string $webRoot = '/volumes'): string
+    {
+        $resolved = self::resolveWebPath($webPath, $root, $webRoot);
+        
+        if ($resolved && is_dir($resolved)) {
+            return $resolved;
+        }
+        
+        return $root;
+    }
+
+    public static function resolveWebPathForFile(string $webPath, string $root, string $webRoot = '/volumes'): ?string
+    {
+        $resolved = self::resolveWebPath($webPath, $root, $webRoot);
+        
+        if ($resolved && is_file($resolved)) {
+            return $resolved;
+        }
+        
+        return null;
+    }
 }

@@ -201,8 +201,21 @@ function resolvePath($path, $currentDir, $root) {
         $path = $currentDir . '/' . $path;
     }
     
-    // Resolve to real path
-    $realPath = realpath($path);
+    // Try multiple path variations
+    $candidates = [
+        $path,
+        urldecode($path),
+    ];
+    
+    // Resolve to real path - try each candidate
+    $realPath = null;
+    foreach ($candidates as $candidate) {
+        $resolved = realpath($candidate);
+        if ($resolved && str_starts_with($resolved, $root)) {
+            $realPath = $resolved;
+            break;
+        }
+    }
     
     // Security check: must be within /volumes
     if (!$realPath || !str_starts_with($realPath, $root)) {
@@ -467,9 +480,7 @@ switch ($action) {
                 exit;
             }
             
-            $decodedFolder = urldecode($folder);
-            $cleanFolder = ltrim(preg_replace('#^/volumes/#i', '', $decodedFolder), '/');
-            $fsPath = realpath($root . '/' . $cleanFolder);
+            $fsPath = Utils::resolveWebPathForDir($folder, $root);
             
             if (!$fsPath || !str_starts_with($fsPath, $root) || !is_dir($fsPath)) {
                 http_response_code(400);
@@ -515,7 +526,21 @@ switch ($action) {
                 $decodedFile = urldecode($file);
                 // Strip /volumes prefix
                 $cleanFile = ltrim(preg_replace('#^/volumes/#i', '', $decodedFile), '/');
-                $fsPath = realpath($root . '/' . $cleanFile);
+                
+                // Try multiple path variations
+                $candidatePaths = [
+                    $root . '/' . $cleanFile,
+                    $root . '/' . urldecode($cleanFile),
+                ];
+                
+                $fsPath = null;
+                foreach ($candidatePaths as $candidate) {
+                    $resolved = realpath($candidate);
+                    if ($resolved && str_starts_with($resolved, $root)) {
+                        $fsPath = $resolved;
+                        break;
+                    }
+                }
 
                 if (!$fsPath || !str_starts_with($fsPath, $root) || !file_exists($fsPath)) {
                     $results[$file] = 'not_found';
@@ -723,8 +748,7 @@ switch ($action) {
         }
         
         // Convert web path to filesystem path
-        $cleanFolder = ltrim(preg_replace('#^/volumes/#i', '', urldecode($folderPath)), '/');
-        $fsFolderPath = realpath($root . '/' . $cleanFolder);
+        $fsFolderPath = Utils::resolveWebPathForDir($folderPath, $root);
         
         try {
             $favDb = new FavoritesDatabase();
@@ -758,17 +782,7 @@ switch ($action) {
         $cmd = strtolower($args[0] ?? '');
         
         // Convert web path to filesystem path
-        // $currentDir comes in as web path (e.g., "/videos/action" or "/volumes/videos/action")
-        // We need to convert it to filesystem path (e.g., "/var/www/volumes/videos/action")
-        $cleanDir = ltrim(preg_replace('#^/volumes/?#i', '', $currentDir), '/');
-        $cleanDir = urldecode($cleanDir);
-        $fsDir = $root . ($cleanDir ? '/' . $cleanDir : '');
-        
-        // Validate current directory
-        $currentDir = realpath($fsDir) ?: $root;
-        if (!str_starts_with($currentDir, $root)) {
-            $currentDir = $root;
-        }
+        $currentDir = Utils::resolveWebPathForDir($currentDir, $root);
         
         $output = '';
         $newDir = $currentDir;
@@ -883,15 +897,7 @@ switch ($action) {
         }
         
         // Convert web path to filesystem path
-        $cleanDir = ltrim(preg_replace('#^/volumes/?#i', '', $currentDir), '/');
-        $cleanDir = urldecode($cleanDir);
-        $fsDir = $root . ($cleanDir ? '/' . $cleanDir : '');
-        
-        // Validate current directory
-        $fsDir = realpath($fsDir) ?: $root;
-        if (!str_starts_with($fsDir, $root)) {
-            $fsDir = $root;
-        }
+        $fsDir = Utils::resolveWebPathForDir($currentDir, $root);
         
         // Check if this is a cd command (we need to track directory changes)
         $trimmedCmd = trim($commandLine);
@@ -914,8 +920,10 @@ switch ($action) {
             } elseif (str_starts_with($target, '/')) {
                 // Absolute path
                 $target = urldecode($target);
-                $targetPath = realpath($root . $target);
-                if ($targetPath && str_starts_with($targetPath, $root) && is_dir($targetPath)) {
+                $webPath = '/volumes' . $target;
+                $targetPath = Utils::resolveWebPathForDir($webPath, $root);
+                
+                if ($targetPath && is_dir($targetPath)) {
                     $newDir = $targetPath;
                 } else {
                     $output = "bash: cd: {$target}: No such file or directory";
@@ -923,8 +931,11 @@ switch ($action) {
             } else {
                 // Relative path
                 $target = urldecode($target);
-                $targetPath = realpath($fsDir . '/' . $target);
-                if ($targetPath && str_starts_with($targetPath, $root) && is_dir($targetPath)) {
+                $relativeWebPath = Utils::filesystemToWebPath($fsDir, $root, '/volumes');
+                $relativeWebPath = $relativeWebPath . '/' . $target;
+                $targetPath = Utils::resolveWebPathForDir($relativeWebPath, $root);
+                
+                if ($targetPath && is_dir($targetPath)) {
                     $newDir = $targetPath;
                 } else {
                     $output = "bash: cd: {$target}: No such file or directory";
@@ -1047,10 +1058,7 @@ switch ($action) {
         }
         
         // Convert web path to filesystem path for working directory
-        $cleanDir = ltrim(preg_replace('#^/volumes/?#i', '', $currentDir), '/');
-        $cleanDir = urldecode($cleanDir);
-        $workingDir = $root . ($cleanDir ? '/' . $cleanDir : '');
-        $workingDir = realpath($workingDir) ?: $root;
+        $workingDir = Utils::resolveWebPathForDir($currentDir, $root);
         
         // Security check
         if (!str_starts_with($workingDir, $root)) {
@@ -1177,15 +1185,7 @@ switch ($action) {
         }
         
         // Convert web path to filesystem path for working directory
-        $cleanDir = ltrim(preg_replace('#^/volumes/?#i', '', $currentDir), '/');
-        $cleanDir = urldecode($cleanDir);
-        $workingDir = $root . ($cleanDir ? '/' . $cleanDir : '');
-        $workingDir = realpath($workingDir) ?: $root;
-        
-        // Security check
-        if (!str_starts_with($workingDir, $root)) {
-            $workingDir = $root;
-        }
+        $workingDir = Utils::resolveWebPathForDir($currentDir, $root);
         
         // Build the full command
         $escapedArgs = [];
