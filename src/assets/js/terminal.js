@@ -527,6 +527,12 @@ async function handleTabCompletion() {
   let partial = '';
   let prefix = '';
   
+  // Check if we're completing after 'cd' command
+  const isCdCommand = (() => {
+    const trimmed = textBeforeCursor.trim().toLowerCase();
+    return trimmed === 'cd' || trimmed.startsWith('cd ') || trimmed.startsWith('cd\t');
+  })();
+  
   // Find the last space to determine the partial text
   const lastSpaceIndex = textBeforeCursor.lastIndexOf(' ');
   if (lastSpaceIndex === -1) {
@@ -580,8 +586,11 @@ async function handleTabCompletion() {
     
     if (data.error || !data.output) return;
     
+    // Decode base64 output from the API
+    const decodedOutput = atob(data.output);
+    
     // Parse the directory listing
-    const lines = data.output.split('\n');
+    const lines = decodedOutput.split('\n');
     const entries = [];
     const isDirectory = {}; // Track which entries are directories
     
@@ -612,7 +621,12 @@ async function handleTabCompletion() {
     
     if (matches.length === 1) {
       // Single match - complete it
-      const completed = prefix + matches[0];
+      let completedName = matches[0];
+      // Add trailing slash for directories, and space for cd commands
+      if (isDirectory[completedName]) {
+        completedName += '/';
+      }
+      const completed = prefix + completedName;
       const suffix = currentValue.substring(cursorPosition);
       inputElement.value = completed + suffix;
       inputElement.selectionStart = inputElement.selectionEnd = completed.length;
@@ -621,7 +635,13 @@ async function handleTabCompletion() {
       const commonPrefix = findCommonPrefix(matches);
       if (commonPrefix.length > partial.length) {
         // Complete to common prefix
-        const completed = prefix + commonPrefix;
+        let completedName = commonPrefix;
+        // If common prefix is a full directory name, add slash and potentially space
+        const fullMatches = matches.filter(m => m.toLowerCase() === commonPrefix.toLowerCase());
+        if (fullMatches.length > 0 && isDirectory[fullMatches[0]]) {
+          completedName += '/';
+        }
+        const completed = prefix + completedName;
         const suffix = currentValue.substring(cursorPosition);
         inputElement.value = completed + suffix;
         inputElement.selectionStart = inputElement.selectionEnd = completed.length;
