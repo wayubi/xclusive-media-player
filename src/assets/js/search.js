@@ -3,30 +3,6 @@ import { state } from './state.js';
 import { renderGrid } from './grid.js';
 import { isTerminalActive } from './terminal.js';
 
-let searchableItems = [];
-
-export function initSearch() {
-  searchableItems = state.allFilesWithPaths.map(fullPath => {
-    const webPath = state.webRoot + '/' + fullPath
-      .replace(state.rootDirAbs + '/', '')
-      .split('/')
-      .map(encodeURIComponent)
-      .join('/');
-
-    const parts = fullPath.split('/');
-    const filename = parts[parts.length - 1];
-    const folderPath = parts.slice(0, -1).join('/');
-    const folderNames = parts.slice(1, -1);
-
-    return {
-      webPath: webPath,
-      filename: filename.toLowerCase(),
-      folderNames: folderNames.map(n => n.toLowerCase()),
-      fullFolderPath: folderPath.toLowerCase()
-    };
-  });
-}
-
 export function applySearch(term) {
   term = (term || '').trim().toLowerCase();
   
@@ -40,10 +16,11 @@ export function applySearch(term) {
   state.setFilter('search', {
     searchTerm: term,
     filterFn: file => {
-      const item = searchableItems.find(i => i.webPath === file);
-      if (!item) return false;
-      return item.filename.includes(term) || 
-             item.folderNames.some(folder => folder.includes(term));
+      // file is like '/volumes/videos/movie.mp4'
+      const filename = file.split('/').pop().toLowerCase();
+      const folderPath = file.substring(0, file.lastIndexOf('/')).toLowerCase();
+      
+      return filename.includes(term) || folderPath.includes(term);
     }
   });
   

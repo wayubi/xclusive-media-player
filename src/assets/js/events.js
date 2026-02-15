@@ -2,7 +2,7 @@
 import { state } from './state.js';
 import { nextGrid, prevGrid, renderGrid } from './grid.js';
 import { playAll, shufflePlay } from './fullscreen.js';
-import { initSearch, setupSearchListeners } from './search.js';
+import { setupSearchListeners } from './search.js';
 import { runAudit, auditCurrentView } from './audit.js';
 import { setupUnauditedFilter } from './filter.js';
 import { toggleTileSelection, confirmDelete, selectAllFiles, clearAllSelections, isSelectAllMode, getSelectedTileCount, syncMuteIcons } from './ui.js';
@@ -48,7 +48,6 @@ function handleMouseMove(e) {
 
 export function setupEventListeners() {
   // Initialize search
-  initSearch();
   setupSearchListeners();
   
   // Setup unaudited filter
@@ -284,6 +283,10 @@ function setupDeleteHotkeys() {
       }
       return;
     }
+    
+    // Don't process if search overlay is open (allow typing in search)
+    const searchOverlay = document.getElementById('search-overlay');
+    if (searchOverlay && searchOverlay.style.display === 'flex') return;
     
     const key = e.key;
     
