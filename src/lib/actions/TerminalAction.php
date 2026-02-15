@@ -97,6 +97,26 @@ class TerminalAction extends ActionHandler
     private function handleExecCommand(string $commandLine, string $fsDir): void
     {
         $scriptsDir = __DIR__ . '/../../scripts';
+        $trimmed = trim($commandLine);
+        
+        // Check for & at end (with optional leading whitespace) - run in background
+        if (preg_match('/\s+&$/', $trimmed)) {
+            $cmd = rtrim($trimmed, '&');
+            $cmd = trim($cmd);
+            
+            $bgCommand = "cd " . escapeshellarg($fsDir) . " && export PATH=" . escapeshellarg($scriptsDir) . ":\$PATH && nohup " . $cmd . " > /dev/null 2>&1 &";
+            shell_exec($bgCommand);
+            
+            $relativePath = ltrim(str_replace($this->root, '', $fsDir), '/');
+            $webDir = '/volumes' . ($relativePath ? '/' . $relativePath : '');
+            
+            $this->json([
+                'output' => base64_encode("Started: $cmd (background)"),
+                'currentDir' => $webDir
+            ]);
+            return;
+        }
+        
         $fullCommand = "cd " . escapeshellarg($fsDir) . " && export PATH=" . escapeshellarg($scriptsDir) . ":\$PATH && " . $commandLine . " 2>&1";
 
         $output = shell_exec($fullCommand) ?? '';
