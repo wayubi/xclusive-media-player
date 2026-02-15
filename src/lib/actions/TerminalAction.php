@@ -63,7 +63,7 @@ class TerminalAction extends ActionHandler
         } elseif ($target === '-') {
             $output = '';
         } elseif (str_starts_with($target, '/')) {
-            $target = urldecode($target);
+            $target = rawurldecode($target);
             $webPath = '/volumes' . $target;
             $targetPath = Utils::resolveWebPathForDir($webPath, $this->root);
 
@@ -73,7 +73,7 @@ class TerminalAction extends ActionHandler
                 $output = "bash: cd: {$target}: No such file or directory";
             }
         } else {
-            $target = urldecode($target);
+            $target = rawurldecode($target);
             $relativeWebPath = Utils::filesystemToWebPath($fsDir, $this->root, '/volumes');
             $relativeWebPath = $relativeWebPath . '/' . $target;
             $targetPath = Utils::resolveWebPathForDir($relativeWebPath, $this->root);
