@@ -269,6 +269,55 @@ class MetadataDatabase extends Database
     }
     
     /**
+     * Get optimization status for multiple files (batch operation)
+     * Returns array with absolute paths as keys and optimization status as values
+     */
+    public function getOptimizationStatusBatch($absolutePaths) {
+        if (empty($absolutePaths)) {
+            return [];
+        }
+        
+        $results = [];
+        
+        // Normalize all paths
+        $normalizedPaths = array_map([$this, 'normalizePath'], $absolutePaths);
+        $pathMap = array_combine($normalizedPaths, $absolutePaths);
+        
+        // Build IN clause
+        $placeholders = implode(',', array_fill(0, count($normalizedPaths), '?'));
+        
+        $stmt = $this->db->prepare("
+            SELECT file_path, is_optimized, optimization_issues
+            FROM files
+            WHERE file_path IN ($placeholders)
+        ");
+        
+        foreach ($normalizedPaths as $i => $path) {
+            $stmt->bindValue($i + 1, $path, SQLITE3_TEXT);
+        }
+        
+        $result = $stmt->execute();
+        
+        // Initialize all as not having status (will default to optimized in JS)
+        foreach ($absolutePaths as $path) {
+            $results[$path] = null;
+        }
+        
+        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+            $originalPath = $pathMap[$row['file_path']];
+            $isOptimized = (bool)$row['is_optimized'];
+            $issues = json_decode($row['optimization_issues'] ?? '[]', true);
+            
+            $results[$originalPath] = [
+                'isOptimized' => $isOptimized,
+                'issues' => $issues ?: []
+            ];
+        }
+        
+        return $results;
+    }
+    
+    /**
      * Delete metadata for a specific file
      */
     public function deleteMetadata($fsPath) {

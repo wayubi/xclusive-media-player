@@ -222,9 +222,10 @@ $allFiles = array_map(fn($f) => Utils::filesystemToWebPath($f, $root_directory_a
 $allFilesCount = count($allFiles);
 
 // Batch fetch audit and favorites statuses (lightweight)
-// Skip metadata preloading - let JS lazy-load per-file optimization status on demand
+// Get batch statuses for all filters (same pattern as favorites/audit)
 $auditStatuses = $auditDb->getAuditStatusBatch($allFilesRaw);
 $favoritesStatuses = $favDb->getFavoriteStatusBatch($allFilesRaw);
+$optimizationStatuses = $metaDb->getOptimizationStatusBatch($allFilesRaw);
 
 // Get optimization stats using SQL COUNT (lightweight)
 $optimizationStats = $metaDb->getOptimizationStats($current_path);
@@ -250,7 +251,16 @@ foreach ($allFilesRaw as $i => $fsPath) {
 $unAuditedCount = $allFilesCount - $auditCount;
 $optimizedCount = $optimizationStats['optimized'];
 $unoptimizedCount = $optimizationStats['unoptimized'];
+
+// Build optimization status map (same pattern as favorites/audit)
 $optimizationStatusMap = [];
+foreach ($allFilesRaw as $i => $fsPath) {
+    $webPath = $allFiles[$i];
+    $status = $optimizationStatuses[$fsPath] ?? null;
+    if ($status !== null) {
+        $optimizationStatusMap[$webPath] = $status;
+    }
+}
 
 // Favorites map
 $favoritesMap = [];

@@ -460,11 +460,15 @@ function enforceSingleUnmuted() {
   }
 }
 
-function updateFileCount() {
+export function updateFileCount() {
   const countElem = document.getElementById('file-count');
   if (!countElem) return;
 
-  if (state.unauditedFilter) {
+  if (state.optimizationFilter) {
+    countElem.innerText = `Needs optimization: ${state.startIndex + 1} / ${state.allVideos.length} (of ${state.originalVideos.length})`;
+  } else if (state.favoritesFilter) {
+    countElem.innerText = `Favorites: ${state.startIndex + 1} / ${state.allVideos.length} (of ${state.originalVideos.length})`;
+  } else if (state.unauditedFilter) {
     countElem.innerText = `Unaudited: ${state.startIndex + 1} / ${state.allVideos.length} (of ${state.originalVideos.length})`;
   } else if (state.currentSearch) {
     countElem.innerText = `Filtered: ${state.startIndex + 1} / ${state.allVideos.length} (of ${state.originalVideos.length})`;

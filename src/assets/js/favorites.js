@@ -1,6 +1,6 @@
 // favorites.js - Favorites functionality
 import { state } from './state.js';
-import { renderGrid } from './grid.js';
+import { renderGrid, updateFileCount } from './grid.js';
 import { startFullscreenPlayer } from './fullscreen.js';
 
 export async function toggleFavorite(file, heartElement) {
@@ -77,21 +77,6 @@ export function playFavorites() {
   import('./fullscreen.js').then(module => {
     module.startFullscreenPlayer(favorites, 0);
   });
-}
-
-function updateFileCount() {
-  const countElem = document.getElementById('file-count');
-  if (!countElem) return;
-  
-  if (state.favoritesFilter) {
-    countElem.innerText = `Favorites: ${state.startIndex + 1} / ${state.allVideos.length} (of ${state.originalVideos.length})`;
-  } else if (state.unauditedFilter) {
-    countElem.innerText = `Unaudited: ${state.startIndex + 1} / ${state.allVideos.length} (of ${state.originalVideos.length})`;
-  } else if (state.currentSearch) {
-    countElem.innerText = `Filtered: ${state.startIndex + 1} / ${state.allVideos.length} (of ${state.originalVideos.length})`;
-  } else {
-    countElem.innerText = `${state.startIndex + 1} / ${state.allVideos.length}`;
-  }
 }
 
 export function setupFavoritesFilter() {
