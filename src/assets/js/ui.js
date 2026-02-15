@@ -321,6 +321,20 @@ export async function confirmDelete() {
       });
       
       renderGrid();
+      
+      // Update folder count in dropdown
+      const folderSelect = document.getElementById('folder-select');
+      if (folderSelect) {
+        const currentOption = folderSelect.querySelector('option[value=""]');
+        if (currentOption) {
+          const text = currentOption.textContent.trim();
+          const match = text.match(/^(.+\s)(\(\d+\))$/);
+          if (match) {
+            const totalCount = state.originalVideos.length;
+            currentOption.textContent = match[1] + '(' + totalCount + ')';
+          }
+        }
+      }
     })
     .catch(() => alert('Delete failed'));
   }
