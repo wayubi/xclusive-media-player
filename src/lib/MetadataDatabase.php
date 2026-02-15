@@ -3,6 +3,7 @@
 
 require_once __DIR__ . '/Database.php';
 require_once __DIR__ . '/Utils.php';
+require_once __DIR__ . '/MetadataExtractor.php';
 
 class MetadataDatabase extends Database
 {
@@ -55,12 +56,12 @@ class MetadataDatabase extends Database
             CREATE INDEX IF NOT EXISTS idx_updated_at ON files(updated_at);
         ');
     }
-    
-    /**
-     * Get metadata for a single file
-     * Returns null if not found or if stale
-     */
+
     public function getMetadata($webPath, $fsPath) {
+        return $this->fetchMetadata($webPath, $fsPath);
+    }
+
+    private function fetchMetadata($webPath, $fsPath) {
         if (!file_exists($fsPath)) {
             return null;
         }
@@ -78,30 +79,63 @@ class MetadataDatabase extends Database
         $row = $result->fetchArray(SQLITE3_ASSOC);
         
         if (!$row) {
-            return null; // Not in database
+            return null;
         }
         
-        // Check if stale (modified time or size changed)
         if ($row['modified_time'] != $currentMtime || $row['file_size'] != $currentSize) {
-            return null; // Stale, needs refresh
+            return null;
         }
         
-        // Build metadata array matching old format
         return $this->rowToMetadata($row);
     }
-    
+
     /**
      * Get metadata for multiple files (batch operation)
+     * Returns array with webPath as key, metadata as value
      */
-    public function getMetadataBatch($webPaths, $root, $webRoot) {
-        $results = [];
-        
-        foreach ($webPaths as $webPath) {
-            $fsPath = Utils::webToFilesystemPath($webPath, $root, $webRoot);
-            $metadata = $this->getMetadata($webPath, $fsPath);
-            $results[$webPath] = $metadata;
+    public function getMetadataBatch(array $webPaths, array $fsPaths): array
+    {
+        if (empty($webPaths)) {
+            return [];
         }
-        
+
+        $results = [];
+        $needsExtraction = [];
+
+        foreach ($webPaths as $i => $webPath) {
+            $fsPath = $fsPaths[$i] ?? '';
+            
+            if (!file_exists($fsPath)) {
+                $results[$webPath] = null;
+                continue;
+            }
+
+            $normalizedPath = $this->normalizePath($fsPath);
+            $currentMtime = @filemtime($fsPath);
+            $currentSize = @filesize($fsPath);
+
+            $stmt = $this->db->prepare('SELECT * FROM files WHERE file_path = :path');
+            $stmt->bindValue(':path', $normalizedPath, SQLITE3_TEXT);
+            $result = $stmt->execute();
+            $row = $result->fetchArray(SQLITE3_ASSOC);
+
+            if ($row && $row['modified_time'] == $currentMtime && $row['file_size'] == $currentSize) {
+                $results[$webPath] = $this->rowToMetadata($row);
+            } else {
+                $needsExtraction[$webPath] = $fsPath;
+            }
+        }
+
+        // Batch extract metadata for files not in cache
+        if (!empty($needsExtraction)) {
+            foreach ($needsExtraction as $webPath => $fsPath) {
+                $output = MetadataExtractor::extract($fsPath);
+                $this->saveMetadata($webPath, $fsPath, $output);
+                $output['file'] = base64_encode($output['file']);
+                $results[$webPath] = $output;
+            }
+        }
+
         return $results;
     }
     
@@ -258,7 +292,7 @@ class MetadataDatabase extends Database
      */
     private function rowToMetadata($row) {
         $metadata = [
-            'file' => basename($row['file_path']),
+            'file' => base64_encode(basename($row['file_path'])),
             'folder' => basename(dirname($row['file_path'])),
             'filesize' => (int)$row['file_size'],
         ];

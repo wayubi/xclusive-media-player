@@ -37,7 +37,9 @@ switch ($data['action']) {
 
     case 'audit':
         if (empty($data['path'])) {
-            break;
+            http_response_code(400);
+            echo json_encode(['error' => 'Missing path parameter']);
+            exit;
         }
 
         $payload = [
@@ -58,6 +60,13 @@ switch ($data['action']) {
             'action' => 'terminal',
             'command' => $data['command'],
             'currentDir' => $data['currentDir'] ?? '/volumes',
+        ];
+        break;
+
+    case 'list_scripts':
+        $payload = [
+            'action' => 'terminal',
+            'command' => 'list_scripts',
         ];
         break;
 

@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/Utils.php';
+
 abstract class Database
 {
     protected $db;
@@ -30,6 +32,45 @@ abstract class Database
     public function normalizePath(string $path): string
     {
         return Utils::normalizePath($path);
+    }
+
+    protected function registerFile(string $absolutePath): ?int
+    {
+        if (!file_exists($absolutePath)) {
+            return null;
+        }
+        
+        $fileSize = @filesize($absolutePath);
+        $modifiedTime = @filemtime($absolutePath);
+        $normalizedPath = $this->normalizePath($absolutePath);
+        
+        $stmt = $this->db->prepare('
+            INSERT OR IGNORE INTO files (file_path, file_size, modified_time, created_at)
+            VALUES (:path, :size, :mtime, :created)
+        ');
+        
+        $stmt->bindValue(':path', $normalizedPath, SQLITE3_TEXT);
+        $stmt->bindValue(':size', $fileSize, SQLITE3_INTEGER);
+        $stmt->bindValue(':mtime', $modifiedTime, SQLITE3_INTEGER);
+        $stmt->bindValue(':created', time(), SQLITE3_INTEGER);
+        $stmt->execute();
+        
+        $stmt = $this->db->prepare('SELECT id FROM files WHERE file_path = :path');
+        $stmt->bindValue(':path', $normalizedPath, SQLITE3_TEXT);
+        $result = $stmt->execute();
+        $row = $result->fetchArray(SQLITE3_ASSOC);
+        
+        return $row ? (int)$row['id'] : null;
+    }
+
+    protected function getFileId(string $absolutePath): ?int
+    {
+        $normalizedPath = $this->normalizePath($absolutePath);
+        $stmt = $this->db->prepare('SELECT id FROM files WHERE file_path = :path');
+        $stmt->bindValue(':path', $normalizedPath, SQLITE3_TEXT);
+        $result = $stmt->execute();
+        $row = $result->fetchArray(SQLITE3_ASSOC);
+        return $row ? (int)$row['id'] : null;
     }
 
     public function cleanupDeletedFiles(): int

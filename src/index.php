@@ -215,61 +215,52 @@ $auditDb = new AuditDatabase();
 $favDb = new FavoritesDatabase();
 $metaDb = new MetadataDatabase();
 
+// Cache file list - only scan once
 $allFilesRaw = Utils::getFilesRecursively($current_path);
 $webRoot = '/' . trim($root_directory, './');
 $allFiles = array_map(fn($f) => Utils::filesystemToWebPath($f, $root_directory_absolute, $webRoot), $allFilesRaw);
 $allFilesCount = count($allFiles);
 
-// Get audit statuses for all files
+// Batch fetch audit and favorites statuses (lightweight)
+// Skip metadata preloading - let JS lazy-load per-file optimization status on demand
 $auditStatuses = $auditDb->getAuditStatusBatch($allFilesRaw);
+$favoritesStatuses = $favDb->getFavoriteStatusBatch($allFilesRaw);
 
-// Count audited vs unaudited
-$auditedCount = 0;
+// Get optimization stats using SQL COUNT (lightweight)
+$optimizationStats = $metaDb->getOptimizationStats($current_path);
+
+// Build maps for JavaScript - single pass
+$auditStatusMap = [];
+$auditCount = 0;
 $latestAuditDate = '';
-foreach ($auditStatuses as $status) {
-    if ($status['audited']) {
-        $auditedCount++;
-        if ($status['audit_date'] > $latestAuditDate) {
-            $latestAuditDate = $status['audit_date'];
+
+foreach ($allFilesRaw as $i => $fsPath) {
+    $webPath = $allFiles[$i];
+    
+    // Audit status
+    $auditStatusMap[$webPath] = $auditStatuses[$fsPath]['audited'] ?? false;
+    if (!empty($auditStatuses[$fsPath]['audited'])) {
+        $auditCount++;
+        if (($auditStatuses[$fsPath]['audit_date'] ?? '') > $latestAuditDate) {
+            $latestAuditDate = $auditStatuses[$fsPath]['audit_date'];
         }
     }
 }
-$unAuditedCount = $allFilesCount - $auditedCount;
 
-// Get optimization status counts from metadata database
-$optimizationStats = $metaDb->getOptimizationStats($current_path);
+$unAuditedCount = $allFilesCount - $auditCount;
 $optimizedCount = $optimizationStats['optimized'];
 $unoptimizedCount = $optimizationStats['unoptimized'];
-
-// Build optimization status map for JavaScript
 $optimizationStatusMap = [];
-foreach ($allFilesRaw as $i => $fsPath) {
-    $webPath = $allFiles[$i];
-    $metadata = $metaDb->getMetadata($webPath, $fsPath);
-    if ($metadata && isset($metadata['optimizationStatus'])) {
-        $optimizationStatusMap[$webPath] = $metadata['optimizationStatus'];
-    }
-}
 
-// Create a map of web path -> audit status for JS
-$auditStatusMap = [];
-foreach ($allFilesRaw as $i => $fsPath) {
-    $webPath = $allFiles[$i];
-    $auditStatusMap[$webPath] = $auditStatuses[$fsPath]['audited'] ?? false;
-}
-
-// Get favorites statuses for all files
-$favoritesStatuses = $favDb->getFavoriteStatusBatch($allFilesRaw);
-
-// Create a map of web path -> favorite status for JS
+// Favorites map
 $favoritesMap = [];
+$favoritesCount = 0;
 foreach ($allFilesRaw as $i => $fsPath) {
     $webPath = $allFiles[$i];
-    $favoritesMap[$webPath] = $favoritesStatuses[$fsPath]['favorited'] ?? false;
+    $isFav = $favoritesStatuses[$fsPath]['favorited'] ?? false;
+    $favoritesMap[$webPath] = $isFav;
+    if ($isFav) $favoritesCount++;
 }
-
-// Get total favorites count in this folder
-$favoritesCount = $favDb->getFavoritesCountInFolder($current_path);
 
 // Pre-calculate folder stats for dropdown (O(n) instead of O(n²))
 $subfolders = Utils::getSubfolders($current_path);
@@ -400,7 +391,7 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
                 white-space: nowrap;
             ">
                 <?php if ($latestAuditDate): ?>
-                    📅 <?= htmlspecialchars($latestAuditDate) ?> • ✅ <?= $auditedCount ?> • <span id="unaudited-count" title="Click to filter unaudited files">⚠️ <?= $unAuditedCount ?></span>
+                    📅 <?= htmlspecialchars($latestAuditDate) ?> • ✅ <?= $auditCount ?> • <span id="unaudited-count" title="Click to filter unaudited files">⚠️ <?= $unAuditedCount ?></span>
                 <?php else: ?>
                     <span id="unaudited-count" title="Click to filter unaudited files">⚠️ Not audited</span>
                 <?php endif; ?>

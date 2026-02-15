@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-DB_PATH="/var/www/db/metadata.db"
+DB_PATH="$(dirname "$0")/../../db/metadata.db"
 
 # Check if the main database file exists before attempting to remove it
 if [[ -f "$DB_PATH" ]]; then

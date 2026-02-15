@@ -1,8 +1,8 @@
 #!/usr/bin/env php
 <?php
-require_once '/var/www/html/lib/Utils.php';
-require_once '/var/www/html/lib/MetadataExtractor.php';
-require_once '/var/www/html/lib/MetadataDatabase.php';
+require_once __DIR__ . '/../lib/Utils.php';
+require_once __DIR__ . '/../lib/MetadataExtractor.php';
+require_once __DIR__ . '/../lib/MetadataDatabase.php';
 
 // Parse arguments
 $options = getopt('', ['force', 'all', 'dry-run', 'xxhash', 'prune', 'help']);
@@ -47,7 +47,7 @@ $checkXxhash = isset($options['xxhash']);
 $prune = isset($options['prune']);
 
 // Determine target directory
-$root = realpath('/var/www/html/volumes');
+$root = realpath(__DIR__ . '/../volumes');
 $targetDir = $all ? $root : getcwd();
 
 // Handle prune mode

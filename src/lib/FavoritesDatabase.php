@@ -5,6 +5,9 @@ require_once __DIR__ . '/Database.php';
 
 class FavoritesDatabase extends Database
 {
+    private array $statusCache = [];
+    private int $cacheTtl = 60;
+
     public function __construct($dbPath = null) {
         $dbPath = $dbPath ?? __DIR__ . '/../../db/favorites.db';
         parent::__construct($dbPath);
@@ -41,36 +44,9 @@ class FavoritesDatabase extends Database
      * Register a file and return its unique ID
      * Uses full absolute path as unique identifier
      */
-    public function registerFile($absolutePath) {
-        if (!file_exists($absolutePath)) {
-            return null;
-        }
-        
-        $fileSize = filesize($absolutePath);
-        $modifiedTime = filemtime($absolutePath);
-        
-        // Normalize path (remove any ./ or ../ and make consistent)
-        $normalizedPath = $this->normalizePath($absolutePath);
-        
-        // Try to insert, ignore if exists
-        $stmt = $this->db->prepare('
-            INSERT OR IGNORE INTO files (file_path, file_size, modified_time, created_at)
-            VALUES (:path, :size, :mtime, :created)
-        ');
-        
-        $stmt->bindValue(':path', $normalizedPath, SQLITE3_TEXT);
-        $stmt->bindValue(':size', $fileSize, SQLITE3_INTEGER);
-        $stmt->bindValue(':mtime', $modifiedTime, SQLITE3_INTEGER);
-        $stmt->bindValue(':created', time(), SQLITE3_INTEGER);
-        $stmt->execute();
-        
-        // Get the file ID
-        $stmt = $this->db->prepare('SELECT id FROM files WHERE file_path = :path');
-        $stmt->bindValue(':path', $normalizedPath, SQLITE3_TEXT);
-        $result = $stmt->execute();
-        $row = $result->fetchArray(SQLITE3_ASSOC);
-        
-        return $row ? $row['id'] : null;
+    public function registerFile($absolutePath): ?int
+    {
+        return parent::registerFile($absolutePath);
     }
     
     /**
@@ -175,6 +151,12 @@ class FavoritesDatabase extends Database
         if (empty($absolutePaths)) {
             return [];
         }
+
+        // Check cache first
+        $cacheKey = md5(implode('|', $absolutePaths));
+        if (isset($this->statusCache[$cacheKey])) {
+            return $this->statusCache[$cacheKey];
+        }
         
         $results = [];
         
@@ -212,6 +194,9 @@ class FavoritesDatabase extends Database
                 $results[$path] = ['favorited' => false];
             }
         }
+
+        // Cache results
+        $this->statusCache[$cacheKey] = $results;
         
         return $results;
     }

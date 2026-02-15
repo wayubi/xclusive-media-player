@@ -45,9 +45,10 @@ class Utils
 
     public static function isInExcludedFolder(string $pathname): bool
     {
-        $excluded = self::getExcludedFolders();
+        static $excluded = ['.trash'];
+        
         foreach ($excluded as $folder) {
-            if (strpos($pathname, "/$folder/") !== false) {
+            if (str_contains($pathname, "/$folder/")) {
                 return true;
             }
         }
@@ -56,9 +57,10 @@ class Utils
 
     public static function isInHiddenDirectory(string $pathname): bool
     {
-        $pathParts = explode('/', dirname($pathname));
-        foreach ($pathParts as $part) {
-            if (!empty($part) && $part[0] === '.') {
+        $dirname = dirname($pathname);
+        $parts = explode('/', $dirname);
+        foreach ($parts as $part) {
+            if ($part !== '' && $part[0] === '.') {
                 return true;
             }
         }
@@ -70,29 +72,29 @@ class Utils
         if (!is_dir($path)) return [];
 
         $files = [];
+        $mtimes = [];
         $it = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS),
+            new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS | FilesystemIterator::CURRENT_AS_PATHNAME),
             RecursiveIteratorIterator::SELF_FIRST
         );
 
         foreach ($it as $file) {
-            $name = $file->getFilename();
-            if (!$file->isFile() || $name[0] === '.') continue;
+            $name = basename($file);
+            if ($name === '' || $name[0] === '.') continue;
+            if (!is_file($file)) continue;
 
-            $pathname = $file->getPathname();
+            if (self::isInHiddenDirectory($file)) continue;
+            if (self::isInExcludedFolder($file)) continue;
 
-            if (self::isInHiddenDirectory($pathname)) continue;
-            if (self::isInExcludedFolder($pathname)) continue;
-
-            $files[] = $pathname;
+            $files[] = $file;
+            $mtimes[] = @filemtime($file) ?: 0;
         }
 
-        $mtimes = array_map(function($file) {
-            return @filemtime($file) ?: 0;
-        }, $files);
-        array_multisort($mtimes, SORT_DESC, $files);
+        if (!empty($files)) {
+            array_multisort($mtimes, SORT_DESC, SORT_NUMERIC, $files);
+        }
 
-        return array_values($files);
+        return $files;
     }
 
     public static function getSubfolders(string $path): array
@@ -100,11 +102,13 @@ class Utils
         if (!is_dir($path)) return [];
 
         $folders = scandir($path);
+        if ($folders === false) return [];
+
         $excluded = self::getExcludedFolders();
 
         $filtered = array_filter($folders, function ($d) use ($path, $excluded) {
-            if ($d === '.' || $d === '..' || in_array($d, $excluded)) return false;
-            if ($d[0] === '.') return false;
+            if ($d === '' || $d === '.' || $d === '..' || in_array($d, $excluded)) return false;
+            if (isset($d[0]) && $d[0] === '.') return false;
             return is_dir("$path/$d");
         });
 

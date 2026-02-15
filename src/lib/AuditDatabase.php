@@ -5,6 +5,9 @@ require_once __DIR__ . '/Database.php';
 
 class AuditDatabase extends Database
 {
+    private array $statusCache = [];
+    private int $cacheTtl = 60;
+
     public function __construct($dbPath = null) {
         $dbPath = $dbPath ?? __DIR__ . '/../../db/audit.db';
         parent::__construct($dbPath);
@@ -42,36 +45,9 @@ class AuditDatabase extends Database
      * Register a file and return its unique ID
      * Uses full absolute path as unique identifier
      */
-    public function registerFile($absolutePath) {
-        if (!file_exists($absolutePath)) {
-            return null;
-        }
-        
-        $fileSize = filesize($absolutePath);
-        $modifiedTime = filemtime($absolutePath);
-        
-        // Normalize path (remove any ./ or ../ and make consistent)
-        $normalizedPath = $this->normalizePath($absolutePath);
-        
-        // Try to insert, ignore if exists
-        $stmt = $this->db->prepare('
-            INSERT OR IGNORE INTO files (file_path, file_size, modified_time, created_at)
-            VALUES (:path, :size, :mtime, :created)
-        ');
-        
-        $stmt->bindValue(':path', $normalizedPath, SQLITE3_TEXT);
-        $stmt->bindValue(':size', $fileSize, SQLITE3_INTEGER);
-        $stmt->bindValue(':mtime', $modifiedTime, SQLITE3_INTEGER);
-        $stmt->bindValue(':created', time(), SQLITE3_INTEGER);
-        $stmt->execute();
-        
-        // Get the file ID
-        $stmt = $this->db->prepare('SELECT id FROM files WHERE file_path = :path');
-        $stmt->bindValue(':path', $normalizedPath, SQLITE3_TEXT);
-        $result = $stmt->execute();
-        $row = $result->fetchArray(SQLITE3_ASSOC);
-        
-        return $row ? $row['id'] : null;
+    public function registerFile($absolutePath): ?int
+    {
+        return parent::registerFile($absolutePath);
     }
     
     /**
@@ -85,7 +61,6 @@ class AuditDatabase extends Database
         
         $auditDate = date('ymd');
         
-        // Check if already audited
         $stmt = $this->db->prepare('
             SELECT id FROM audit_log 
             WHERE file_id = :file_id 
@@ -97,7 +72,6 @@ class AuditDatabase extends Database
         $existing = $result->fetchArray(SQLITE3_ASSOC);
         
         if ($existing) {
-            // Update existing audit
             $stmt = $this->db->prepare('
                 UPDATE audit_log 
                 SET audited_at = :audited_at,
@@ -108,7 +82,6 @@ class AuditDatabase extends Database
             $stmt->bindValue(':date', $auditDate, SQLITE3_TEXT);
             $stmt->bindValue(':id', $existing['id'], SQLITE3_INTEGER);
         } else {
-            // Insert new audit
             $stmt = $this->db->prepare('
                 INSERT INTO audit_log (file_id, audit_date, audited_at)
                 VALUES (:file_id, :date, :audited_at)
