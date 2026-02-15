@@ -8,7 +8,7 @@ class MetadataExtractor
     const AUDIO_EXTENSIONS = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma'];
     const VIDEO_EXTENSIONS = ['mp4', 'webm', 'mkv', 'mov', 'm4v', '3gp', 'flv', 'wmv', 'avi', 'mpg', 'mpeg'];
     const NON_STREAMING_CONTAINERS = ['avi', 'flv', 'wmv', 'mkv', 'mpeg', 'mpg'];
-    const NON_STREAMING_CODECS = ['wmv3', 'flv1', 'wmv2', 'mpeg4', 'wmv1', 'mpeg1video'];
+    const NON_STREAMING_CODECS = ['vc1', 'wmv3', 'flv1', 'wmv2', 'mpeg4', 'wmv1', 'mpeg1video'];
 
     public static function extract(string $fsPath): array
     {

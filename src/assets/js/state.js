@@ -41,7 +41,7 @@ export const state = {
   optimizationStatusMap: {},
   
   // Unsupported video codecs (these don't play in browsers)
-  unsupportedCodecs: ['wmv3', 'flv1', 'wmv2', 'mpeg4', 'wmv1', 'mpeg1video'],
+  unsupportedCodecs: ['vc1', 'wmv3', 'flv1', 'wmv2', 'mpeg4', 'wmv1', 'mpeg1video'],
   
   // Initialize state from bootstrap data
   init(config) {
