@@ -606,6 +606,13 @@ body {
   pointer-events: none;
 }
 
+/* Idle state - hide overlays after 3 seconds of no mouse movement */
+body.overlays-idle .overlay,
+body.overlays-idle .central-overlay {
+  opacity: 0 !important;
+  pointer-events: none;
+}
+
 .video-container:hover .central-overlay {
   opacity: 1;
   pointer-events: auto;

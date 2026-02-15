@@ -10,6 +10,42 @@ import { toggleTerminal, isTerminalActive, hideTerminal } from './terminal.js';
 
 let scrollDebounce = false;
 
+let overlayIdleTimer = null;
+const OVERLAY_IDLE_DELAY = 500;
+const MOVEMENT_THRESHOLD = 10;
+
+let lastMouseX = 0;
+let lastMouseY = 0;
+let isFirstMouseMove = true;
+
+function handleMouseMove(e) {
+  if (isFirstMouseMove) {
+    isFirstMouseMove = false;
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+    return;
+  }
+  
+  const dx = e.clientX - lastMouseX;
+  const dy = e.clientY - lastMouseY;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  
+  if (distance < MOVEMENT_THRESHOLD) {
+    return;
+  }
+  
+  lastMouseX = e.clientX;
+  lastMouseY = e.clientY;
+  
+  if (overlayIdleTimer) {
+    clearTimeout(overlayIdleTimer);
+  }
+  document.body.classList.remove('overlays-idle');
+  overlayIdleTimer = setTimeout(() => {
+    document.body.classList.add('overlays-idle');
+  }, OVERLAY_IDLE_DELAY);
+}
+
 export function setupEventListeners() {
   // Initialize search
   initSearch();
@@ -29,6 +65,10 @@ export function setupEventListeners() {
   
   // Delete hotkeys (number keys 1-9, 0 and DEL key)
   setupDeleteHotkeys();
+  
+  // Overlay idle timeout - hide overlays after 3 seconds of no mouse movement
+  document.addEventListener('mousemove', handleMouseMove);
+  document.addEventListener('mouseenter', handleMouseMove);
 }
 
 function setupGridNavigation() {
