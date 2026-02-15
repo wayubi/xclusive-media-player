@@ -141,7 +141,7 @@ $muted = !isset($_GET['muted']) || $_GET['muted'] === 'true';
 // FILESYSTEM HELPERS (using Utils)
 // ================================
 
-function renderSingleFolderSelect(array $selected_parts, string $current_abs_path, $auditDb, array $folderStats = [], array $subfolders = []): void {
+function renderSingleFolderSelect(array $selected_parts, string $current_abs_path, $auditDb, $metaDb, array $folderStats = [], array $subfolders = []): void {
     $is_root = empty($selected_parts);
     $has_children = !empty($subfolders);
     
@@ -181,7 +181,13 @@ function renderSingleFolderSelect(array $selected_parts, string $current_abs_pat
                 
                 switch ($subfolder_status) {
                     case 'all_audited':
-                        $subfolder_icon = '✅';
+                        // Check optimization status
+                        $optStats = $metaDb->getOptimizationStats($subfolderPath);
+                        if ($optStats['unoptimized'] > 0) {
+                            $subfolder_icon = '🔧'; // Not all optimized
+                        } else {
+                            $subfolder_icon = '✅'; // All audited AND optimized
+                        }
                         break;
                     case 'some_audited':
                         $subfolder_icon = '⚠️';
@@ -345,7 +351,7 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
                         ← Back
                     </button>
                 <?php endif; ?>
-                <?php renderSingleFolderSelect($selected_path_parts_final, $current_path, $auditDb, $folderStats, $subfolders); ?>
+                <?php renderSingleFolderSelect($selected_path_parts_final, $current_path, $auditDb, $metaDb, $folderStats, $subfolders); ?>
             </div>
 
             <!-- Grid controls -->
