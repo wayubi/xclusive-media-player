@@ -4,7 +4,10 @@ import { renderGrid } from './grid.js';
 import { mediaPool } from './mediaPool.js';
 import { isTerminalActive } from './terminal.js';
 
+let fullscreenDeleteUsed = false;
+
 export function startFullscreenFrom(file, startTime = 0) {
+  fullscreenDeleteUsed = false;
   // Check if this file has an unsupported codec
   if (state.hasUnsupportedCodec(file)) {
     const meta = state.getFileMetadata(file);
@@ -56,6 +59,9 @@ export function shufflePlay() {
 
 export async function startFullscreenPlayer(playlist, index = 0, startTime = 0) {
   if (!playlist.length) return;
+  
+  document.body.classList.add('fullscreen-active');
+  
   let i = index;
 
   // Filter out unsupported videos and text files from playlist
@@ -174,6 +180,7 @@ export async function startFullscreenPlayer(playlist, index = 0, startTime = 0) 
     if (mediaEl) mediaEl.remove();
     container.remove();
     document.removeEventListener('keydown', keyHandler);
+    document.body.classList.remove('fullscreen-active');
 
     // Force complete grid re-render to restore video sources
     renderGrid();
@@ -277,6 +284,64 @@ function setupFullscreenEvents(container, play, close, getIndex) {
   });
 }
 
+function deleteCurrentVideo(file, playlist, currentIndex, play, close) {
+  const filename = file.split('/').pop();
+  if (!confirm(`Delete "${filename}"?`)) {
+    fullscreenDeleteUsed = false;
+    return;
+  }
+  
+  fetch('post-handler.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'delete', files: [file] })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.error) {
+      alert('Delete error: ' + data.error);
+      fullscreenDeleteUsed = false;
+      return;
+    }
+    
+    const idx = state.allVideos.indexOf(file);
+    if (idx > -1) state.allVideos.splice(idx, 1);
+    delete state.auditStatusMap[file];
+    delete state.webToFsPathMap[file];
+    delete state.favoritesMap[file];
+    
+    // Remove from local playlist
+    const playlistIndex = playlist.indexOf(file);
+    if (playlistIndex > -1) {
+      playlist.splice(playlistIndex, 1);
+    }
+    
+    // If no videos left, close fullscreen
+    if (playlist.length === 0) {
+      close();
+      return;
+    }
+    
+    // Adjust index if we deleted before current position
+    let newIndex = currentIndex;
+    if (playlistIndex < currentIndex) {
+      newIndex = currentIndex - 1;
+    }
+    // Wrap if needed
+    if (newIndex >= playlist.length) {
+      newIndex = 0;
+    }
+    
+    // Play the next video
+    play(newIndex);
+    fullscreenDeleteUsed = false;
+  })
+  .catch(() => {
+    alert('Delete failed');
+    fullscreenDeleteUsed = false;
+  });
+}
+
 function setupKeyboardHandler(playlist, play, close, getIndex) {
   return function keyHandler(e) {
     // Don't process if terminal is active
@@ -301,6 +366,14 @@ function setupKeyboardHandler(playlist, play, close, getIndex) {
       case 'Q':
         e.preventDefault();
         close();
+        break;
+      case 'Delete':
+      case 'd':
+        e.stopPropagation();
+        if (fullscreenDeleteUsed) return;
+        e.preventDefault();
+        fullscreenDeleteUsed = true;
+        deleteCurrentVideo(playlist[i], playlist, i, play, close);
         break;
     }
   };

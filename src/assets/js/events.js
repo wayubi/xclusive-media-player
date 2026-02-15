@@ -288,7 +288,7 @@ function setupDeleteHotkeys() {
     const key = e.key;
     
     // Check if we're in fullscreen mode by looking for the fullscreen container
-    const isFullscreenActive = document.querySelector('div[style*="z-index:9999"]') !== null;
+    const isFullscreenActive = document.body.classList.contains('fullscreen-active');
     
     // ESC key - clear delete selections (only when not in fullscreen)
     if (key === 'Escape') {
