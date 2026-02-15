@@ -262,7 +262,7 @@ async function processCommand(commandLine) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        action: 'shell',
+        action: 'terminal',
         command: commandLine,
         currentDir: currentDirectory
       })
@@ -379,7 +379,7 @@ async function runScript(scriptName, args) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        action: 'run_script',
+        action: 'terminal',
         script: scriptName,
         args: args,
         currentDir: currentDirectory
@@ -415,7 +415,7 @@ async function runFfmpegCommand(cmd, args, fullCommandLine) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        action: 'run_ffmpeg',
+        action: 'terminal',
         command: cmd,
         args: args,
         fullCommand: fullCommandLine,
@@ -570,7 +570,7 @@ async function handleTabCompletion() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        action: 'shell',
+        action: 'terminal',
         command: 'ls -la',
         currentDir: currentDirectory
       })
