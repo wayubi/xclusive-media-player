@@ -105,8 +105,20 @@ function populateGridContainers(grid, visibleFiles) {
  * Returns a promise that resolves when metadata is processed
  */
 function fetchMetadataBatch(grid, visibleFiles) {
+  // Skip if no visible files
+  if (!visibleFiles || visibleFiles.length === 0) {
+    return Promise.resolve({});
+  }
+  
   // Use webToFsPathMap to get base64-encoded filesystem paths for API
-  const fsPaths = visibleFiles.map(webPath => state.webToFsPathMap[webPath]);
+  // Filter out any undefined/null paths
+  const fsPaths = visibleFiles.map(webPath => state.webToFsPathMap[webPath])
+                              .filter(path => path != null);
+  
+  // Skip API call if no valid filesystem paths
+  if (fsPaths.length === 0) {
+    return Promise.resolve({});
+  }
 
   return fetch('api.php', {
     method: 'POST',
