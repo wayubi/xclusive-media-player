@@ -33,10 +33,10 @@ for f in *.flv; do
 
   # Try remux if already MP4-compatible
   if [[ "$vcodec" == "h264" && "$acodec" == "aac" ]]; then
-    if ffmpeg -nostdin -i "$f" -c copy "$mp4"; then
+    if ffmpeg -nostdin -i "$f" -c copy -movflags +faststart "$mp4"; then
       touch -r "$f" "$mp4"
       mv "$f" "$trashDir/"
-      echo "Remuxed: $f"
+      echo "Remuxed (faststart): $f"
       continue
     fi
   fi
@@ -66,6 +66,7 @@ for f in *.flv; do
       -b:v "${vtarget}" -maxrate "$((vtarget * 11 / 10))" -bufsize "$((vtarget * 2))" \
       -pix_fmt yuv420p \
       -c:a aac -b:a "${atarget}" \
+      -movflags +faststart \
       "$mp4"; then
 
     touch -r "$f" "$mp4"
