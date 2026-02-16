@@ -11,7 +11,7 @@ import { toggleTerminal, isTerminalActive, hideTerminal } from './terminal.js';
 let scrollDebounce = false;
 
 let overlayIdleTimer = null;
-const OVERLAY_IDLE_DELAY = 500;
+const OVERLAY_IDLE_DELAY = 1000;
 const MOVEMENT_THRESHOLD = 10;
 
 let lastMouseX = 0;
