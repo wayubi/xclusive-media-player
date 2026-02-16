@@ -38,3 +38,23 @@ export function isUnsupportedVideoFile(file) {
   // Check codec from stored metadata
   return state.hasUnsupportedCodec(file);
 }
+
+/**
+ * Decode base64 string to UTF-8 text
+ * Unlike atob(), this properly handles multi-byte UTF-8 characters
+ * @param {string} base64 - Base64 encoded string
+ * @returns {string} Decoded UTF-8 string
+ */
+export function decodeBase64UTF8(base64) {
+  try {
+    const binaryString = atob(base64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return new TextDecoder('utf-8').decode(bytes);
+  } catch (e) {
+    console.warn('Failed to decode base64 UTF-8:', e);
+    return base64;
+  }
+}

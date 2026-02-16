@@ -1,5 +1,6 @@
 // terminal.js - Functional terminal interface for real filesystem commands
 import { state } from './state.js';
+import { decodeBase64UTF8 } from './utils.js';
 
 let terminalActive = false;
 let terminalElement = null;
@@ -274,8 +275,8 @@ async function processCommand(commandLine) {
       printToTerminal(data.error, 'error');
     } else {
       if (data.output) {
-        // Decode base64-encoded output
-        printToTerminal(atob(data.output));
+        // Decode base64-encoded output with UTF-8 support
+        printToTerminal(decodeBase64UTF8(data.output));
       }
       // Update current directory if it changed
       if (data.currentDir) {
@@ -586,8 +587,8 @@ async function handleTabCompletion() {
     
     if (data.error || !data.output) return;
     
-    // Decode base64 output from the API
-    const decodedOutput = atob(data.output);
+    // Decode base64 output from the API with UTF-8 support
+    const decodedOutput = decodeBase64UTF8(data.output);
     
     // Parse the directory listing
     const lines = decodedOutput.split('\n');

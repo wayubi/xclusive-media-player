@@ -4,6 +4,7 @@ import { mediaPool } from './mediaPool.js';
 import { mediaQueue } from './mediaQueue.js';
 import { createMediaContainer, transformToUnsupportedVideo, loadTextContent, LAZY_LOAD_OFFSET } from './mediaContainer.js';
 import { syncMuteIcons, clearSelectedTiles, clearAllSelections } from './ui.js';
+import { decodeBase64UTF8 } from './utils.js';
 
 // IntersectionObserver for lazy loading media
 let gridObserver = null;
@@ -154,7 +155,7 @@ function fetchMetadataBatch(grid, visibleFiles) {
       const metaElem = container.querySelector('.overlay > div:last-child');
 
       if (filenameElem) {
-        filenameElem.textContent = meta.file ? atob(meta.file) : decodeURIComponent(file.split('/').pop());
+        filenameElem.textContent = meta.file ? decodeBase64UTF8(meta.file) : decodeURIComponent(file.split('/').pop());
       }
 
       if (metaElem) {
