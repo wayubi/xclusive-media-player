@@ -4,20 +4,78 @@ require_once __DIR__ . '/../lib/Utils.php';
 require_once __DIR__ . '/../lib/MetadataExtractor.php';
 require_once __DIR__ . '/../lib/MetadataDatabase.php';
 
-// Parse arguments
-$options = getopt('', ['force', 'all', 'dry-run', 'xxhash', 'prune', 'help']);
+// Parse arguments manually to handle options anywhere in the command line
+// (PHP's getopt doesn't reliably handle options after positional arguments)
+$force = false;
+$all = false;
+$dryRun = false;
+$checkXxhash = false;
+$prune = false;
+$showHelp = false;
+$singleFile = null;
+
+for ($i = 1; $i < count($argv); $i++) {
+    $arg = $argv[$i];
+    
+    if (strpos($arg, '--') === 0) {
+        $opt = substr($arg, 2);
+        switch ($opt) {
+            case 'force':
+                $force = true;
+                break;
+            case 'all':
+                $all = true;
+                break;
+            case 'dry-run':
+                $dryRun = true;
+                break;
+            case 'xxhash':
+                $checkXxhash = true;
+                break;
+            case 'prune':
+                $prune = true;
+                break;
+            case 'help':
+                $showHelp = true;
+                break;
+        }
+    } elseif (strpos($arg, '-') === 0) {
+        // Handle short options
+        $opts = substr($arg, 1);
+        for ($j = 0; $j < strlen($opts); $j++) {
+            switch ($opts[$j]) {
+                case 'f':
+                    $force = true;
+                    break;
+                case 'a':
+                    $all = true;
+                    break;
+                case 'h':
+                    $showHelp = true;
+                    break;
+            }
+        }
+    } else {
+        // Positional argument (file)
+        $singleFile = $arg;
+    }
+}
 
 // Show help if requested
-if (isset($options['help'])) {
+if ($showHelp) {
     echo <<<HELP
 refresh_metadata - Manage file metadata in the SQLite database
 
-Usage: refresh_metadata [options]
+Usage: refresh_metadata [file] [options]
 
 Description:
   Manages file metadata database. Two modes: refresh (default) scans filesystem
   and adds/updates records; prune (--prune) queries database and removes stale
   records. These are mutually exclusive operations.
+
+Arguments:
+  file          Optional: specific file to refresh. If provided, processes only
+                that file regardless of --all flag.
 
 Options:
   --force      Refresh mode: refresh all files. Prune mode: remove all records
@@ -31,20 +89,25 @@ Options:
 
 Examples:
   refresh_metadata              Refresh current directory, skip existing
+  refresh_metadata video.mp4    Refresh single file
   refresh_metadata --force      Force refresh all files in current directory
   refresh_metadata --all        Refresh all files under /volumes
   refresh_metadata --prune      Remove records for deleted files in current dir
   refresh_metadata --prune --all --force   Remove all records from database
+  refresh_metadata video.mp4 --xxhash --force  Force refresh single file
 
 HELP;
     exit(0);
 }
 
-$force = isset($options['force']);
-$all = isset($options['all']);
-$dryRun = isset($options['dry-run']);
-$checkXxhash = isset($options['xxhash']);
-$prune = isset($options['prune']);
+// Validate single file if provided
+if ($singleFile !== null) {
+    if (!file_exists($singleFile)) {
+        fprintf(STDERR, "Error: File not found: %s\n", $singleFile);
+        exit(1);
+    }
+    $singleFile = realpath($singleFile);
+}
 
 // Determine target directory
 $root = realpath(__DIR__ . '/../volumes');
@@ -67,10 +130,17 @@ if ($prune) {
         
         // Check if record is in scope
         $inScope = false;
-        if ($all) {
+        if ($singleFile) {
+            // Single file mode: only check the specified file
+            $inScope = ($dbFilePath === $singleFile);
+        } elseif ($all) {
             $inScope = (strpos($dbFilePath, $root) === 0);
         } else {
             $inScope = (strpos($dbFilePath, $targetDir) === 0);
+        }
+        
+        if (!$inScope) {
+            continue;
         }
         
         if (!$inScope) {
@@ -136,36 +206,42 @@ if ($prune) {
     exit(0);
 }
 
-echo "Scanning " . ($all ? "all files under /volumes" : "current directory") . "...\n";
-
-// Get all files
-$files = [];
-if ($all) {
-    $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($targetDir, RecursiveDirectoryIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::SELF_FIRST
-    );
-    foreach ($iterator as $file) {
-        if ($file->isFile()) {
-            $path = $file->getPathname();
-            // Skip if any directory component or filename starts with "."
-            $parts = explode('/', $path);
-            $shouldSkip = false;
-            foreach ($parts as $part) {
-                if (strlen($part) > 0 && $part[0] === '.') {
-                    $shouldSkip = true;
-                    break;
+// Handle single file mode
+if ($singleFile) {
+    $files = [$singleFile];
+    echo "Processing single file: " . basename($singleFile) . "\n\n";
+} else {
+    echo "Scanning " . ($all ? "all files under /volumes" : "current directory") . "...\n";
+    
+    // Get all files
+    $files = [];
+    if ($all) {
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($targetDir, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::SELF_FIRST
+        );
+        foreach ($iterator as $file) {
+            if ($file->isFile()) {
+                $path = $file->getPathname();
+                // Skip if any directory component or filename starts with "."
+                $parts = explode('/', $path);
+                $shouldSkip = false;
+                foreach ($parts as $part) {
+                    if (strlen($part) > 0 && $part[0] === '.') {
+                        $shouldSkip = true;
+                        break;
+                    }
+                }
+                if (!$shouldSkip) {
+                    $files[] = $path;
                 }
             }
-            if (!$shouldSkip) {
-                $files[] = $path;
-            }
         }
-    }
-} else {
-    foreach (scandir($targetDir) as $f) {
-        if ($f !== '.' && $f !== '..' && $f[0] !== '.' && is_file($targetDir . '/' . $f)) {
-            $files[] = $targetDir . '/' . $f;
+    } else {
+        foreach (scandir($targetDir) as $f) {
+            if ($f !== '.' && $f !== '..' && $f[0] !== '.' && is_file($targetDir . '/' . $f)) {
+                $files[] = $targetDir . '/' . $f;
+            }
         }
     }
 }

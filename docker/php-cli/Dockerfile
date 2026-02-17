@@ -1,8 +1,8 @@
 FROM php:8.4-cli
 
-# Install FFmpeg, cron, util-linux (for flock), and xxhash
+# Install FFmpeg, cron, util-linux (for flock), xxhash, and xxd
 RUN apt-get update && \
-    apt-get install -y ffmpeg cron util-linux xxhash && \
+    apt-get install -y ffmpeg cron util-linux xxhash xxd && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Create log file for cron

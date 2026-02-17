@@ -185,6 +185,7 @@ BITRATE_AUDIO=""
 QUALITY_MODE=false
 CRF_VALUE=""
 QUALITY_AUDIO=""
+OUTPUT_FILE=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -471,6 +472,10 @@ for f in "${files[@]}"; do
     touch -r "$f" "$mp4"
     mv "$f" "$trashDir/"
     echo "  ✓ Converted: $mp4"
+    # Track output file for single file mode
+    if [[ -n "$SINGLE_FILE" ]]; then
+      OUTPUT_FILE="$mp4"
+    fi
   else
     echo "  ERROR: Conversion failed"
     echo "FAILED (encode): $f" >> "$log"
@@ -496,9 +501,13 @@ if [[ "$DRY_RUN" == false ]]; then
   fi
   
   # Only refresh metadata if we actually converted files
-  if [[ -n "$SINGLE_FILE" || ${#files[@]} -gt 0 ]]; then
+  if [[ -n "$OUTPUT_FILE" || ${#files[@]} -gt 0 ]]; then
     echo ""
     echo "Refreshing metadata for new MP4 files..."
-    refresh_metadata --xxhash
+    if [[ -n "$OUTPUT_FILE" ]]; then
+      refresh_metadata --xxhash "$OUTPUT_FILE"
+    else
+      refresh_metadata --xxhash
+    fi
   fi
 fi
