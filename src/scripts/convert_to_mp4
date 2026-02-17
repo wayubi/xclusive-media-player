@@ -1,0 +1,504 @@
+#!/usr/bin/env bash
+shopt -s nullglob
+
+# Universal video converter to MP4
+# Supports: FLV, WMV, AVI, MPG/MPEG with quality preservation
+
+# Help function
+show_help() {
+  cat << 'EOF'
+Universal Video Converter to MP4
+================================
+
+Converts legacy video formats (FLV, WMV, AVI, MPG/MPEG) to MP4.
+
+USAGE:
+    convert_to_mp4 [FILE] [OPTIONS]
+
+    convert_to_mp4                           # Convert all files in directory
+    convert_to_mp4 video.avi                 # Convert specific file
+    convert_to_mp4 video.avi --quality 18 100 # Convert one file with CRF 18
+
+OPTIONS:
+    <file>                    Specific file to convert (optional)
+                              If provided, only this file will be processed
+    
+    --type <ext>              Process only specific file extension
+                              Valid: flv, wmv, avi, mpg, mpeg
+    
+    --bitrate-matching <V> <A>  Override with custom bitrate percentages
+                                V = video percentage (0-100)
+                                A = audio percentage (0-100)
+                                Example: --bitrate-matching 90 80
+    
+    --quality <CRF> [A]       Use CRF mode with specified audio bitrate
+                                CRF = quality value (0-51, lower is better)
+                                A = audio percentage (0-100), defaults to 100
+                                Examples: --quality 18
+                                          --quality 18 90
+    
+    --dry-run                 Preview what would be converted without modifying files
+    
+    --help                    Show this help message
+
+MODE PRIORITY (highest to lowest):
+==================================
+
+1. --bitrate-matching : Custom fixed bitrate percentages
+2. --quality [CRF] [A] : CRF-based encoding with custom values
+3. Default             : CRF 18, Audio 100% (visually lossless quality)
+
+Note: --bitrate-matching takes precedence if both are specified.
+      Default is CRF 18 which provides visually lossless quality.
+      Neither mode applies to h264+aac files (they are remuxed without encoding).
+
+EXAMPLES:
+=========
+
+    # Single file conversions (all use CRF 18 by default)
+    convert_to_mp4 myvideo.avi                    # Convert one file (CRF 18, Audio 100%)
+    convert_to_mp4 myvideo.wmv --quality 16       # One file with CRF 16 (higher quality)
+    convert_to_mp4 myvideo.mpg --bitrate-matching 100 100  # Use fixed bitrate instead
+    
+    # Batch conversions
+    convert_to_mp4                           # Default mode (CRF 18, Audio 100%)
+    convert_to_mp4 --type wmv                # Convert only WMV files (CRF 18)
+    convert_to_mp4 --quality 23              # All files with CRF 23 (smaller files)
+    convert_to_mp4 --quality 23 90 --type avi # CRF 23, Audio: 90%, only AVI
+    convert_to_mp4 --bitrate-matching 90 90  # Fixed bitrate mode (90% video/audio)
+
+CRF QUALITY RECOMMENDATIONS:
+============================
+
+CRF 0-16  : Very high quality (visually lossless or near-lossless)
+            • Use for archival or when quality is critical
+            • Larger file sizes
+
+CRF 17-20 : High quality (recommended for most conversions)
+            • 18 is often considered "visually lossless"
+            • Good balance of quality and size
+
+CRF 21-23 : Good quality (ffmpeg default is 23)
+            • Slight quality reduction, noticeable in some scenes
+            • Smaller files than high quality settings
+
+CRF 24-28 : Acceptable quality
+            • Compression artifacts may be visible
+            • Use when file size is more important than quality
+
+CRF 29-51 : Low quality (not recommended)
+            • Significant quality loss
+            • Very small files but poor viewing experience
+
+Note: CRF values are not linear. Each reduction of 6 roughly doubles the file size.
+
+SUPPORTED INPUT FORMATS:
+========================
+
+    • FLV (Flash Video) - .flv
+    • WMV (Windows Media Video) - .wmv
+    • AVI (Audio Video Interleave) - .avi
+    • MPEG (Motion Picture Experts Group) - .mpg, .mpeg
+
+DEFAULT MODE (no arguments):
+============================
+
+Uses CRF 18 with audio 100%:
+• Video: CRF 18 (visually lossless quality)
+• Audio: 100% of source bitrate
+• Action: Re-encode to H.264/AAC for compatibility
+• Provides superior quality to fixed bitrate encoding
+
+Why CRF 18 instead of bitrate-matching?
+• CRF allocates bits dynamically based on scene complexity
+• Consistent quality throughout the video
+• Typically produces better results than fixed bitrate
+• Recommended for archival and quality-critical conversions
+
+BITRATE-MATCHING MODE:
+======================
+
+Uses custom percentages:
+• Video: Specified percentage of source bitrate
+• Audio: Specified percentage of source bitrate
+• Allows fine-tuned control over file size vs quality
+• Example: --bitrate-matching 90 90 for 10% reduction
+
+QUALITY (CRF) MODE:
+===================
+
+Uses CRF (Constant Rate Factor) for video:
+• Video: CRF-based variable bitrate (no target bitrate)
+• Audio: Specified percentage of source bitrate
+• FFmpeg determines bitrate based on content complexity
+• Better quality per bit than fixed bitrate
+
+Remux Mode (fastest, zero quality loss):
+• Triggered when video is h264 AND audio is AAC
+• Copies streams without any re-encoding
+• No quality loss, very fast processing
+• Neither bitrate-matching nor quality modes apply
+
+OUTPUT:
+=======
+
+• Converted files: <original_name>.mp4
+• Originals moved to: .trash-<timestamp>/
+• Failed conversions logged to: convert_to_mp4_errors.log
+• Metadata automatically refreshed after conversion
+
+REQUIREMENTS:
+=============
+
+• ffmpeg (with libx264 and aac encoder)
+• ffprobe
+• refresh_metadata (custom tool for metadata updates)
+
+EOF
+  exit 0
+}
+
+# Supported extensions
+ALL_EXTENSIONS=("flv" "wmv" "avi" "mpg" "mpeg")
+
+# Function to check if extension is supported
+check_extension() {
+  local filename="$1"
+  local ext="${filename##*.}"
+  ext=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
+  
+  for valid_ext in "${ALL_EXTENSIONS[@]}"; do
+    if [[ "$ext" == "$valid_ext" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Parse arguments
+SINGLE_FILE=""
+FILTER_TYPE=""
+DRY_RUN=false
+BITRATE_MATCHING=false
+BITRATE_VIDEO=""
+BITRATE_AUDIO=""
+QUALITY_MODE=false
+CRF_VALUE=""
+QUALITY_AUDIO=""
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --help|-h)
+      show_help
+      ;;
+    --type)
+      FILTER_TYPE="$2"
+      shift 2
+      ;;
+    --dry-run)
+      DRY_RUN=true
+      shift
+      ;;
+    --bitrate-matching)
+      BITRATE_MATCHING=true
+      BITRATE_VIDEO="$2"
+      BITRATE_AUDIO="$3"
+      shift 3
+      ;;
+    --quality)
+      QUALITY_MODE=true
+      CRF_VALUE="$2"
+      # Check if third argument exists and is not another option
+      if [[ -n "$3" && ! "$3" =~ ^- ]]; then
+        QUALITY_AUDIO="$3"
+        shift 3
+      else
+        QUALITY_AUDIO="100"
+        shift 2
+      fi
+      ;;
+    -*)
+      echo "Unknown option: $1"
+      echo "Usage: $0 [FILE] [--type <extension>] [--bitrate-matching <V> <A>] [--quality <CRF> <A>] [--dry-run] [--help]"
+      echo "Try '$0 --help' for more information."
+      exit 1
+      ;;
+    *)
+      # Check if this is a file path
+      if [[ -f "$1" ]]; then
+        if check_extension "$1"; then
+          SINGLE_FILE="$1"
+          shift
+        else
+          echo "Error: File '$1' has an unsupported extension."
+          echo "Supported extensions: ${ALL_EXTENSIONS[*]}"
+          echo "To add support for this file type, edit the ALL_EXTENSIONS array in this script."
+          exit 1
+        fi
+      else
+        echo "Error: '$1' is not a valid file or option."
+        echo "Usage: $0 [FILE] [--type <extension>] [--bitrate-matching <V> <A>] [--quality <CRF> <A>] [--dry-run] [--help]"
+        exit 1
+      fi
+      ;;
+  esac
+done
+
+# Determine mode: bitrate-matching > quality (with custom values) > default quality
+# Default is CRF 18 with audio 100% for best quality
+if [[ "$BITRATE_MATCHING" == true ]]; then
+  MODE="bitrate-matching"
+elif [[ "$QUALITY_MODE" == true ]]; then
+  # User specified --quality with custom values
+  MODE="quality"
+  # CRF_VALUE and QUALITY_AUDIO already set from argument parsing
+else
+  # Default mode: CRF 18 with audio 100%
+  MODE="quality"
+  CRF_VALUE="18"
+  QUALITY_AUDIO="100"
+fi
+
+# Validate type filter if provided
+if [[ -n "$FILTER_TYPE" && -n "$SINGLE_FILE" ]]; then
+  # Check if file extension matches --type
+  file_ext="${SINGLE_FILE##*.}"
+  file_ext=$(echo "$file_ext" | tr '[:upper:]' '[:lower:]')
+  type_lower=$(echo "$FILTER_TYPE" | tr '[:upper:]' '[:lower:]')
+  
+  if [[ "$file_ext" != "$type_lower" ]]; then
+    echo "Warning: --type $FILTER_TYPE doesn't match file extension .$file_ext"
+    echo "Ignoring --type flag and processing $SINGLE_FILE"
+    FILTER_TYPE=""
+  fi
+fi
+
+# Build file list
+if [[ -n "$SINGLE_FILE" ]]; then
+  # Single file mode
+  files=("$SINGLE_FILE")
+  echo "Processing single file: $SINGLE_FILE"
+  if [[ "$MODE" == "quality" ]]; then
+    echo "Mode: Quality (CRF $CRF_VALUE, Audio ${QUALITY_AUDIO}%)"
+  elif [[ "$MODE" == "bitrate-matching" ]]; then
+    echo "Mode: Bitrate-matching (Video ${BITRATE_VIDEO}%, Audio ${BITRATE_AUDIO}%)"
+  fi
+else
+  # Batch mode - determine which extensions to process
+  if [[ -n "$FILTER_TYPE" ]]; then
+    # Validate filter type
+    valid=false
+    for ext in "${ALL_EXTENSIONS[@]}"; do
+      if [[ "$ext" == "$FILTER_TYPE" ]]; then
+        valid=true
+        break
+      fi
+    done
+    
+    if [[ "$valid" == false ]]; then
+      echo "Error: Unsupported type '$FILTER_TYPE'"
+      echo "Supported types: ${ALL_EXTENSIONS[*]}"
+      exit 1
+    fi
+    
+    EXTENSIONS=("$FILTER_TYPE")
+    echo "Processing only .$FILTER_TYPE files..."
+  else
+    EXTENSIONS=("${ALL_EXTENSIONS[@]}")
+    echo "Processing all supported formats: ${EXTENSIONS[*]}"
+  fi
+  
+  # Build file list
+  files=()
+  for ext in "${EXTENSIONS[@]}"; do
+    for f in *.$ext; do
+      [[ -f "$f" ]] && files+=("$f")
+    done
+  done
+  
+  # Check if any files found
+  if (( ${#files[@]} == 0 )); then
+    echo "No supported video files found. Nothing to do."
+    exit 0
+  fi
+  
+  echo "Found ${#files[@]} file(s) to process"
+  
+  if [[ "$MODE" == "quality" ]]; then
+    echo "Mode: Quality (CRF $CRF_VALUE, Audio ${QUALITY_AUDIO}%)"
+  elif [[ "$MODE" == "bitrate-matching" ]]; then
+    echo "Mode: Bitrate-matching (Video ${BITRATE_VIDEO}%, Audio ${BITRATE_AUDIO}%)"
+  fi
+fi
+
+echo ""
+
+if [[ "$DRY_RUN" == true ]]; then
+  echo "DRY RUN MODE - No files will be modified"
+  echo ""
+fi
+
+# Setup
+trashDir=".trash-$(date +%s)"
+mkdir -p "$trashDir"
+log="convert_to_mp4_errors.log"
+
+# Process each file
+for f in "${files[@]}"; do
+  # Get file extension
+  ext="${f##*.}"
+  ext_lower=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
+  
+  # Generate output filename
+  base="${f%.*}"
+  mp4="${base}.mp4"
+  
+  # Avoid name collisions
+  if [[ -f "$mp4" ]]; then
+    i=1
+    while [[ -f "${base}.${i}.mp4" ]]; do
+      ((i++))
+    done
+    mp4="${base}.${i}.mp4"
+  fi
+  
+  echo "Processing: $f"
+  
+  if [[ "$DRY_RUN" == true ]]; then
+    echo "  [DRY RUN] Would convert to: $mp4"
+    continue
+  fi
+  
+  # Detect codecs
+  vcodec=$(ffprobe -v error -select_streams v:0 \
+    -show_entries stream=codec_name -of csv=p=0 "$f" 2>/dev/null)
+  
+  acodec=$(ffprobe -v error -select_streams a:0 \
+    -show_entries stream=codec_name -of csv=p=0 "$f" 2>/dev/null)
+  
+  # Handle missing codec detection
+  if [[ -z "$vcodec" ]]; then
+    echo "  ERROR: Could not detect video codec, skipping"
+    echo "FAILED (no video codec): $f" >> "$log"
+    continue
+  fi
+  
+  echo "  Codecs: $vcodec / ${acodec:-none}"
+  
+  # Check if already MP4-compatible (h264 video + aac audio)
+  if [[ "$vcodec" == "h264" && "$acodec" == "aac" ]]; then
+    echo "  → Remuxing (already MP4-compatible)"
+    if ffmpeg -nostdin -hide_banner -loglevel error -i "$f" -c copy -movflags +faststart "$mp4"; then
+      touch -r "$f" "$mp4"
+      mv "$f" "$trashDir/"
+      echo "  ✓ Remuxed: $mp4"
+    else
+      echo "  ERROR: Remux failed"
+      echo "FAILED (remux): $f" >> "$log"
+    fi
+    continue
+  fi
+  
+  # Determine reduction percentages based on mode
+  if [[ "$MODE" == "quality" ]]; then
+    # CRF mode: no video bitrate reduction (CRF handles it), custom audio
+    vreduction=100
+    areduction=$QUALITY_AUDIO
+    echo "  → CRF mode: CRF=$CRF_VALUE, Audio ${areduction}%"
+  elif [[ "$MODE" == "bitrate-matching" ]]; then
+    # Bitrate-matching mode: custom percentages for all
+    vreduction=$BITRATE_VIDEO
+    areduction=$BITRATE_AUDIO
+    echo "  → Bitrate-matching: Video ${vreduction}%, Audio ${areduction}%"
+  else
+    # Default mode: use 100% for everything
+    vreduction=100
+    areduction=100
+    echo "  → Default mode: Video ${vreduction}%, Audio ${areduction}%"
+  fi
+  
+  # Read source bitrates
+  vbit=$(ffprobe -v error -select_streams v:0 \
+    -show_entries stream=bit_rate -of csv=p=0 "$f" 2>/dev/null)
+  abit=$(ffprobe -v error -select_streams a:0 \
+    -show_entries stream=bit_rate -of csv=p=0 "$f" 2>/dev/null)
+  
+  # Sanitize missing/insane values
+  [[ -z "$vbit" || "$vbit" -lt 100000 ]] && vbit=1500000
+  [[ -z "$abit" || "$abit" -lt 32000 ]] && abit=128000
+  
+  # Calculate target bitrates (only used in non-CRF modes)
+  if [[ "$MODE" != "quality" ]]; then
+    vtarget=$(( vbit * vreduction / 100 ))
+  fi
+  atarget=$(( abit * areduction / 100 ))
+  
+  # Clamp audio to reasonable ranges
+  (( atarget > 320000 )) && atarget=320000
+  (( atarget < 64000 )) && atarget=64000
+  
+  # Build ffmpeg command
+  if [[ "$MODE" == "quality" ]]; then
+    # CRF mode: use CRF for video, bitrate for audio
+    echo "  → Re-encoding: $vcodec → libx264 (CRF $CRF_VALUE)"
+    echo "  → Audio: ${acodec:-none} → AAC @ ${atarget}bps"
+    
+    ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\""
+    ffmpeg_cmd="$ffmpeg_cmd -c:v libx264 -preset slow -crf $CRF_VALUE"
+    ffmpeg_cmd="$ffmpeg_cmd -pix_fmt yuv420p"
+  else
+    # Bitrate-matching or default mode: use target bitrate for video
+    echo "  → Re-encoding: $vcodec → libx264 @ ${vtarget}bps"
+    echo "  → Audio: ${acodec:-none} → AAC @ ${atarget}bps"
+    
+    ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\""
+    ffmpeg_cmd="$ffmpeg_cmd -c:v libx264 -preset slow"
+    ffmpeg_cmd="$ffmpeg_cmd -b:v ${vtarget} -maxrate $((vtarget * 11 / 10)) -bufsize $((vtarget * 2))"
+    ffmpeg_cmd="$ffmpeg_cmd -pix_fmt yuv420p"
+  fi
+  
+  # Handle audio
+  if [[ -n "$acodec" ]]; then
+    ffmpeg_cmd="$ffmpeg_cmd -c:a aac -b:a ${atarget}"
+  else
+    ffmpeg_cmd="$ffmpeg_cmd -an"  # No audio stream
+  fi
+  
+  ffmpeg_cmd="$ffmpeg_cmd -movflags +faststart \"$mp4\""
+  
+  # Execute conversion
+  if eval "$ffmpeg_cmd"; then
+    touch -r "$f" "$mp4"
+    mv "$f" "$trashDir/"
+    echo "  ✓ Converted: $mp4"
+  else
+    echo "  ERROR: Conversion failed"
+    echo "FAILED (encode): $f" >> "$log"
+    # Clean up partial file if it exists
+    [[ -f "$mp4" ]] && rm -f "$mp4"
+  fi
+  
+  echo ""
+done
+
+# Summary
+if [[ "$DRY_RUN" == false ]]; then
+  echo ""
+  echo "========================================"
+  echo "Conversion complete!"
+  echo "Original files moved to: $trashDir"
+  
+  if [[ -f "$log" ]]; then
+    failures=$(wc -l < "$log")
+    echo "Failures logged: $failures (see $log)"
+  else
+    echo "All files converted successfully!"
+  fi
+  
+  # Only refresh metadata if we actually converted files
+  if [[ -n "$SINGLE_FILE" || ${#files[@]} -gt 0 ]]; then
+    echo ""
+    echo "Refreshing metadata for new MP4 files..."
+    refresh_metadata --xxhash
+  fi
+fi
