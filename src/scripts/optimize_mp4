@@ -426,9 +426,13 @@ else
     echo ""
     echo "Refreshing metadata for optimized files..."
     if [[ -n "$SINGLE_FILE" ]]; then
-      refresh_metadata --xxhash "$SINGLE_FILE"
+      refresh_metadata "$SINGLE_FILE" --xxhash
     else
       refresh_metadata --xxhash
     fi
+    
+    echo ""
+    echo "Pruning stale database records..."
+    refresh_metadata --prune
   fi
 fi

@@ -505,9 +505,13 @@ if [[ "$DRY_RUN" == false ]]; then
     echo ""
     echo "Refreshing metadata for new MP4 files..."
     if [[ -n "$OUTPUT_FILE" ]]; then
-      refresh_metadata --xxhash "$OUTPUT_FILE"
+      refresh_metadata "$OUTPUT_FILE" --xxhash
     else
       refresh_metadata --xxhash
     fi
+    
+    echo ""
+    echo "Pruning stale database records..."
+    refresh_metadata --prune
   fi
 fi
