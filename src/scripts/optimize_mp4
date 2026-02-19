@@ -364,11 +364,8 @@ for f in "${files[@]}"; do
     mkdir -p "$trashDir"
   fi
   
-  # Move original to trash
-  mv "$f" "${trashDir}/${base}.${ext}"
-  
-  # Build ffmpeg command
-  ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"${trashDir}/${base}.${ext}\""
+  # Build ffmpeg command - read from original, write to .tmp. prefixed file
+  ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\""
   
   # Always copy streams (no re-encoding)
   ffmpeg_cmd="$ffmpeg_cmd -c:v copy -c:a copy"
@@ -383,19 +380,21 @@ for f in "${files[@]}"; do
     ffmpeg_cmd="$ffmpeg_cmd -map_metadata -1"
   fi
   
-  ffmpeg_cmd="$ffmpeg_cmd \"${base}.${ext}\""
+  ffmpeg_cmd="$ffmpeg_cmd \".tmp.${base}.${ext}\""
   
   # Execute optimization
   if eval "$ffmpeg_cmd"; then
-    touch -r "${trashDir}/${base}.${ext}" "${base}.${ext}"
+    # Move original to trash first, then rename .tmp file to final name
+    mv "$f" "${trashDir}/${base}.${ext}"
+    mv ".tmp.${base}.${ext}" "./${base}.${ext}"
+    touch -r "${trashDir}/${base}.${ext}" "./${base}.${ext}"
     echo "  ✓ Optimized: ${base}.${ext}"
     ((processed++))
   else
     echo "  ERROR: Optimization failed"
     echo "FAILED: $f" >> "$log"
-    # Restore original from trash
-    mv "${trashDir}/${base}.${ext}" "$f"
-    echo "  ✗ Restored original from trash"
+    # Clean up partial .tmp file
+    [[ -f ".tmp.${base}.${ext}" ]] && rm -f ".tmp.${base}.${ext}"
     ((failed++))
   fi
   

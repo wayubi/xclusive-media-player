@@ -37,6 +37,12 @@ OPTIONS:
                                 Examples: --quality 18
                                           --quality 18 90
     
+    --codec <codec>           Target video codec (default: h264)
+                                Valid: h264, hevc, av1
+                                h264 = libx264 (best compatibility)
+                                hevc = libx265 (smaller files, slower)
+                                av1  = libsvtav1 or libaom-av1 (smallest, slowest)
+    
     --dry-run                 Preview what would be converted without modifying files
     
     --help                    Show this help message
@@ -66,6 +72,11 @@ EXAMPLES:
     convert_to_mp4 --quality 23              # All files with CRF 23 (smaller files)
     convert_to_mp4 --quality 23 90 --type avi # CRF 23, Audio: 90%, only AVI
     convert_to_mp4 --bitrate-matching 90 90  # Fixed bitrate mode (90% video/audio)
+
+    # Different output codecs
+    convert_to_mp4 video.avi --codec hevc    # Convert to HEVC/H.265
+    convert_to_mp4 video.mkv --codec av1     # Convert to AV1
+    convert_to_mp4 --codec hevc --quality 20 # HEVC with custom CRF
 
 CRF QUALITY RECOMMENDATIONS:
 ============================
@@ -107,6 +118,30 @@ Uses CRF 18 with audio 100%:
 • Video: CRF 18 (visually lossless quality)
 • Audio: 100% of source bitrate
 • Action: Re-encode to H.264/AAC for compatibility
+• Use --codec hevc or --codec av1 for alternative codecs
+
+OUTPUT CODEC OPTIONS:
+=====================
+
+    --codec h264    H.264/AVC (libx264) - Default
+                    • Best browser/device compatibility
+                    • CRF 18 = visually lossless
+                    • Fast encoding
+
+    --codec hevc    H.265/HEVC (libx265)
+                    • ~50% smaller files than H.264
+                    • CRF 22 = visually lossless (equivalent to H.264 CRF 18)
+                    • Slower encoding
+                    • Good for archiving
+
+    --codec av1     AV1 (libsvtav1 or libaom-av1)
+                    • ~30-50% smaller than HEVC
+                    • CRF 28 = visually lossless
+                    • Very slow encoding (unless SVT-AV1 available)
+                    • Best for maximum compression
+
+    Note: CRF values are not equivalent across codecs. The script
+    automatically adjusts CRF per codec for visually lossless quality.
 • Provides superior quality to fixed bitrate encoding
 
 Why CRF 18 instead of bitrate-matching?
@@ -159,7 +194,7 @@ EOF
 }
 
 # Supported extensions
-ALL_EXTENSIONS=("flv" "wmv" "avi" "mpg" "mpeg")
+ALL_EXTENSIONS=("flv" "wmv" "avi" "mpg" "mpeg" "mkv" "mp4")
 
 # Function to check if extension is supported
 check_extension() {
@@ -186,6 +221,7 @@ QUALITY_MODE=false
 CRF_VALUE=""
 QUALITY_AUDIO=""
 OUTPUT_FILE=""
+TARGET_CODEC="h264"
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -194,6 +230,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --type)
       FILTER_TYPE="$2"
+      shift 2
+      ;;
+    --codec)
+      TARGET_CODEC="$2"
       shift 2
       ;;
     --dry-run)
@@ -245,6 +285,38 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Validate target codec
+case "$TARGET_CODEC" in
+  h264|hevc|av1)
+    ;;
+  *)
+    echo "Error: Unsupported codec '$TARGET_CODEC'"
+    echo "Valid options: h264, hevc, av1"
+    exit 1
+    ;;
+esac
+
+# Map codec to FFmpeg encoder
+case "$TARGET_CODEC" in
+  h264)
+    VIDEO_ENCODER="libx264"
+    PIX_FMT="yuv420p"
+    ;;
+  hevc)
+    VIDEO_ENCODER="libx265"
+    PIX_FMT="yuv420p"
+    ;;
+  av1)
+    # Prefer SVT if available (MUCH faster)
+    if ffmpeg -encoders 2>/dev/null | grep -q libsvtav1; then
+      VIDEO_ENCODER="libsvtav1"
+    else
+      VIDEO_ENCODER="libaom-av1"
+    fi
+    PIX_FMT="yuv420p"
+    ;;
+esac
+
 # Determine mode: bitrate-matching > quality (with custom values) > default quality
 # Default is CRF 18 with audio 100% for best quality
 if [[ "$BITRATE_MATCHING" == true ]]; then
@@ -254,10 +326,14 @@ elif [[ "$QUALITY_MODE" == true ]]; then
   MODE="quality"
   # CRF_VALUE and QUALITY_AUDIO already set from argument parsing
 else
-  # Default mode: CRF 18 with audio 100%
+  # Default mode: CRF with audio 100%, CRF adjusted per codec
   MODE="quality"
-  CRF_VALUE="18"
   QUALITY_AUDIO="100"
+  case "$TARGET_CODEC" in
+    h264) CRF_VALUE="18" ;;
+    hevc) CRF_VALUE="22" ;;
+    av1)  CRF_VALUE="28" ;;
+  esac
 fi
 
 # Validate type filter if provided
@@ -350,18 +426,9 @@ for f in "${files[@]}"; do
   ext="${f##*.}"
   ext_lower=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
   
-  # Generate output filename
+  # Generate output filename with .tmp. prefix (hidden from grid during conversion)
   base="${f%.*}"
-  mp4="${base}.mp4"
-  
-  # Avoid name collisions
-  if [[ -f "$mp4" ]]; then
-    i=1
-    while [[ -f "${base}.${i}.mp4" ]]; do
-      ((i++))
-    done
-    mp4="${base}.${i}.mp4"
-  fi
+  mp4=".tmp.${base}.mp4"
   
   echo "Processing: $f"
   
@@ -386,17 +453,108 @@ for f in "${files[@]}"; do
   
   echo "  Codecs: $vcodec / ${acodec:-none}"
   
-  # Check if already MP4-compatible (h264 video + aac audio)
-  if [[ "$vcodec" == "h264" && "$acodec" == "aac" ]]; then
-    echo "  → Remuxing (already MP4-compatible)"
-    if ffmpeg -nostdin -hide_banner -loglevel error -i "$f" -c copy -movflags +faststart "$mp4"; then
-      touch -r "$f" "$mp4"
+  # For .mp4 files, skip if codec is already good (not in bad list)
+  if [[ "$ext" == "mp4" ]]; then
+    # Define bad codecs for MP4 container - these don't play reliably in browsers
+    case "$vcodec" in
+      mpeg4)
+        # mpeg4 doesn't play reliably in browsers - continue to re-encode
+        ;;
+      *)
+        # Other codecs are good - skip
+        echo "  → Already optimized MP4 ($vcodec), skipping"
+        ((skipped++))
+        continue
+        ;;
+    esac
+  fi
+  
+  # Define MP4-compatible codecs
+  # Video: h264, hevc, av1 can be copied to MP4
+  # Audio: aac, mp3, ac3 can be copied to MP4
+  case "$vcodec" in
+    h264|hevc|av1)
+      video_mp4_compatible=true
+      ;;
+    *)
+      video_mp4_compatible=false
+      ;;
+  esac
+  
+  case "$acodec" in
+    aac|mp3|ac3)
+      audio_mp4_compatible=true
+      ;;
+    *)
+      audio_mp4_compatible=false
+      ;;
+  esac
+  
+  # Determine conversion strategy based on codec compatibility
+  if [[ "$vcodec" == "$TARGET_CODEC" && "$audio_mp4_compatible" == true ]]; then
+    # Source already matches target codec - just remux
+    echo "  → Already $TARGET_CODEC codec, remuxing"
+    ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\" -c copy -movflags +faststart \"$mp4\""
+  elif [[ "$video_mp4_compatible" == true && "$audio_mp4_compatible" == true ]]; then
+    # Both video and audio are MP4-compatible but video codec differs from target - transcode video
+    echo "  → Transcoding video to $TARGET_CODEC (audio copy)"
+    if [[ "$TARGET_CODEC" == "av1" ]]; then
+      ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\" -c:v $VIDEO_ENCODER -crf $CRF_VALUE -preset 6 -pix_fmt $PIX_FMT -c:a copy -movflags +faststart \"$mp4\""
+    elif [[ "$TARGET_CODEC" == "hevc" ]]; then
+      ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\" -c:v $VIDEO_ENCODER -preset slow -threads 0 -crf $CRF_VALUE -pix_fmt $PIX_FMT -tag:v hvc1 -c:a copy -movflags +faststart \"$mp4\""
+    else
+      ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\" -c:v $VIDEO_ENCODER -preset slow -crf $CRF_VALUE -pix_fmt $PIX_FMT -c:a copy -movflags +faststart \"$mp4\""
+    fi
+  elif [[ "$video_mp4_compatible" == true && "$audio_mp4_compatible" == false ]]; then
+    # Video is compatible but audio is not - need to transcode audio
+    if [[ "$vcodec" == "$TARGET_CODEC" ]]; then
+      # Video codec already matches target, just remux video and transcode audio
+      echo "  → Transcoding audio to AAC (video copy - $TARGET_CODEC)"
+      ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\" -c:v copy -c:a aac -b:a 192k -movflags +faststart \"$mp4\""
+    else
+      # Need to transcode both
+      echo "  → Transcoding to $TARGET_CODEC + AAC"
+      if [[ "$TARGET_CODEC" == "av1" ]]; then
+        ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\" -c:v $VIDEO_ENCODER -crf $CRF_VALUE -preset 6 -pix_fmt $PIX_FMT -c:a aac -b:a 192k -movflags +faststart \"$mp4\""
+      elif [[ "$TARGET_CODEC" == "hevc" ]]; then
+        ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\" -c:v $VIDEO_ENCODER -preset slow -threads 0 -crf $CRF_VALUE -pix_fmt $PIX_FMT -tag:v hvc1 -c:a aac -b:a 192k -movflags +faststart \"$mp4\""
+      else
+        ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\" -c:v $VIDEO_ENCODER -preset slow -crf $CRF_VALUE -pix_fmt $PIX_FMT -c:a aac -b:a 192k -movflags +faststart \"$mp4\""
+      fi
+    fi
+  elif [[ "$video_mp4_compatible" == false && "$audio_mp4_compatible" == true ]]; then
+    # Video is not compatible, audio is - transcode video, copy audio
+    echo "  → Transcoding video to $TARGET_CODEC (audio copy)"
+    if [[ "$TARGET_CODEC" == "av1" ]]; then
+      ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\" -c:v $VIDEO_ENCODER -crf $CRF_VALUE -preset 6 -pix_fmt $PIX_FMT -c:a copy -movflags +faststart \"$mp4\""
+    elif [[ "$TARGET_CODEC" == "hevc" ]]; then
+      ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\" -c:v $VIDEO_ENCODER -preset slow -threads 0 -crf $CRF_VALUE -pix_fmt $PIX_FMT -tag:v hvc1 -c:a copy -movflags +faststart \"$mp4\""
+    else
+      ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\" -c:v $VIDEO_ENCODER -preset slow -crf $CRF_VALUE -pix_fmt $PIX_FMT -c:a copy -movflags +faststart \"$mp4\""
+    fi
+  else
+    # Neither is compatible - re-encode both (handled below)
+    ffmpeg_cmd=""
+  fi
+  
+  # Execute if we have a remux/transcode command (both video+audio compatible or partial compatible)
+  if [[ -n "$ffmpeg_cmd" ]]; then
+    if eval "$ffmpeg_cmd"; then
+      # Move original to trash first, then rename .tmp file to final name
       mv "$f" "$trashDir/"
-      echo "  ✓ Remuxed: $mp4"
+      mv "$mp4" "./${base}.mp4"
+      touch -r "$trashDir/$f" "./${base}.mp4"
+      echo "  ✓ Remuxed: ${base}.mp4"
+      # Track output file for single file mode
+      if [[ -n "$SINGLE_FILE" ]]; then
+        OUTPUT_FILE="${base}.mp4"
+      fi
     else
       echo "  ERROR: Remux failed"
-      echo "FAILED (remux): $f" >> "$log"
+      echo "FAILED (convert): $f" >> "$log"
+      [[ -f "$mp4" ]] && rm -f "$mp4"
     fi
+    echo ""
     continue
   fi
   
@@ -441,21 +599,33 @@ for f in "${files[@]}"; do
   # Build ffmpeg command
   if [[ "$MODE" == "quality" ]]; then
     # CRF mode: use CRF for video, bitrate for audio
-    echo "  → Re-encoding: $vcodec → libx264 (CRF $CRF_VALUE)"
+    echo "  → Re-encoding: $vcodec → $TARGET_CODEC (CRF $CRF_VALUE)"
     echo "  → Audio: ${acodec:-none} → AAC @ ${atarget}bps"
     
     ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\""
-    ffmpeg_cmd="$ffmpeg_cmd -c:v libx264 -preset slow -crf $CRF_VALUE"
-    ffmpeg_cmd="$ffmpeg_cmd -pix_fmt yuv420p"
+    if [[ "$TARGET_CODEC" == "av1" ]]; then
+      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -crf $CRF_VALUE -preset 6"
+    elif [[ "$TARGET_CODEC" == "hevc" ]]; then
+      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow -threads 0 -crf $CRF_VALUE -tag:v hvc1"
+    else
+      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow -crf $CRF_VALUE"
+    fi
+    ffmpeg_cmd="$ffmpeg_cmd -pix_fmt $PIX_FMT"
   else
     # Bitrate-matching or default mode: use target bitrate for video
-    echo "  → Re-encoding: $vcodec → libx264 @ ${vtarget}bps"
+    echo "  → Re-encoding: $vcodec → $TARGET_CODEC @ ${vtarget}bps"
     echo "  → Audio: ${acodec:-none} → AAC @ ${atarget}bps"
     
     ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\""
-    ffmpeg_cmd="$ffmpeg_cmd -c:v libx264 -preset slow"
+    if [[ "$TARGET_CODEC" == "av1" ]]; then
+      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset 6"
+    elif [[ "$TARGET_CODEC" == "hevc" ]]; then
+      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow -threads 0 -tag:v hvc1"
+    else
+      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow"
+    fi
     ffmpeg_cmd="$ffmpeg_cmd -b:v ${vtarget} -maxrate $((vtarget * 11 / 10)) -bufsize $((vtarget * 2))"
-    ffmpeg_cmd="$ffmpeg_cmd -pix_fmt yuv420p"
+    ffmpeg_cmd="$ffmpeg_cmd -pix_fmt $PIX_FMT"
   fi
   
   # Handle audio
@@ -469,12 +639,14 @@ for f in "${files[@]}"; do
   
   # Execute conversion
   if eval "$ffmpeg_cmd"; then
-    touch -r "$f" "$mp4"
+    # Move original to trash first, then rename .tmp file to final name
     mv "$f" "$trashDir/"
-    echo "  ✓ Converted: $mp4"
+    mv "$mp4" "./${base}.mp4"
+    touch -r "$trashDir/$f" "./${base}.mp4"
+    echo "  ✓ Converted: ${base}.mp4"
     # Track output file for single file mode
     if [[ -n "$SINGLE_FILE" ]]; then
-      OUTPUT_FILE="$mp4"
+      OUTPUT_FILE="${base}.mp4"
     fi
   else
     echo "  ERROR: Conversion failed"
