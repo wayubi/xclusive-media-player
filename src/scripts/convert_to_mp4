@@ -2,7 +2,7 @@
 shopt -s nullglob
 
 # Universal video converter to MP4
-# Supports: FLV, WMV, AVI, MPG/MPEG with quality preservation
+# Supports: FLV, WMV, AVI, MPG/MPEG, MKV, MOV with quality preservation
 
 # Help function
 show_help() {
@@ -10,7 +10,7 @@ show_help() {
 Universal Video Converter to MP4
 ================================
 
-Converts legacy video formats (FLV, WMV, AVI, MPG/MPEG) to MP4.
+Converts legacy video formats (FLV, WMV, AVI, MPG/MPEG, MKV, MOV) to MP4.
 
 USAGE:
     convert_to_mp4 [FILE] [OPTIONS]
@@ -121,6 +121,8 @@ SUPPORTED INPUT FORMATS:
     • WMV (Windows Media Video) - .wmv
     • AVI (Audio Video Interleave) - .avi
     • MPEG (Motion Picture Experts Group) - .mpg, .mpeg
+    • MKV (Matroska) - .mkv
+    • MOV (QuickTime) - .mov
 
 DEFAULT MODE (no arguments):
 ============================
@@ -205,7 +207,7 @@ EOF
 }
 
 # Supported extensions
-ALL_EXTENSIONS=("flv" "wmv" "avi" "mpg" "mpeg" "mkv" "mp4")
+ALL_EXTENSIONS=("flv" "wmv" "avi" "mpg" "mpeg" "mkv" "mp4" "mov")
 
 # Function to check if extension is supported
 check_extension() {
