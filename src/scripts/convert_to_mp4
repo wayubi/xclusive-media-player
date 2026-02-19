@@ -42,6 +42,17 @@ OPTIONS:
                                 h264 = libx264 (best compatibility)
                                 hevc = libx265 (smaller files, slower)
                                 av1  = libsvtav1 or libaom-av1 (smallest, slowest)
+
+    --sharpen <level>        Apply contrast-adaptive sharpening (CAS filter)
+                                1 = subtle   (strength 0.3)
+                                2 = medium   (strength 0.5)  ← recommended
+                                3 = strong   (strength 0.7)
+                              • Applied only during re-encoding
+                              • Not applied during remux (-c copy)
+                              • May slightly increase bitrate
+                              • Recommended for AV1 and HEVC encodes
+
+    --seconds <duration>      Truncate the video to the specified number of seconds
     
     --dry-run                 Preview what would be converted without modifying files
     
@@ -222,6 +233,9 @@ CRF_VALUE=""
 QUALITY_AUDIO=""
 OUTPUT_FILE=""
 TARGET_CODEC="h264"
+SHARPEN_LEVEL=0
+CAS_FILTER=""
+TRIM_SECONDS=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -257,6 +271,14 @@ while [[ $# -gt 0 ]]; do
         QUALITY_AUDIO="100"
         shift 2
       fi
+      ;;
+    --sharpen)
+      SHARPEN_LEVEL="$2"
+      shift 2
+      ;;
+    --seconds)
+      TRIM_SECONDS="$2"
+      shift 2
       ;;
     -*)
       echo "Unknown option: $1"
@@ -295,6 +317,28 @@ case "$TARGET_CODEC" in
     exit 1
     ;;
 esac
+
+# Validate sharpen level
+if [[ "$SHARPEN_LEVEL" != "0" ]]; then
+  case "$SHARPEN_LEVEL" in
+    1) CAS_STRENGTH="0.3" ;;
+    2) CAS_STRENGTH="0.5" ;;
+    3) CAS_STRENGTH="0.7" ;;
+    *)
+      echo "Error: --sharpen must be 1, 2, or 3"
+      exit 1
+      ;;
+  esac
+  CAS_FILTER="-vf cas=strength=${CAS_STRENGTH}"
+fi
+
+# Validate seconds
+if [[ -n "$TRIM_SECONDS" ]]; then
+  if ! [[ "$TRIM_SECONDS" =~ ^[0-9]+$ ]]; then
+    echo "Error: --seconds must be a positive integer"
+    exit 1
+  fi
+fi
 
 # Map codec to FFmpeg encoder
 case "$TARGET_CODEC" in
@@ -498,13 +542,17 @@ for f in "${files[@]}"; do
   elif [[ "$video_mp4_compatible" == true && "$audio_mp4_compatible" == true ]]; then
     # Both video and audio are MP4-compatible but video codec differs from target - transcode video
     echo "  → Transcoding video to $TARGET_CODEC (audio copy)"
+    ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\""
+    [[ -n "$TRIM_SECONDS" ]] && ffmpeg_cmd="$ffmpeg_cmd -t $TRIM_SECONDS"
+    [[ -n "$CAS_FILTER" ]] && ffmpeg_cmd="$ffmpeg_cmd $CAS_FILTER"
     if [[ "$TARGET_CODEC" == "av1" ]]; then
-      ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\" -c:v $VIDEO_ENCODER -crf $CRF_VALUE -preset 6 -pix_fmt $PIX_FMT -c:a copy -movflags +faststart \"$mp4\""
+      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -crf $CRF_VALUE -preset 6"
     elif [[ "$TARGET_CODEC" == "hevc" ]]; then
-      ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\" -c:v $VIDEO_ENCODER -preset slow -threads 0 -crf $CRF_VALUE -pix_fmt $PIX_FMT -tag:v hvc1 -c:a copy -movflags +faststart \"$mp4\""
+      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow -threads 0 -crf $CRF_VALUE -tag:v hvc1"
     else
-      ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\" -c:v $VIDEO_ENCODER -preset slow -crf $CRF_VALUE -pix_fmt $PIX_FMT -c:a copy -movflags +faststart \"$mp4\""
+      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow -crf $CRF_VALUE"
     fi
+    ffmpeg_cmd="$ffmpeg_cmd -pix_fmt $PIX_FMT -c:a copy -movflags +faststart \"$mp4\""
   elif [[ "$video_mp4_compatible" == true && "$audio_mp4_compatible" == false ]]; then
     # Video is compatible but audio is not - need to transcode audio
     if [[ "$vcodec" == "$TARGET_CODEC" ]]; then
@@ -514,24 +562,32 @@ for f in "${files[@]}"; do
     else
       # Need to transcode both
       echo "  → Transcoding to $TARGET_CODEC + AAC"
+      ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\""
+      [[ -n "$TRIM_SECONDS" ]] && ffmpeg_cmd="$ffmpeg_cmd -t $TRIM_SECONDS"
+      [[ -n "$CAS_FILTER" ]] && ffmpeg_cmd="$ffmpeg_cmd $CAS_FILTER"
       if [[ "$TARGET_CODEC" == "av1" ]]; then
-        ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\" -c:v $VIDEO_ENCODER -crf $CRF_VALUE -preset 6 -pix_fmt $PIX_FMT -c:a aac -b:a 192k -movflags +faststart \"$mp4\""
+        ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -crf $CRF_VALUE -preset 6"
       elif [[ "$TARGET_CODEC" == "hevc" ]]; then
-        ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\" -c:v $VIDEO_ENCODER -preset slow -threads 0 -crf $CRF_VALUE -pix_fmt $PIX_FMT -tag:v hvc1 -c:a aac -b:a 192k -movflags +faststart \"$mp4\""
+        ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow -threads 0 -crf $CRF_VALUE -tag:v hvc1"
       else
-        ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\" -c:v $VIDEO_ENCODER -preset slow -crf $CRF_VALUE -pix_fmt $PIX_FMT -c:a aac -b:a 192k -movflags +faststart \"$mp4\""
+        ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow -crf $CRF_VALUE"
       fi
+      ffmpeg_cmd="$ffmpeg_cmd -pix_fmt $PIX_FMT -c:a aac -b:a 192k -movflags +faststart \"$mp4\""
     fi
   elif [[ "$video_mp4_compatible" == false && "$audio_mp4_compatible" == true ]]; then
     # Video is not compatible, audio is - transcode video, copy audio
     echo "  → Transcoding video to $TARGET_CODEC (audio copy)"
+    ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\""
+    [[ -n "$TRIM_SECONDS" ]] && ffmpeg_cmd="$ffmpeg_cmd -t $TRIM_SECONDS"
+    [[ -n "$CAS_FILTER" ]] && ffmpeg_cmd="$ffmpeg_cmd $CAS_FILTER"
     if [[ "$TARGET_CODEC" == "av1" ]]; then
-      ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\" -c:v $VIDEO_ENCODER -crf $CRF_VALUE -preset 6 -pix_fmt $PIX_FMT -c:a copy -movflags +faststart \"$mp4\""
+      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -crf $CRF_VALUE -preset 6"
     elif [[ "$TARGET_CODEC" == "hevc" ]]; then
-      ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\" -c:v $VIDEO_ENCODER -preset slow -threads 0 -crf $CRF_VALUE -pix_fmt $PIX_FMT -tag:v hvc1 -c:a copy -movflags +faststart \"$mp4\""
+      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow -threads 0 -crf $CRF_VALUE -tag:v hvc1"
     else
-      ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\" -c:v $VIDEO_ENCODER -preset slow -crf $CRF_VALUE -pix_fmt $PIX_FMT -c:a copy -movflags +faststart \"$mp4\""
+      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow -crf $CRF_VALUE"
     fi
+    ffmpeg_cmd="$ffmpeg_cmd -pix_fmt $PIX_FMT -c:a copy -movflags +faststart \"$mp4\""
   else
     # Neither is compatible - re-encode both (handled below)
     ffmpeg_cmd=""
@@ -603,6 +659,8 @@ for f in "${files[@]}"; do
     echo "  → Audio: ${acodec:-none} → AAC @ ${atarget}bps"
     
     ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\""
+    [[ -n "$TRIM_SECONDS" ]] && ffmpeg_cmd="$ffmpeg_cmd -t $TRIM_SECONDS"
+    [[ -n "$CAS_FILTER" ]] && ffmpeg_cmd="$ffmpeg_cmd $CAS_FILTER"
     if [[ "$TARGET_CODEC" == "av1" ]]; then
       ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -crf $CRF_VALUE -preset 6"
     elif [[ "$TARGET_CODEC" == "hevc" ]]; then
@@ -617,6 +675,8 @@ for f in "${files[@]}"; do
     echo "  → Audio: ${acodec:-none} → AAC @ ${atarget}bps"
     
     ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\""
+    [[ -n "$TRIM_SECONDS" ]] && ffmpeg_cmd="$ffmpeg_cmd -t $TRIM_SECONDS"
+    [[ -n "$CAS_FILTER" ]] && ffmpeg_cmd="$ffmpeg_cmd $CAS_FILTER"
     if [[ "$TARGET_CODEC" == "av1" ]]; then
       ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset 6"
     elif [[ "$TARGET_CODEC" == "hevc" ]]; then
