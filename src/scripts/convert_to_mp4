@@ -491,7 +491,7 @@ for f in "${files[@]}"; do
   if [[ -n "$fps_raw" ]]; then
     fps_num=$(echo "$fps_raw" | cut -d'/' -f1)
     fps_den=$(echo "$fps_raw" | cut -d'/' -f2)
-    GOP_SIZE=$(( (fps_num * 5 + fps_den / 2) / fps_den ))
+    GOP_SIZE=$(( (fps_num * 1 + fps_den / 2) / fps_den ))
   else
     GOP_SIZE=300
   fi
