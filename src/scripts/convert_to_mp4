@@ -353,12 +353,7 @@ case "$TARGET_CODEC" in
     PIX_FMT="yuv420p"
     ;;
   av1)
-    # Prefer SVT if available (MUCH faster)
-    if ffmpeg -encoders 2>/dev/null | grep -q libsvtav1; then
-      VIDEO_ENCODER="libsvtav1"
-    else
-      VIDEO_ENCODER="libaom-av1"
-    fi
+    VIDEO_ENCODER="libsvtav1"
     PIX_FMT="yuv420p"
     ;;
 esac
@@ -490,6 +485,17 @@ for f in "${files[@]}"; do
   acodec=$(ffprobe -v error -select_streams a:0 \
     -show_entries stream=codec_name -of csv=p=0 "$f" 2>/dev/null)
   
+  fps_raw=$(ffprobe -v error -select_streams v:0 \
+    -show_entries stream=r_frame_rate -of csv=p=0 "$f" 2>/dev/null)
+  
+  if [[ -n "$fps_raw" ]]; then
+    fps_num=$(echo "$fps_raw" | cut -d'/' -f1)
+    fps_den=$(echo "$fps_raw" | cut -d'/' -f2)
+    GOP_SIZE=$(( (fps_num * 5 + fps_den / 2) / fps_den ))
+  else
+    GOP_SIZE=300
+  fi
+  
   # Handle missing codec detection
   if [[ -z "$vcodec" ]]; then
     echo "  ERROR: Could not detect video codec, skipping"
@@ -548,11 +554,11 @@ for f in "${files[@]}"; do
     [[ -n "$TRIM_SECONDS" ]] && ffmpeg_cmd="$ffmpeg_cmd -t $TRIM_SECONDS"
     [[ -n "$CAS_FILTER" ]] && ffmpeg_cmd="$ffmpeg_cmd $CAS_FILTER"
     if [[ "$TARGET_CODEC" == "av1" ]]; then
-      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -crf $CRF_VALUE -preset 6"
+      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -crf $CRF_VALUE -preset 6 -g $GOP_SIZE -svtav1-params keyint=$GOP_SIZE"
     elif [[ "$TARGET_CODEC" == "hevc" ]]; then
-      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow -threads 0 -crf $CRF_VALUE -tag:v hvc1"
+      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow -threads 0 -crf $CRF_VALUE -tag:v hvc1 -g $GOP_SIZE"
     else
-      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow -crf $CRF_VALUE"
+      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow -crf $CRF_VALUE -g $GOP_SIZE"
     fi
     ffmpeg_cmd="$ffmpeg_cmd -pix_fmt $PIX_FMT -c:a copy -movflags +faststart \"$mp4\""
   elif [[ "$video_mp4_compatible" == true && "$audio_mp4_compatible" == false ]]; then
@@ -568,11 +574,11 @@ for f in "${files[@]}"; do
       [[ -n "$TRIM_SECONDS" ]] && ffmpeg_cmd="$ffmpeg_cmd -t $TRIM_SECONDS"
       [[ -n "$CAS_FILTER" ]] && ffmpeg_cmd="$ffmpeg_cmd $CAS_FILTER"
       if [[ "$TARGET_CODEC" == "av1" ]]; then
-        ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -crf $CRF_VALUE -preset 6"
+        ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -crf $CRF_VALUE -preset 6 -g $GOP_SIZE -svtav1-params keyint=$GOP_SIZE"
       elif [[ "$TARGET_CODEC" == "hevc" ]]; then
-        ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow -threads 0 -crf $CRF_VALUE -tag:v hvc1"
+        ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow -threads 0 -crf $CRF_VALUE -tag:v hvc1 -g $GOP_SIZE"
       else
-        ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow -crf $CRF_VALUE"
+        ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow -crf $CRF_VALUE -g $GOP_SIZE"
       fi
       ffmpeg_cmd="$ffmpeg_cmd -pix_fmt $PIX_FMT -c:a aac -b:a 192k -movflags +faststart \"$mp4\""
     fi
@@ -583,11 +589,11 @@ for f in "${files[@]}"; do
     [[ -n "$TRIM_SECONDS" ]] && ffmpeg_cmd="$ffmpeg_cmd -t $TRIM_SECONDS"
     [[ -n "$CAS_FILTER" ]] && ffmpeg_cmd="$ffmpeg_cmd $CAS_FILTER"
     if [[ "$TARGET_CODEC" == "av1" ]]; then
-      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -crf $CRF_VALUE -preset 6"
+      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -crf $CRF_VALUE -preset 6 -g $GOP_SIZE -svtav1-params keyint=$GOP_SIZE"
     elif [[ "$TARGET_CODEC" == "hevc" ]]; then
-      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow -threads 0 -crf $CRF_VALUE -tag:v hvc1"
+      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow -threads 0 -crf $CRF_VALUE -tag:v hvc1 -g $GOP_SIZE"
     else
-      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow -crf $CRF_VALUE"
+      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow -crf $CRF_VALUE -g $GOP_SIZE"
     fi
     ffmpeg_cmd="$ffmpeg_cmd -pix_fmt $PIX_FMT -c:a copy -movflags +faststart \"$mp4\""
   else
@@ -664,11 +670,11 @@ for f in "${files[@]}"; do
     [[ -n "$TRIM_SECONDS" ]] && ffmpeg_cmd="$ffmpeg_cmd -t $TRIM_SECONDS"
     [[ -n "$CAS_FILTER" ]] && ffmpeg_cmd="$ffmpeg_cmd $CAS_FILTER"
     if [[ "$TARGET_CODEC" == "av1" ]]; then
-      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -crf $CRF_VALUE -preset 6"
+      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -crf $CRF_VALUE -preset 6 -g $GOP_SIZE -svtav1-params keyint=$GOP_SIZE"
     elif [[ "$TARGET_CODEC" == "hevc" ]]; then
-      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow -threads 0 -crf $CRF_VALUE -tag:v hvc1"
+      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow -threads 0 -crf $CRF_VALUE -tag:v hvc1 -g $GOP_SIZE"
     else
-      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow -crf $CRF_VALUE"
+      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow -crf $CRF_VALUE -g $GOP_SIZE"
     fi
     ffmpeg_cmd="$ffmpeg_cmd -pix_fmt $PIX_FMT"
   else
@@ -680,11 +686,11 @@ for f in "${files[@]}"; do
     [[ -n "$TRIM_SECONDS" ]] && ffmpeg_cmd="$ffmpeg_cmd -t $TRIM_SECONDS"
     [[ -n "$CAS_FILTER" ]] && ffmpeg_cmd="$ffmpeg_cmd $CAS_FILTER"
     if [[ "$TARGET_CODEC" == "av1" ]]; then
-      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset 6"
+      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset 6 -g $GOP_SIZE -svtav1-params keyint=$GOP_SIZE"
     elif [[ "$TARGET_CODEC" == "hevc" ]]; then
-      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow -threads 0 -tag:v hvc1"
+      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow -threads 0 -tag:v hvc1 -g $GOP_SIZE"
     else
-      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow"
+      ffmpeg_cmd="$ffmpeg_cmd -c:v $VIDEO_ENCODER -preset slow -g $GOP_SIZE"
     fi
     ffmpeg_cmd="$ffmpeg_cmd -b:v ${vtarget} -maxrate $((vtarget * 11 / 10)) -bufsize $((vtarget * 2))"
     ffmpeg_cmd="$ffmpeg_cmd -pix_fmt $PIX_FMT"
