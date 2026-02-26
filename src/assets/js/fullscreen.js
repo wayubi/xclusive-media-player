@@ -107,7 +107,7 @@ export async function startFullscreenPlayer(playlist, index = 0, startTime = 0) 
 
   function createMedia(file, startTime = 0) {
     const ext = file.split('.').pop().toLowerCase();
-    const isImage = ['jpg','jpeg','png','gif','webp'].includes(ext);
+    const isImage = ['jpg','jpeg','png','gif','webp','heic'].includes(ext);
     const isAudio = ['mp3','wav','ogg'].includes(ext);
 
     if (mediaEl && state.lastFullscreen.file === file) {

@@ -43,7 +43,7 @@ export function createMediaContainer(file, index = 0) {
   const ext = file.split('.').pop().toLowerCase();
   const isAudio = ['mp3','wav','ogg'].includes(ext);
   const isVideo = ['mp4', 'webm', 'mkv', 'mov', 'm4v', '3gp', 'flv', 'wmv', 'avi', 'mpg', 'mpeg'].includes(ext);
-  const isImage = ['jpg','jpeg','png','gif','webp'].includes(ext);
+  const isImage = ['jpg','jpeg','png','gif','webp','heic'].includes(ext);
   const isText = ['txt', 'md', 'log', 'json', 'xml', 'csv', 'yaml', 'yml', 'conf', 'cfg', 'ini', 'nfo', 'sfv'].includes(ext);
 
   let mediaEl = null;

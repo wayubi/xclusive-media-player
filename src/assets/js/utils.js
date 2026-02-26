@@ -31,7 +31,7 @@ export function isVideoFile(filename) {
 
 export function isImageFile(filename) {
   const ext = getFileExtension(filename);
-  return ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext);
+  return ['jpg', 'jpeg', 'png', 'gif', 'webp','heic'].includes(ext);
 }
 
 export function isUnsupportedVideoFile(file) {
