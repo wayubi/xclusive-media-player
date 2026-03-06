@@ -154,10 +154,9 @@ function renderSingleFolderSelect(array $selected_parts, string $current_abs_pat
         $current_file_count = count(Utils::getFilesRecursively($current_abs_path));
     }
     
-    $current_icon = $is_root ? '🏠' : '📂';
-    $current_folder_name = $current_icon . ' ' . ($is_root ? 'Root' : basename($current_abs_path)) . ' (' . $current_file_count . ')';
+    $current_folder_name = ($is_root ? 'Root' : basename($current_abs_path)) . ' (' . $current_file_count . ')';
     ?>
-    <select name="goto_folder" id="folder-select"
+    <select name="goto_folder" id="folder-select" class="folder-select-mobile"
             onchange="this.form.submit()"
             autofocus>
         <option value="" disabled selected>
@@ -310,7 +309,7 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
         <link rel="icon" type="image/svg+xml" href="/favicon.svg">
         <link rel="shortcut icon" href="/favicon.svg">
         
-        <link rel="stylesheet" href="/assets/css/app.css?v=10">
+        <link rel="stylesheet" href="/assets/css/app.css?v=<?= filemtime(__DIR__ . '/assets/css/app.css') ?>">
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -340,7 +339,7 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
                 <a href="<?= htmlspecialchars($homeUrl) ?>" 
                    style="text-decoration: none;">
                     <button type="button" title="Go to root folder">
-                        🏠 Home
+                        🏠
                     </button>
                 </a>
                 
@@ -348,7 +347,7 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
                     <button type="submit" name="goto" value=".." 
                             onclick="this.form.action = 'index.php?t=' + Date.now();"
                             title="Go back to parent folder">
-                        ← Back
+                        ←
                     </button>
                 <?php endif; ?>
                 <?php renderSingleFolderSelect($selected_path_parts_final, $current_path, $auditDb, $metaDb, $folderStats, $subfolders); ?>
