@@ -154,7 +154,8 @@ function renderSingleFolderSelect(array $selected_parts, string $current_abs_pat
         $current_file_count = count(Utils::getFilesRecursively($current_abs_path));
     }
     
-    $current_folder_name = ($is_root ? 'Root' : basename($current_abs_path)) . ' (' . $current_file_count . ')';
+    $current_icon = $is_root ? '🏠' : '📂';
+    $current_folder_name = $current_icon . ' ' . ($is_root ? 'Root' : basename($current_abs_path)) . ' (' . $current_file_count . ')';
     ?>
     <select name="goto_folder" id="folder-select" class="folder-select-mobile"
             onchange="this.form.submit()"
