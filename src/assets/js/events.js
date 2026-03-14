@@ -337,9 +337,9 @@ function setupDeleteHotkeys() {
       }
       return;
     } else if (key.toLowerCase() === 'a') {
-      // 'a' key - audit current view
+      // 'a' key - audit (double-press for all files in folder)
       e.preventDefault();
-      auditCurrentView();
+      runAudit();
       return;
     }
     
