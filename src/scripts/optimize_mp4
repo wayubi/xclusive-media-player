@@ -280,7 +280,8 @@ else
   # Batch mode
   files=()
   for ext in "${ALL_EXTENSIONS[@]}"; do
-    for f in *.$ext; do
+    pattern="*.$ext *.${ext^^}"
+    for f in $pattern; do
       [[ -f "$f" ]] && files+=("$f")
     done
   done
