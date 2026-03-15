@@ -288,6 +288,18 @@ function setupDeleteHotkeys() {
     const searchOverlay = document.getElementById('search-overlay');
     if (searchOverlay && searchOverlay.style.display === 'flex') return;
     
+    // Don't process if user is typing in an input field
+    const activeElement = document.activeElement;
+    if (activeElement.tagName === 'INPUT' || 
+        activeElement.tagName === 'TEXTAREA' || 
+        activeElement.tagName === 'SELECT') {
+      return;
+    }
+    
+    // Don't process if share modal is open
+    const shareModal = document.getElementById('share-modal');
+    if (shareModal) return;
+    
     const key = e.key;
     
     // Check if we're in fullscreen mode by looking for the fullscreen container

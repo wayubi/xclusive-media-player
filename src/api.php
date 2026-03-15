@@ -11,6 +11,7 @@ require_once __DIR__ . '/lib/actions/MetadataAction.php';
 require_once __DIR__ . '/lib/actions/AuditAction.php';
 require_once __DIR__ . '/lib/actions/AuditStatusAction.php';
 require_once __DIR__ . '/lib/actions/FavoritesAction.php';
+require_once __DIR__ . '/lib/actions/ShareAction.php';
 require_once __DIR__ . '/lib/actions/TerminalAction.php';
 
 header('Content-Type: application/json');
@@ -52,6 +53,7 @@ $actionMap = [
     'toggle_favorite' => FavoritesAction::class,
     'favorites_status_batch' => FavoritesAction::class,
     'get_favorites_count' => FavoritesAction::class,
+    'share' => ShareAction::class,
     'terminal' => TerminalAction::class,
 ];
 

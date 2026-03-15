@@ -485,6 +485,22 @@ export function addCentralOverlay(container, mediaEl, file) {
     overlay.appendChild(muteBtn);
   }
 
+  // Share button - show for all media elements (video, image, audio)
+  if (!isUnsupported && !isTextFile && mediaEl && (mediaEl.tagName === 'VIDEO' || mediaEl.tagName === 'IMG' || mediaEl.tagName === 'AUDIO')) {
+    const isVideo = mediaEl.tagName === 'VIDEO';
+    const isAudio = mediaEl.tagName === 'AUDIO';
+    const shareBtn = document.createElement('button');
+    shareBtn.innerHTML = '📤';
+    shareBtn.title = 'Share to Mastodon';
+    shareBtn.onclick = e => {
+      e.stopPropagation();
+      import('./share.js').then(module => {
+        module.openShareModal(file, isVideo, isAudio);
+      });
+    };
+    overlay.appendChild(shareBtn);
+  }
+
   container.appendChild(overlay);
 }
 

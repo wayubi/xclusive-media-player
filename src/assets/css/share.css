@@ -1,0 +1,243 @@
+#share-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 999999;
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+#share-modal .modal-content {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border: 2px solid #4a5568;
+    border-radius: 16px;
+    padding: 24px;
+    max-width: 480px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+#share-modal h2 {
+    color: #e2e8f0;
+    margin: 0 0 20px 0;
+    font-size: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+#share-modal .media-container {
+    width: 100%;
+    max-height: 300px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    background: #0a0a0f;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+#share-modal .media-preview {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: cover;
+}
+
+#share-modal .media-preview[src$=".mp4"],
+#share-modal .media-preview[src$=".webm"],
+#share-modal .media-preview[src$=".mov"] {
+    width: 100%;
+    height: auto;
+}
+
+#share-modal .media-preview[src$=".mp3"],
+#share-modal .media-preview[src$=".wav"],
+#share-modal .media-preview[src$=".ogg"],
+#share-modal .media-preview[src$=".m4a"],
+#share-modal .media-preview[src$=".aac"],
+#share-modal .media-preview[src$=".flac"] {
+    width: 100%;
+}
+
+#share-modal .file-preview {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    color: #a0aec0;
+}
+
+#share-modal .file-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+}
+
+#share-modal .file-name {
+    font-size: 0.9rem;
+    text-align: center;
+    word-break: break-all;
+}
+
+#share-modal .filename {
+    color: #a0aec0;
+    font-size: 0.9rem;
+    margin-bottom: 16px;
+    word-break: break-all;
+}
+
+#share-modal .form-group {
+    margin-bottom: 16px;
+}
+
+#share-modal label {
+    display: block;
+    color: #e2e8f0;
+    margin-bottom: 6px;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+#share-modal input,
+#share-modal select,
+#share-modal textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #4a5568;
+    border-radius: 8px;
+    background: #0a0a0f;
+    color: #e2e8f0;
+    font-size: 0.95rem;
+    box-sizing: border-box;
+    font-family: inherit;
+}
+
+#share-modal input:focus,
+#share-modal select:focus,
+#share-modal textarea:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+#share-modal textarea {
+    min-height: 80px;
+    resize: vertical;
+}
+
+#share-modal .checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+#share-modal .checkbox-group input {
+    width: auto;
+}
+
+#share-modal .checkbox-group label {
+    margin: 0;
+    font-weight: normal;
+}
+
+#share-modal .button-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+#share-modal button {
+    flex: 1;
+    padding: 12px 20px;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+#share-modal .btn-share {
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    color: white;
+}
+
+#share-modal .btn-share:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
+}
+
+#share-modal .btn-share:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+#share-modal .btn-cancel {
+    background: #4a5568;
+    color: white;
+}
+
+#share-modal .btn-cancel:hover {
+    background: #718096;
+}
+
+#share-modal .error {
+    color: #fc8181;
+    background: rgba(252, 129, 129, 0.1);
+    padding: 10px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-size: 0.9rem;
+    display: none;
+}
+
+#share-modal .success {
+    color: #68d391;
+    background: rgba(104, 211, 145, 0.1);
+    padding: 10px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-size: 0.9rem;
+    display: none;
+}
+
+#share-modal .success a {
+    color: #68d391;
+    font-weight: 600;
+}
+
+#share-modal .spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    border-top-color: white;
+    animation: spin 1s linear infinite;
+    margin-right: 8px;
+}
+
+#share-modal .help-text {
+    color: #718096;
+    font-size: 0.8rem;
+    margin-top: 4px;
+}
