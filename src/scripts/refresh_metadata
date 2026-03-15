@@ -11,6 +11,7 @@ $all = false;
 $dryRun = false;
 $checkXxhash = false;
 $prune = false;
+$refresh = false;
 $showHelp = false;
 $singleFile = null;
 
@@ -34,6 +35,9 @@ for ($i = 1; $i < count($argv); $i++) {
                 break;
             case 'prune':
                 $prune = true;
+                break;
+            case 'refresh':
+                $refresh = true;
                 break;
             case 'help':
                 $showHelp = true;
@@ -69,9 +73,10 @@ refresh_metadata - Manage file metadata in the SQLite database
 Usage: refresh_metadata [file] [options]
 
 Description:
-  Manages file metadata database. Two modes: refresh (default) scans filesystem
-  and adds/updates records; prune (--prune) queries database and removes stale
-  records. These are mutually exclusive operations.
+  Manages file metadata database. Three modes:
+  - Default (refresh): scans filesystem and adds/updates records
+  - --prune: queries database and removes stale records
+  - --prune --refresh: prune first, then refresh (both operations)
 
 Arguments:
   file          Optional: specific file to refresh. If provided, processes only
@@ -85,6 +90,7 @@ Options:
   --xxhash     Verify file integrity using xxhash (also calculates/stores xxhash
                during refresh)
   --prune      Enter prune mode (remove stale records instead of refreshing)
+  --refresh    After pruning, continue with refresh mode (use with --prune to do both)
   --help       Display this help message
 
 Examples:
@@ -94,6 +100,7 @@ Examples:
   refresh_metadata --all        Refresh all files under /volumes
   refresh_metadata --prune      Remove records for deleted files in current dir
   refresh_metadata --prune --all --force   Remove all records from database
+  refresh_metadata --prune --refresh --all Prune stale records, then refresh all files
   refresh_metadata video.mp4 --xxhash --force  Force refresh single file
 
 HELP;
@@ -134,18 +141,11 @@ if ($prune) {
             // Single file mode: only check the specified file
             $inScope = ($dbFilePath === $singleFile);
         } elseif ($all) {
-            $inScope = (strpos($dbFilePath, $root) === 0);
+            $inScope = (strpos($dbFilePath, $root . '/') === 0);
         } else {
-            $inScope = (strpos($dbFilePath, $targetDir) === 0);
+            $inScope = (dirname($dbFilePath) === $targetDir);
         }
-        
-        if (!$inScope) {
-            continue;
-        }
-        
-        if (!$inScope) {
-            continue;
-        }
+        if (!$inScope) { continue; }
         
         $checked++;
         $shouldPrune = false;
@@ -219,15 +219,20 @@ if ($prune) {
         echo "Pruning complete. Removed $pruned of $checked records.\n";
     }
     
-    exit(0);
+    if (!$refresh) {
+        exit(0);
+    }
+    echo "\n";
 }
+
+// Continue to refresh mode if --refresh was specified
 
 // Handle single file mode
 if ($singleFile) {
     $files = [$singleFile];
     echo "Processing single file: " . basename($singleFile) . "\n\n";
 } else {
-    echo "Scanning " . ($all ? "all files under /volumes" : "current directory") . "...\n";
+    echo "Scanning all files under /volumes...\n";
     
     // Get all files
     $files = [];
