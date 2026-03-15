@@ -269,13 +269,17 @@ foreach ($allFilesRaw as $i => $fsPath) {
 
 // Get subfolders from database
 $subfolders = $metaDb->getSubfoldersByFolder($current_path);
-$folderStats = [];
-$folderAuditStats = [];
 
 // Get stats for current folder + subfolders
 $allFolderPaths = array_merge([$current_path], array_map(fn($f) => $current_path . DIRECTORY_SEPARATOR . $f, $subfolders));
 $folderStats = $metaDb->getFolderStatsBatch($allFolderPaths);
-$folderAuditStats = $auditDb->getFolderStatsBatch($allFolderPaths);
+
+// Pass total counts from metadata.db to audit query
+$totalCounts = [];
+foreach ($allFolderPaths as $path) {
+    $totalCounts[$path] = $folderStats[$path]['total'] ?? 0;
+}
+$folderAuditStats = $auditDb->getFolderStatsBatch($allFolderPaths, $totalCounts);
 
 require_once __DIR__ . '/lib/audioCovers.php';
 $audioThumbsRaw = generateAudioCovers($allFilesRaw);

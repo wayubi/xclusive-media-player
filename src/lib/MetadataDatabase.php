@@ -375,6 +375,7 @@ class MetadataDatabase extends Database
             FROM files
             WHERE file_path LIKE :path_wildcard
             AND file_path != :exact_path
+            AND INSTR(SUBSTR(file_path, LENGTH(:prefix) + 1), '/') > 0
         ");
         
         $stmt->bindValue(':prefix', $prefix, SQLITE3_TEXT);
@@ -384,13 +385,14 @@ class MetadataDatabase extends Database
         
         $folders = [];
         while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
-            if (!empty($row['subfolder'])) {
-                $folders[] = $row['subfolder'];
+            $subfolder = $row['subfolder'] ?? '';
+            if ($subfolder !== '' && $subfolder !== false) {
+                $folders[] = $subfolder;
             }
         }
         
         usort($folders, 'strcasecmp');
-        return $folders;
+        return array_values(array_unique($folders));
     }
 
     /**

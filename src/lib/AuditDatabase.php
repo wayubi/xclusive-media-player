@@ -172,10 +172,10 @@ class AuditDatabase extends Database
 
     /**
      * Get audit status for multiple folders at once (batch operation)
-     * Returns array with folder paths as keys and status as values
-     * Uses database as source of truth with SQL-level filtering
+     * Returns array with folder paths as keys and audited count
+     * Uses audit.db - does NOT compute status (combines with metadata totals in index.php)
      */
-    public function getFolderStatsBatch(array $folderPaths): array
+    public function getFolderStatsBatch(array $folderPaths, array $totalCounts = []): array
     {
         $results = [];
         
@@ -208,10 +208,13 @@ class AuditDatabase extends Database
         
         $result = $stmt->execute();
         
-        // Group files by folder (or immediate subfolder)
-        $folderCounts = [];
+        // Count audited files by folder (not total - use metadata.db for totals)
+        $auditedCounts = [];
         while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
             $filePath = $row['file_path'];
+            if (!$row['last_audit_at']) {
+                continue; // Skip non-audited files
+            }
             
             foreach ($normalizedFolders as $folderPath) {
                 $prefix = $folderPath . '/';
@@ -221,43 +224,38 @@ class AuditDatabase extends Database
                     
                     if ($firstSlash === false) {
                         // File is directly in folder
-                        if (!isset($folderCounts[$folderPath])) {
-                            $folderCounts[$folderPath] = ['total' => 0, 'audited' => 0];
+                        if (!isset($auditedCounts[$folderPath])) {
+                            $auditedCounts[$folderPath] = 0;
                         }
-                        $folderCounts[$folderPath]['total']++;
-                        if ($row['last_audit_at']) {
-                            $folderCounts[$folderPath]['audited']++;
-                        }
+                        $auditedCounts[$folderPath]++;
                     } else {
                         // File is in subfolder - use subfolder as key
                         $subfolder = substr($relativePath, 0, $firstSlash);
                         $subfolderPath = $folderPath . '/' . $subfolder;
                         
-                        if (!isset($folderCounts[$subfolderPath])) {
-                            $folderCounts[$subfolderPath] = ['total' => 0, 'audited' => 0];
+                        if (!isset($auditedCounts[$subfolderPath])) {
+                            $auditedCounts[$subfolderPath] = 0;
                         }
-                        $folderCounts[$subfolderPath]['total']++;
-                        if ($row['last_audit_at']) {
-                            $folderCounts[$subfolderPath]['audited']++;
-                        }
+                        $auditedCounts[$subfolderPath]++;
                     }
                     break;
                 }
             }
         }
         
-        // Determine status for each folder
+        // Build results - combine audited count with total from metadata.db
         foreach ($normalizedFolders as $folderPath) {
-            $counts = $folderCounts[$folderPath] ?? ['total' => 0, 'audited' => 0];
+            $total = $totalCounts[$folderPath] ?? 0;
+            $audited = $auditedCounts[$folderPath] ?? 0;
             
-            if ($counts['total'] === 0) {
-                $results[$folderPath] = ['status' => 'all_audited', 'total' => 0, 'audited' => 0];
-            } elseif ($counts['audited'] === $counts['total']) {
-                $results[$folderPath] = ['status' => 'all_audited', 'total' => $counts['total'], 'audited' => $counts['audited']];
-            } elseif ($counts['audited'] === 0) {
-                $results[$folderPath] = ['status' => 'none_audited', 'total' => $counts['total'], 'audited' => 0];
+            if ($total === 0) {
+                $results[$folderPath] = ['status' => 'none_audited', 'total' => 0, 'audited' => 0];
+            } elseif ($audited === 0) {
+                $results[$folderPath] = ['status' => 'none_audited', 'total' => $total, 'audited' => 0];
+            } elseif ($audited === $total) {
+                $results[$folderPath] = ['status' => 'all_audited', 'total' => $total, 'audited' => $audited];
             } else {
-                $results[$folderPath] = ['status' => 'some_audited', 'total' => $counts['total'], 'audited' => $counts['audited']];
+                $results[$folderPath] = ['status' => 'some_audited', 'total' => $total, 'audited' => $audited];
             }
         }
         
