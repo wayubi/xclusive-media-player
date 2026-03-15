@@ -1,0 +1,88 @@
+#!/usr/bin/env php
+<?php
+/**
+ * Find records in metadata.db that are not found by the refresh_metadata scanner
+ * Usage: php find_extra_db_records
+ */
+
+require_once __DIR__ . '/../lib/Utils.php';
+
+echo "Finding records in DB that are not found by scanner...\n\n";
+
+// Use the same root path as refresh_metadata
+$root = realpath(__DIR__ . '/../volumes');
+
+if (!$root) {
+    fprintf(STDERR, "Error: Volumes directory not found at %s\n", __DIR__ . '/../volumes');
+    exit(1);
+}
+
+echo "Root path: $root\n\n";
+
+// Scan filesystem (same logic as refresh_metadata)
+$files = [];
+$iterator = new RecursiveIteratorIterator(
+    new RecursiveDirectoryIterator($root, RecursiveDirectoryIterator::SKIP_DOTS),
+    RecursiveIteratorIterator::SELF_FIRST
+);
+
+foreach ($iterator as $file) {
+    if ($file->isFile()) {
+        $path = $file->getPathname();
+        
+        // Skip if any directory component or filename starts with "."
+        $parts = explode('/', $path);
+        $shouldSkip = false;
+        foreach ($parts as $part) {
+            if (strlen($part) > 0 && $part[0] === '.') {
+                $shouldSkip = true;
+                break;
+            }
+        }
+        if (!$shouldSkip) {
+            $files[] = $path;
+        }
+    }
+}
+
+echo "Scanner found: " . count($files) . " files\n";
+
+// Get all DB records
+$dbPath = __DIR__ . '/../../db/metadata.db';
+if (!file_exists($dbPath)) {
+    fprintf(STDERR, "Error: Database not found at %s\n", $dbPath);
+    exit(1);
+}
+
+$db = new SQLite3($dbPath);
+$db->busyTimeout(5000);
+
+$stmt = $db->query('SELECT file_path FROM files');
+$dbFiles = [];
+
+while ($row = $stmt->fetchArray(SQLITE3_ASSOC)) {
+    $dbFiles[] = $row['file_path'];
+}
+
+echo "Database has: " . count($dbFiles) . " records\n\n";
+
+// Normalize paths for comparison
+$normalizedFiles = [];
+foreach ($files as $f) {
+    $normalizedFiles[Utils::normalizePath($f)] = true;
+}
+
+// Find files in DB that aren't in scanner
+$extraInDb = [];
+foreach ($dbFiles as $dbFile) {
+    $normalizedDbFile = Utils::normalizePath($dbFile);
+    if (!isset($normalizedFiles[$normalizedDbFile])) {
+        $extraInDb[] = $dbFile;
+    }
+}
+
+echo "Extra records in DB (not found by scanner): " . count($extraInDb) . "\n\n";
+
+foreach ($extraInDb as $path) {
+    echo $path . "\n";
+}

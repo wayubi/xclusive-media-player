@@ -151,12 +151,28 @@ if ($prune) {
         $shouldPrune = false;
         $reason = '';
         
-        if ($force) {
+        // Prune non-files (directories)
+        if (!is_file($dbFilePath)) {
             $shouldPrune = true;
-            $reason = 'force';
-        } else {
-            // Check if file exists
-            if (!file_exists($dbFilePath)) {
+            $reason = 'not-a-file';
+        }
+        // Prune hidden files/directories (any path component starting with .)
+        elseif (!$shouldPrune) {
+            $parts = explode('/', $dbFilePath);
+            foreach ($parts as $part) {
+                if (strlen($part) > 0 && $part[0] === '.') {
+                    $shouldPrune = true;
+                    $reason = 'hidden';
+                    break;
+                }
+            }
+        }
+        
+        if (!$shouldPrune) {
+            if ($force) {
+                $shouldPrune = true;
+                $reason = 'force';
+            } elseif (!file_exists($dbFilePath)) {
                 $shouldPrune = true;
                 $reason = 'missing';
             } elseif ($checkXxhash) {

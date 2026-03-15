@@ -1,0 +1,42 @@
+#!/usr/bin/env php
+<?php
+/**
+ * Check which files in the metadata database no longer exist on the filesystem
+ * Usage: php check_missing_files
+ */
+
+$dbPath = __DIR__ . '/../../db/metadata.db';
+
+if (!file_exists($dbPath)) {
+    fprintf(STDERR, "Error: Database not found at %s\n", $dbPath);
+    exit(1);
+}
+
+$db = new SQLite3($dbPath);
+$db->busyTimeout(5000);
+
+echo "Checking for missing files in database...\n\n";
+
+$stmt = $db->query('SELECT file_path FROM files');
+$missing = [];
+$checked = 0;
+
+while ($row = $stmt->fetchArray(SQLITE3_ASSOC)) {
+    $filePath = $row['file_path'];
+    $checked++;
+    
+    if (!file_exists($filePath)) {
+        $missing[] = $filePath;
+    }
+}
+
+echo "Checked $checked records\n";
+echo "Found " . count($missing) . " missing files:\n\n";
+
+foreach ($missing as $path) {
+    echo $path . "\n";
+}
+
+echo "\n";
+echo "Missing: " . count($missing) . "\n";
+echo "Existing: " . ($checked - count($missing)) . "\n";
