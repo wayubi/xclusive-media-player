@@ -173,49 +173,65 @@ class AuditDatabase extends Database
     /**
      * Get audit status for multiple folders at once (batch operation)
      * Returns array with folder paths as keys and status as values
-     * This is much more efficient than calling getFolderAuditStatus for each folder
+     * Uses database as source of truth
      */
     public function getFolderStatsBatch(array $folderPaths): array
     {
         $results = [];
         
-        // Collect all files from all folders
-        $allFiles = [];
-        $fileToFolder = [];
-        
-        foreach ($folderPaths as $folderPath) {
-            if (!is_dir($folderPath)) {
-                $results[$folderPath] = ['status' => 'all_audited', 'total' => 0, 'audited' => 0];
-                continue;
-            }
-            
-            $files = Utils::getFilesRecursively($folderPath);
-            foreach ($files as $file) {
-                $allFiles[] = $file;
-                $fileToFolder[$file] = $folderPath;
-            }
-        }
-        
-        if (empty($allFiles)) {
-            foreach ($folderPaths as $folderPath) {
-                $results[$folderPath] = ['status' => 'all_audited', 'total' => 0, 'audited' => 0];
-            }
+        if (empty($folderPaths)) {
             return $results;
         }
         
-        // Get audit status for all files at once
-        $statuses = $this->getAuditStatusBatch($allFiles);
+        // Build query to get audit counts per file_path prefix (folder)
+        // This queries the audit database's files table joined with audit_log
+        $placeholders = implode(',', array_fill(0, count($folderPaths), '?'));
         
-        // Group results by folder
+        $stmt = $this->db->prepare("
+            SELECT 
+                f.file_path,
+                MAX(al.audited_at) as last_audit_at
+            FROM files f
+            LEFT JOIN audit_log al ON f.id = al.file_id
+            GROUP BY f.file_path
+        ");
+        
+        $result = $stmt->execute();
+        
+        // Group files by their parent folder
         $folderCounts = [];
-        foreach ($allFiles as $file) {
-            $folder = $fileToFolder[$file];
-            if (!isset($folderCounts[$folder])) {
-                $folderCounts[$folder] = ['total' => 0, 'audited' => 0];
-            }
-            $folderCounts[$folder]['total']++;
-            if (!empty($statuses[$file]['audited'])) {
-                $folderCounts[$folder]['audited']++;
+        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+            $filePath = $row['file_path'];
+            
+            foreach ($folderPaths as $folderPath) {
+                $normalizedFolder = $this->normalizePath($folderPath);
+                if (str_starts_with($filePath, $normalizedFolder . '/')) {
+                    $relativePath = substr($filePath, strlen($normalizedFolder) + 1);
+                    $firstSlash = strpos($relativePath, '/');
+                    
+                    if ($firstSlash === false) {
+                        // File is directly in this folder
+                        if (!isset($folderCounts[$folderPath])) {
+                            $folderCounts[$folderPath] = ['total' => 0, 'audited' => 0];
+                        }
+                        $folderCounts[$folderPath]['total']++;
+                        if ($row['last_audit_at']) {
+                            $folderCounts[$folderPath]['audited']++;
+                        }
+                    } else {
+                        // File is in a subfolder - get the subfolder name
+                        $subfolder = substr($relativePath, 0, $firstSlash);
+                        $subfolderPath = $normalizedFolder . '/' . $subfolder;
+                        
+                        if (!isset($folderCounts[$subfolderPath])) {
+                            $folderCounts[$subfolderPath] = ['total' => 0, 'audited' => 0];
+                        }
+                        $folderCounts[$subfolderPath]['total']++;
+                        if ($row['last_audit_at']) {
+                            $folderCounts[$subfolderPath]['audited']++;
+                        }
+                    }
+                }
             }
         }
         

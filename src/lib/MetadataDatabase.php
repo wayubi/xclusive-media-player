@@ -337,6 +337,105 @@ class MetadataDatabase extends Database
     }
     
     /**
+     * Get all files in a folder from database (sorted by modified_time DESC like filesystem scan)
+     * Returns array of absolute file paths
+     */
+    public function getFilesByFolder(string $folderPath): array
+    {
+        $normalizedFolder = $this->normalizePath($folderPath);
+        
+        $stmt = $this->db->prepare('
+            SELECT file_path FROM files
+            WHERE file_path LIKE :path_prefix
+            ORDER BY modified_time DESC
+        ');
+        
+        $stmt->bindValue(':path_prefix', $normalizedFolder . '/%', SQLITE3_TEXT);
+        $result = $stmt->execute();
+        
+        $files = [];
+        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+            $files[] = $row['file_path'];
+        }
+        
+        return $files;
+    }
+
+    /**
+     * Get immediate subfolders from database (sorted alphabetically like scandir)
+     */
+    public function getSubfoldersByFolder(string $folderPath): array
+    {
+        $normalizedFolder = $this->normalizePath($folderPath);
+        $prefix = $normalizedFolder . '/';
+        
+        $stmt = $this->db->prepare("
+            SELECT DISTINCT 
+                SUBSTR(file_path, LENGTH(:prefix) + 1, INSTR(SUBSTR(file_path, LENGTH(:prefix) + 1), '/') - 1) as subfolder
+            FROM files
+            WHERE file_path LIKE :path_wildcard
+            AND file_path != :exact_path
+        ");
+        
+        $stmt->bindValue(':prefix', $prefix, SQLITE3_TEXT);
+        $stmt->bindValue(':path_wildcard', $prefix . '%', SQLITE3_TEXT);
+        $stmt->bindValue(':exact_path', $normalizedFolder, SQLITE3_TEXT);
+        $result = $stmt->execute();
+        
+        $folders = [];
+        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+            if (!empty($row['subfolder'])) {
+                $folders[] = $row['subfolder'];
+            }
+        }
+        
+        usort($folders, 'strcasecmp');
+        return $folders;
+    }
+
+    /**
+     * Get folder statistics from database (file counts for dropdown)
+     */
+    public function getFolderStats(string $folderPath): array
+    {
+        $normalizedFolder = $this->normalizePath($folderPath);
+        
+        $stmt = $this->db->prepare('
+            SELECT 
+                COUNT(*) as total,
+                SUM(CASE WHEN is_optimized = 1 THEN 1 ELSE 0 END) as optimized,
+                SUM(CASE WHEN is_optimized = 0 THEN 1 ELSE 0 END) as unoptimized
+            FROM files 
+            WHERE file_path LIKE :path_prefix
+        ');
+        
+        $stmt->bindValue(':path_prefix', $normalizedFolder . '/%', SQLITE3_TEXT);
+        $result = $stmt->execute();
+        $row = $result->fetchArray(SQLITE3_ASSOC);
+        
+        return [
+            'total' => (int)($row['total'] ?? 0),
+            'optimized' => (int)($row['optimized'] ?? 0),
+            'unoptimized' => (int)($row['unoptimized'] ?? 0)
+        ];
+    }
+
+    /**
+     * Get folder stats for multiple folders at once (batch operation)
+     * Returns array with folder paths as keys
+     */
+    public function getFolderStatsBatch(array $folderPaths): array
+    {
+        $results = [];
+        
+        foreach ($folderPaths as $folderPath) {
+            $results[$folderPath] = $this->getFolderStats($folderPath);
+        }
+        
+        return $results;
+    }
+
+    /**
      * Convert database row to metadata array
      */
     private function rowToMetadata($row) {

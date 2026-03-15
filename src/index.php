@@ -141,18 +141,12 @@ $muted = !isset($_GET['muted']) || $_GET['muted'] === 'true';
 // FILESYSTEM HELPERS (using Utils)
 // ================================
 
-function renderSingleFolderSelect(array $selected_parts, string $current_abs_path, $auditDb, $metaDb, array $folderStats = [], array $subfolders = []): void {
+function renderSingleFolderSelect(array $selected_parts, string $current_abs_path, $auditDb, $metaDb, array $folderStats = [], array $folderAuditStats = [], array $subfolders = []): void {
     $is_root = empty($selected_parts);
     $has_children = !empty($subfolders);
     
-    // Get file count from pre-calculated stats if available
-    $current_file_count = 0;
-    if (isset($folderStats[$current_abs_path])) {
-        $current_file_count = $folderStats[$current_abs_path]['total'] ?? 0;
-    } else {
-        // Fallback: count files if not in pre-calculated stats
-        $current_file_count = count(Utils::getFilesRecursively($current_abs_path));
-    }
+    // Get file count from pre-calculated stats
+    $current_file_count = $folderStats[$current_abs_path]['total'] ?? 0;
     
     $current_icon = $is_root ? '🏠' : '📂';
     $current_folder_name = $current_icon . ' ' . ($is_root ? 'Root' : basename($current_abs_path)) . ' (' . $current_file_count . ')';
@@ -164,39 +158,34 @@ function renderSingleFolderSelect(array $selected_parts, string $current_abs_pat
             <?= $current_folder_name ?><?= $has_children ? ' ▾' : '' ?>
         </option>
 
-        <?php foreach ($subfolders as $folder): ?>
-            <?php
+            <?php foreach ($subfolders as $folder): ?>
+                <?php
                 $subfolderPath = $current_abs_path . DIRECTORY_SEPARATOR . $folder;
                 
-                // Use pre-calculated stats if available
-                if (isset($folderStats[$subfolderPath])) {
-                    $stats = $folderStats[$subfolderPath];
-                    $subfolder_status = $stats['status'];
-                    $subfolder_file_count = $stats['total'];
-                } else {
-                    // Fallback: calculate if not in pre-calculated stats
-                    $subfolder_status = 'all_audited';
-                    $subfolder_file_count = count(Utils::getFilesRecursively($subfolderPath));
-                }
+                $stats = $folderStats[$subfolderPath] ?? ['total' => 0, 'optimized' => 0, 'unoptimized' => 0];
+                $auditStats = $folderAuditStats[$subfolderPath] ?? ['status' => 'none_audited', 'total' => 0, 'audited' => 0];
+                $subfolder_file_count = $stats['total'];
+                $subfolder_status = $auditStats['status'] ?? 'none_audited';
                 
                 switch ($subfolder_status) {
                     case 'all_audited':
-                        // Check optimization status
-                        $optStats = $metaDb->getOptimizationStats($subfolderPath);
-                        if ($optStats['unoptimized'] > 0) {
-                            $subfolder_icon = '🔧'; // Not all optimized
+                        if ($stats['unoptimized'] > 0) {
+                            $subfolder_icon = '🔧';
                         } else {
-                            $subfolder_icon = '✅'; // All audited AND optimized
+                            $subfolder_icon = '✅';
                         }
                         break;
                     case 'some_audited':
                         $subfolder_icon = '⚠️';
                         break;
                     case 'none_audited':
-                        $subfolder_icon = '🆕';
-                        break;
                     default:
-                        $subfolder_icon = '📁';
+                        if ($subfolder_file_count === 0) {
+                            $subfolder_icon = '📁';
+                        } else {
+                            $subfolder_icon = '🆕';
+                        }
+                        break;
                 }
             ?>
             <option value="<?= htmlspecialchars($folder) ?>">
@@ -221,8 +210,8 @@ $auditDb = new AuditDatabase();
 $favDb = new FavoritesDatabase();
 $metaDb = new MetadataDatabase();
 
-// Cache file list - only scan once
-$allFilesRaw = Utils::getFilesRecursively($current_path);
+// Get files from database (DB is source of truth)
+$allFilesRaw = $metaDb->getFilesByFolder($current_path);
 $webRoot = '/' . trim($root_directory, './');
 $allFiles = array_map(fn($f) => Utils::filesystemToWebPath($f, $root_directory_absolute, $webRoot), $allFilesRaw);
 $allFilesCount = count($allFiles);
@@ -278,13 +267,15 @@ foreach ($allFilesRaw as $i => $fsPath) {
     if ($isFav) $favoritesCount++;
 }
 
-// Pre-calculate folder stats for dropdown (O(n) instead of O(n²))
-$subfolders = Utils::getSubfolders($current_path);
+// Get subfolders from database
+$subfolders = $metaDb->getSubfoldersByFolder($current_path);
 $folderStats = [];
-if (!empty($subfolders)) {
-    $folderPaths = array_map(fn($f) => $current_path . DIRECTORY_SEPARATOR . $f, $subfolders);
-    $folderStats = $auditDb->getFolderStatsBatch($folderPaths);
-}
+$folderAuditStats = [];
+
+// Get stats for current folder + subfolders
+$allFolderPaths = array_merge([$current_path], array_map(fn($f) => $current_path . DIRECTORY_SEPARATOR . $f, $subfolders));
+$folderStats = $metaDb->getFolderStatsBatch($allFolderPaths);
+$folderAuditStats = $auditDb->getFolderStatsBatch($allFolderPaths);
 
 require_once __DIR__ . '/lib/audioCovers.php';
 $audioThumbsRaw = generateAudioCovers($allFilesRaw);
@@ -351,7 +342,7 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
                         ←
                     </button>
                 <?php endif; ?>
-                <?php renderSingleFolderSelect($selected_path_parts_final, $current_path, $auditDb, $metaDb, $folderStats, $subfolders); ?>
+                <?php renderSingleFolderSelect($selected_path_parts_final, $current_path, $auditDb, $metaDb, $folderStats, $folderAuditStats, $subfolders); ?>
             </div>
 
             <!-- Grid controls -->
