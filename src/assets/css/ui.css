@@ -1,0 +1,105 @@
+#options-form {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  background: rgba(15, 15, 25, 0.75);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+#folder-select-container {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+#folder-select-container button {
+  padding: 10px 18px;
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(139, 92, 246, 0.15));
+  border: 1px solid var(--border-glow);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(168, 85, 247, 0.1);
+}
+
+#folder-select-container button:hover {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.35), rgba(139, 92, 246, 0.25));
+  border-color: var(--accent-glow);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(168, 85, 247, 0.25);
+}
+
+#options-form {
+  flex-shrink: 0;
+}
+
+#options-form select,
+#options-form button {
+  padding: 8px 14px;
+  font-size: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  backdrop-filter: blur(12px);
+  color: var(--text);
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+  height: 40px;
+  min-width: 40px;
+  white-space: nowrap;
+}
+
+#options-form select:hover,
+#options-form button:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-glow);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(168, 85, 247, 0.15);
+}
+
+#options-form button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#options-form span {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  padding: 0 4px;
+}
+
+#unaudited-count {
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+#unaudited-count:hover {
+  color: var(--accent-glow);
+}
+
+#folder-select {
+  min-width: 240px;
+  max-width: 400px;
+  font-size: 1rem;
+  background: var(--surface);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  font-weight: 500;
+}

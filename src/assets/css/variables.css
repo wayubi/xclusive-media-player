@@ -1,0 +1,18 @@
+:root {
+  --bg: linear-gradient(135deg, #0a0a0f 0%, #1a0a1f 50%, #0f0a1a 100%);
+  --surface: rgba(25, 25, 35, 0.95);
+  --surface-hover: rgba(40, 35, 50, 0.95);
+  --accent: #a855f7;
+  --accent-secondary: #ec4899;
+  --accent-glow: #c084fc;
+  --text: #ffffff;
+  --text-secondary: #b4b4c8;
+  --border: rgba(139, 92, 246, 0.15);
+  --border-glow: rgba(139, 92, 246, 0.3);
+  --radius-sm: 12px;
+  --radius: 20px;
+  --shadow-sm: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 20px 60px rgba(168, 85, 247, 0.15);
+  --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --grid-gap: 16px;
+}

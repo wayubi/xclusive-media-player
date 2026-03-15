@@ -1,0 +1,93 @@
+@media (max-width: 500px) {
+  #grid {
+    gap: 8px;
+    padding: 10px;
+  }
+  
+  #options-form {
+    padding: 10px 12px;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  
+  #file-count,
+  #options-form select[name="columns"],
+  #options-form select[name="rows"],
+  #options-form button[onclick="playFavorites()"],
+  #previous,
+  #next,
+  #favorites-text,
+  #audit-text,
+  #optimization-text {
+    display: none !important;
+  }
+  
+  #options-form button {
+    padding: 6px 8px;
+    font-size: 0.75rem;
+  }
+  
+  #folder-select-container select option {
+    font-size: 0.75rem;
+  }
+}
+
+@media (min-width: 500px) {
+  #options-form select[name="columns"],
+  #options-form select[name="rows"] {
+    display: inline-flex !important;
+    min-width: 50px;
+  }
+}
+
+@media (min-width: 600px) {
+  #mute-button,
+  #options-form button[onclick="playAll()"],
+  #options-form button[onclick="shufflePlay()"],
+  #previous,
+  #next {
+    display: inline-flex !important;
+  }
+}
+
+@media (min-width: 700px) {
+  #options-form button[onclick="playFavorites()"],
+  #audit,
+  #favorites-text {
+    display: inline-flex !important;
+  }
+}
+
+@media (min-width: 500px) {
+  #file-count,
+  #audit-text,
+  #optimization-text {
+    display: inline-flex !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .terminal-container {
+    width: 95%;
+    max-height: 90vh;
+    border-radius: var(--radius-sm);
+  }
+  
+  .terminal-output {
+    padding: 15px;
+    font-size: 12px;
+    min-height: 200px;
+  }
+  
+  .terminal-input-line {
+    padding: 12px 15px;
+  }
+  
+  .terminal-input {
+    font-size: 12px;
+  }
+  
+  .terminal-prompt {
+    font-size: 11px;
+  }
+}
