@@ -102,6 +102,17 @@ function setupGridNavigation() {
     // Don't process if delete modal is open
     if (document.getElementById('scary-delete-modal')) return;
     
+    // Don't process if user is typing in an input field
+    const activeElement = document.activeElement;
+    if (activeElement.tagName === 'INPUT' || 
+        activeElement.tagName === 'TEXTAREA' || 
+        activeElement.tagName === 'SELECT') {
+      return;
+    }
+    
+    // Don't process if share modal is open
+    if (document.getElementById('share-modal')) return;
+    
     switch(e.key) {
       case 'ArrowRight':
         e.preventDefault();
