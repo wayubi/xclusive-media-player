@@ -173,7 +173,7 @@ class AuditDatabase extends Database
     /**
      * Get audit status for multiple folders at once (batch operation)
      * Returns array with folder paths as keys and status as values
-     * Uses database as source of truth
+     * Uses database as source of truth with SQL-level filtering
      */
     public function getFolderStatsBatch(array $folderPaths): array
     {
@@ -183,9 +183,18 @@ class AuditDatabase extends Database
             return $results;
         }
         
-        // Build query to get audit counts per file_path prefix (folder)
-        // This queries the audit database's files table joined with audit_log
-        $placeholders = implode(',', array_fill(0, count($folderPaths), '?'));
+        // Normalize all folder paths
+        $normalizedFolders = [];
+        foreach ($folderPaths as $folderPath) {
+            $normalizedFolders[] = $this->normalizePath($folderPath);
+        }
+        
+        // Build SQL WHERE clause to filter only files in requested folders
+        $conditions = [];
+        foreach ($normalizedFolders as $folder) {
+            $conditions[] = "file_path LIKE '" . $this->db->escapeString($folder) . "/%'";
+        }
+        $whereClause = implode(' OR ', $conditions);
         
         $stmt = $this->db->prepare("
             SELECT 
@@ -193,24 +202,25 @@ class AuditDatabase extends Database
                 MAX(al.audited_at) as last_audit_at
             FROM files f
             LEFT JOIN audit_log al ON f.id = al.file_id
+            WHERE $whereClause
             GROUP BY f.file_path
         ");
         
         $result = $stmt->execute();
         
-        // Group files by their parent folder
+        // Group files by folder (or immediate subfolder)
         $folderCounts = [];
         while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
             $filePath = $row['file_path'];
             
-            foreach ($folderPaths as $folderPath) {
-                $normalizedFolder = $this->normalizePath($folderPath);
-                if (str_starts_with($filePath, $normalizedFolder . '/')) {
-                    $relativePath = substr($filePath, strlen($normalizedFolder) + 1);
+            foreach ($normalizedFolders as $folderPath) {
+                $prefix = $folderPath . '/';
+                if (str_starts_with($filePath, $prefix)) {
+                    $relativePath = substr($filePath, strlen($prefix));
                     $firstSlash = strpos($relativePath, '/');
                     
                     if ($firstSlash === false) {
-                        // File is directly in this folder
+                        // File is directly in folder
                         if (!isset($folderCounts[$folderPath])) {
                             $folderCounts[$folderPath] = ['total' => 0, 'audited' => 0];
                         }
@@ -219,9 +229,9 @@ class AuditDatabase extends Database
                             $folderCounts[$folderPath]['audited']++;
                         }
                     } else {
-                        // File is in a subfolder - get the subfolder name
+                        // File is in subfolder - use subfolder as key
                         $subfolder = substr($relativePath, 0, $firstSlash);
-                        $subfolderPath = $normalizedFolder . '/' . $subfolder;
+                        $subfolderPath = $folderPath . '/' . $subfolder;
                         
                         if (!isset($folderCounts[$subfolderPath])) {
                             $folderCounts[$subfolderPath] = ['total' => 0, 'audited' => 0];
@@ -231,12 +241,13 @@ class AuditDatabase extends Database
                             $folderCounts[$subfolderPath]['audited']++;
                         }
                     }
+                    break;
                 }
             }
         }
         
         // Determine status for each folder
-        foreach ($folderPaths as $folderPath) {
+        foreach ($normalizedFolders as $folderPath) {
             $counts = $folderCounts[$folderPath] ?? ['total' => 0, 'audited' => 0];
             
             if ($counts['total'] === 0) {
