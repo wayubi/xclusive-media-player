@@ -81,6 +81,68 @@ export function openShareModal(file, isVideo, isAudio) {
             <div class="form-group">
                 <label for="share-status">Status Text</label>
                 <textarea id="share-status" placeholder="Check this out! @user@example.com"></textarea>
+                <div class="emoji-picker">
+                    <button type="button" class="emoji-btn" data-emoji="😏">😏</button>
+                    <button type="button" class="emoji-btn" data-emoji="😍">😍</button>
+                    <button type="button" class="emoji-btn" data-emoji="😘">😘</button>
+                    <button type="button" class="emoji-btn" data-emoji="😚">😚</button>
+                    <button type="button" class="emoji-btn" data-emoji="😗">😗</button>
+                    <button type="button" class="emoji-btn" data-emoji="🥰">🥰</button>
+                    <button type="button" class="emoji-btn" data-emoji="😋">😋</button>
+                    <button type="button" class="emoji-btn" data-emoji="😈">😈</button>
+                    <button type="button" class="emoji-btn" data-emoji="😉">😉</button>
+                    <button type="button" class="emoji-btn" data-emoji="🫦">🫦</button>
+                    <button type="button" class="emoji-btn" data-emoji="👅">👅</button>
+                    <button type="button" class="emoji-btn" data-emoji="💋">💋</button>
+                    <button type="button" class="emoji-btn" data-emoji="❤️">❤️</button>
+                    <button type="button" class="emoji-btn" data-emoji="🩷">🩷</button>
+                    <button type="button" class="emoji-btn" data-emoji="🧡">🧡</button>
+                    <button type="button" class="emoji-btn" data-emoji="💛">💛</button>
+                    <button type="button" class="emoji-btn" data-emoji="💖">💖</button>
+                    <button type="button" class="emoji-btn" data-emoji="💗">💗</button>
+                    <button type="button" class="emoji-btn" data-emoji="💓">💓</button>
+                    <button type="button" class="emoji-btn" data-emoji="💞">💞</button>
+                    <button type="button" class="emoji-btn" data-emoji="💕">💕</button>
+                    <button type="button" class="emoji-btn" data-emoji="💘">💘</button>
+                    <button type="button" class="emoji-btn" data-emoji="💝">💝</button>
+                    <button type="button" class="emoji-btn" data-emoji="❤️‍🔥">❤️‍🔥</button>
+                    <button type="button" class="emoji-btn" data-emoji="🔥">🔥</button>
+                    <button type="button" class="emoji-btn" data-emoji="💦">💦</button>
+                    <button type="button" class="emoji-btn" data-emoji="✨">✨</button>
+                    <button type="button" class="emoji-btn" data-emoji="🌹">🌹</button>
+                    <button type="button" class="emoji-btn" data-emoji="🌶️">🌶️</button>
+                    <button type="button" class="emoji-btn" data-emoji="🍓">🍓</button>
+                    <button type="button" class="emoji-btn" data-emoji="🍒">🍒</button>
+                    <button type="button" class="emoji-btn" data-emoji="🍑">🍑</button>
+                    <button type="button" class="emoji-btn" data-emoji="🍆">🍆</button>
+                    <button type="button" class="emoji-btn" data-emoji="🍯">🍯</button>
+                    <button type="button" class="emoji-btn" data-emoji="🍬">🍬</button>
+                    <button type="button" class="emoji-btn" data-emoji="🍭">🍭</button>
+                    <button type="button" class="emoji-btn" data-emoji="😜">😜</button>
+                    <button type="button" class="emoji-btn" data-emoji="🤭">🤭</button>
+                    <button type="button" class="emoji-btn" data-emoji="🥵">🥵</button>
+                    <button type="button" class="emoji-btn" data-emoji="😻">😻</button>
+                    <button type="button" class="emoji-btn" data-emoji="🐈">🐈</button>
+                    <button type="button" class="emoji-btn" data-emoji="🐱">🐱</button>
+                    <button type="button" class="emoji-btn" data-emoji="🦊">🦊</button>
+                    <button type="button" class="emoji-btn" data-emoji="🐰">🐰</button>
+                    <button type="button" class="emoji-btn" data-emoji="🫶">🫶</button>
+                    <button type="button" class="emoji-btn" data-emoji="🤤">🤤</button>
+                    <button type="button" class="emoji-btn" data-emoji="😼">😼</button>
+                    <button type="button" class="emoji-btn" data-emoji="😹">😹</button>
+                    <button type="button" class="emoji-btn" data-emoji="😽">😽</button>
+                    <button type="button" class="emoji-btn" data-emoji="🎀">🎀</button>
+                    <button type="button" class="emoji-btn" data-emoji="🕯️">🕯️</button>
+                    <button type="button" class="emoji-btn" data-emoji="🌙">🌙</button>
+                    <button type="button" class="emoji-btn" data-emoji="⭐">⭐</button>
+                    <button type="button" class="emoji-btn" data-emoji="💃">💃</button>
+                    <button type="button" class="emoji-btn" data-emoji="🕺">🕺</button>
+                    <button type="button" class="emoji-btn" data-emoji="🥂">🥂</button>
+                    <button type="button" class="emoji-btn" data-emoji="🍷">🍷</button>
+                    <button type="button" class="emoji-btn" data-emoji="🛏️">🛏️</button>
+                    <button type="button" class="emoji-btn" data-emoji="🧸">🧸</button>
+                    <button type="button" class="emoji-btn" data-emoji="🎶">🎶</button>
+                </div>
                 <div class="help-text">Use @user@instance format to mention people on other instances</div>
             </div>
             
@@ -129,6 +191,15 @@ export function openShareModal(file, isVideo, isAudio) {
         }
     };
     document.addEventListener('keydown', keyHandler);
+
+    document.querySelectorAll('.emoji-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const emoji = btn.dataset.emoji;
+            const textarea = document.getElementById('share-status');
+            insertAtCursor(textarea, emoji);
+            textarea.focus();
+        });
+    });
 
     submitBtn.onclick = async () => {
         const instanceInput = document.getElementById('mastodon-instance');
@@ -246,7 +317,15 @@ function getCookie(name) {
 }
 
 function deleteCookie(name) {
-    document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    document.cookie = '=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+}
+
+function insertAtCursor(textarea, text) {
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const value = textarea.value;
+    textarea.value = value.substring(0, start) + text + value.substring(end);
+    textarea.selectionStart = textarea.selectionEnd = start + text.length;
 }
 
 function escapeHtml(str) {
