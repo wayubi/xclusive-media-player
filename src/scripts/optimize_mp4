@@ -365,26 +365,26 @@ for f in "${files[@]}"; do
     mkdir -p "$trashDir"
   fi
   
-  # Build ffmpeg command - read from original, write to .tmp. prefixed file
-  ffmpeg_cmd="ffmpeg -nostdin -hide_banner -loglevel error -i \"$f\""
+  # Build ffmpeg command - use array to properly handle special characters in filenames
+  ffmpeg_cmd=(ffmpeg -nostdin -hide_banner -loglevel error -i "$f")
   
   # Always copy streams (no re-encoding)
-  ffmpeg_cmd="$ffmpeg_cmd -c:v copy -c:a copy"
+  ffmpeg_cmd+=(-c:v copy -c:a copy)
   
   # Add faststart if needed (always needed when stripping metadata, as it causes loss of faststart)
   if [[ "$STRIP_METADATA" == true || "$needs_fs" == true ]]; then
-    ffmpeg_cmd="$ffmpeg_cmd -movflags +faststart"
+    ffmpeg_cmd+=(-movflags +faststart)
   fi
   
   # Strip metadata if needed
   if [[ "$needs_strip" == true ]]; then
-    ffmpeg_cmd="$ffmpeg_cmd -map_metadata -1"
+    ffmpeg_cmd+=(-map_metadata -1)
   fi
   
-  ffmpeg_cmd="$ffmpeg_cmd \".tmp.${base}.${ext}\""
+  ffmpeg_cmd+=(".tmp.${base}.${ext}")
   
   # Execute optimization
-  if eval "$ffmpeg_cmd"; then
+  if "${ffmpeg_cmd[@]}"; then
     # Move original to trash first, then rename .tmp file to final name
     mv "$f" "${trashDir}/${base}.${ext}"
     mv ".tmp.${base}.${ext}" "./${base}.${ext}"

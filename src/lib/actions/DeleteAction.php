@@ -1,9 +1,19 @@
 <?php
 
 require_once __DIR__ . '/ActionHandler.php';
+require_once __DIR__ . '/../AuditDatabase.php';
 
 class DeleteAction extends ActionHandler
 {
+    private ?AuditDatabase $auditDb = null;
+    
+    private function getAuditDb(): AuditDatabase
+    {
+        if ($this->auditDb === null) {
+            $this->auditDb = new AuditDatabase();
+        }
+        return $this->auditDb;
+    }
     public function handle(): void
     {
         $recursive = $this->data['recursive'] ?? false;
@@ -81,7 +91,12 @@ class DeleteAction extends ActionHandler
                 continue;
             }
 
-            $results[$file] = unlink($fsPath) ? 'deleted' : 'failed';
+            $deleted = unlink($fsPath);
+            if ($deleted) {
+                $this->metaDb->deleteMetadata($fsPath);
+                $this->getAuditDb()->deleteFile($fsPath);
+            }
+            $results[$file] = $deleted ? 'deleted' : 'failed';
         }
 
         $this->json(['status' => 'ok', 'results' => $results]);
@@ -135,7 +150,12 @@ class DeleteAction extends ActionHandler
         }
 
         if (is_file($path)) {
-            return unlink($path);
+            $deleted = unlink($path);
+            if ($deleted) {
+                $this->metaDb->deleteMetadata($path);
+                $this->getAuditDb()->deleteFile($path);
+            }
+            return $deleted;
         }
 
         if (is_dir($path)) {
@@ -146,7 +166,10 @@ class DeleteAction extends ActionHandler
 
             foreach ($iterator as $file) {
                 if ($file->isFile()) {
-                    unlink($file->getPathname());
+                    $filePath = $file->getPathname();
+                    unlink($filePath);
+                    $this->metaDb->deleteMetadata($filePath);
+                    $this->getAuditDb()->deleteFile($filePath);
                 } elseif ($file->isDir()) {
                     rmdir($file->getPathname());
                 }
