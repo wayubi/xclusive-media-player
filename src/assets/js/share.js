@@ -6,6 +6,64 @@ let shareModal = null;
 let currentShareFile = null;
 let keyHandler = null;
 
+let emojiData = null;
+const FREQUENTLY_USED_KEY = 'mastodon_emoji_frequently_used';
+const MAX_FREQUENT = 12;
+
+async function loadEmojiLib() {
+    if (!emojiData) {
+        const response = await fetch('./assets/js/lib/emojilib-v4.0.2/emoji-en-US.json');
+        emojiData = await response.json();
+    }
+    return emojiData;
+}
+
+function getFrequentlyUsed() {
+    try {
+        const stored = localStorage.getItem(FREQUENTLY_USED_KEY);
+        return stored ? JSON.parse(stored) : {};
+    } catch {
+        return {};
+    }
+}
+
+function incrementEmojiUsage(emoji) {
+    const freq = getFrequentlyUsed();
+    freq[emoji] = (freq[emoji] || 0) + 1;
+    localStorage.setItem(FREQUENTLY_USED_KEY, JSON.stringify(freq));
+}
+
+function getTopEmojis(count) {
+    const freq = getFrequentlyUsed();
+    return Object.entries(freq)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, count)
+        .map(([emoji]) => emoji);
+}
+
+function searchEmojis(query, lib) {
+    if (!query.trim()) return [];
+    const q = query.toLowerCase();
+    const results = [];
+    for (const [emoji, keywords] of Object.entries(lib)) {
+        if (Array.isArray(keywords)) {
+            for (const keyword of keywords) {
+                if (keyword.toLowerCase().includes(q)) {
+                    results.push(emoji);
+                    break;
+                }
+            }
+        }
+    }
+    return results;
+}
+
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
 function getFileExtension(filename) {
     const parts = filename.split('.');
     return parts.length > 1 ? parts.pop().toLowerCase() : '';
@@ -82,66 +140,15 @@ export function openShareModal(file, isVideo, isAudio) {
                 <label for="share-status">Status Text</label>
                 <textarea id="share-status" placeholder="Check this out! @user@example.com"></textarea>
                 <div class="emoji-picker">
-                    <button type="button" class="emoji-btn" data-emoji="😏">😏</button>
-                    <button type="button" class="emoji-btn" data-emoji="😍">😍</button>
-                    <button type="button" class="emoji-btn" data-emoji="😘">😘</button>
-                    <button type="button" class="emoji-btn" data-emoji="😚">😚</button>
-                    <button type="button" class="emoji-btn" data-emoji="😗">😗</button>
-                    <button type="button" class="emoji-btn" data-emoji="🥰">🥰</button>
-                    <button type="button" class="emoji-btn" data-emoji="😋">😋</button>
-                    <button type="button" class="emoji-btn" data-emoji="😈">😈</button>
-                    <button type="button" class="emoji-btn" data-emoji="😉">😉</button>
-                    <button type="button" class="emoji-btn" data-emoji="😅">😅</button>
-                    <button type="button" class="emoji-btn" data-emoji="😜">😜</button>
-                    <button type="button" class="emoji-btn" data-emoji="🤭">🤭</button>
-                    <button type="button" class="emoji-btn" data-emoji="🥵">🥵</button>
-                    <button type="button" class="emoji-btn" data-emoji="🤤">🤤</button>
-                    <button type="button" class="emoji-btn" data-emoji="😭">😭</button>
-                    <button type="button" class="emoji-btn" data-emoji="🫦">🫦</button>
-                    <button type="button" class="emoji-btn" data-emoji="👅">👅</button>
-                    <button type="button" class="emoji-btn" data-emoji="💋">💋</button>
-                    <button type="button" class="emoji-btn" data-emoji="❤️">❤️</button>
-                    <button type="button" class="emoji-btn" data-emoji="🩷">🩷</button>
-                    <button type="button" class="emoji-btn" data-emoji="🧡">🧡</button>
-                    <button type="button" class="emoji-btn" data-emoji="💛">💛</button>
-                    <button type="button" class="emoji-btn" data-emoji="💖">💖</button>
-                    <button type="button" class="emoji-btn" data-emoji="💗">💗</button>
-                    <button type="button" class="emoji-btn" data-emoji="💓">💓</button>
-                    <button type="button" class="emoji-btn" data-emoji="💞">💞</button>
-                    <button type="button" class="emoji-btn" data-emoji="💕">💕</button>
-                    <button type="button" class="emoji-btn" data-emoji="💘">💘</button>
-                    <button type="button" class="emoji-btn" data-emoji="💝">💝</button>
-                    <button type="button" class="emoji-btn" data-emoji="❤️‍🔥">❤️‍🔥</button>
-                    <button type="button" class="emoji-btn" data-emoji="🔥">🔥</button>
-                    <button type="button" class="emoji-btn" data-emoji="💦">💦</button>
-                    <button type="button" class="emoji-btn" data-emoji="✨">✨</button>
-                    <button type="button" class="emoji-btn" data-emoji="🌹">🌹</button>
-                    <button type="button" class="emoji-btn" data-emoji="🌶️">🌶️</button>
-                    <button type="button" class="emoji-btn" data-emoji="🍓">🍓</button>
-                    <button type="button" class="emoji-btn" data-emoji="🍒">🍒</button>
-                    <button type="button" class="emoji-btn" data-emoji="🍑">🍑</button>
-                    <button type="button" class="emoji-btn" data-emoji="🍆">🍆</button>
-                    <button type="button" class="emoji-btn" data-emoji="🍯">🍯</button>
-                    <button type="button" class="emoji-btn" data-emoji="🍬">🍬</button>
-                    <button type="button" class="emoji-btn" data-emoji="🍭">🍭</button>
-                    <button type="button" class="emoji-btn" data-emoji="😻">😻</button>
-                    <button type="button" class="emoji-btn" data-emoji="🐈">🐈</button>
-                    <button type="button" class="emoji-btn" data-emoji="🐱">🐱</button>
-                    <button type="button" class="emoji-btn" data-emoji="🦊">🦊</button>
-                    <button type="button" class="emoji-btn" data-emoji="🐰">🐰</button>
-                    <button type="button" class="emoji-btn" data-emoji="🫶">🫶</button>
-                    <button type="button" class="emoji-btn" data-emoji="😼">😼</button>
-                    <button type="button" class="emoji-btn" data-emoji="😹">😹</button>
-                    <button type="button" class="emoji-btn" data-emoji="😽">😽</button>
-                    <button type="button" class="emoji-btn" data-emoji="🎀">🎀</button>
-                    <button type="button" class="emoji-btn" data-emoji="🕯️">🕯️</button>
-                    <button type="button" class="emoji-btn" data-emoji="🌙">🌙</button>
-                    <button type="button" class="emoji-btn" data-emoji="⭐">⭐</button>
-                    <button type="button" class="emoji-btn" data-emoji="🥂">🥂</button>
-                    <button type="button" class="emoji-btn" data-emoji="🍷">🍷</button>
-                    <button type="button" class="emoji-btn" data-emoji="🛏️">🛏️</button>
-                    <button type="button" class="emoji-btn" data-emoji="🧸">🧸</button>
-                    <button type="button" class="emoji-btn" data-emoji="🎶">🎶</button>
+                    <input type="text" id="emoji-search" class="emoji-search" placeholder="Search emojis (e.g., hot, love, cat)">
+                    <div class="emoji-section frequently-used" style="display: none;">
+                        <div class="emoji-section-title">Frequently Used</div>
+                        <div class="emoji-grid" id="frequently-used-grid"></div>
+                    </div>
+                    <div class="emoji-section all-emojis">
+                        <div class="emoji-section-title">All Emojis</div>
+                        <div class="emoji-grid" id="all-emoji-grid"></div>
+                    </div>
                 </div>
                 <div class="help-text">Use @user@instance format to mention people on other instances</div>
             </div>
@@ -192,14 +199,66 @@ export function openShareModal(file, isVideo, isAudio) {
     };
     document.addEventListener('keydown', keyHandler);
 
-    document.querySelectorAll('.emoji-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const emoji = btn.dataset.emoji;
-            const textarea = document.getElementById('share-status');
-            insertAtCursor(textarea, emoji);
-            textarea.focus();
-        });
+    const emojiSearchInput = document.getElementById('emoji-search');
+    const frequentlyUsedSection = document.querySelector('.frequently-used');
+    const frequentlyUsedGrid = document.getElementById('frequently-used-grid');
+    const allEmojiGrid = document.getElementById('all-emoji-grid');
+
+    function renderEmojiButtons(emojis, container) {
+        container.innerHTML = '';
+        for (const emoji of emojis) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'emoji-btn';
+            btn.dataset.emoji = emoji;
+            btn.textContent = emoji;
+            btn.addEventListener('click', () => {
+                incrementEmojiUsage(emoji);
+                const textarea = document.getElementById('share-status');
+                insertAtCursor(textarea, emoji);
+                textarea.focus();
+            });
+            container.appendChild(btn);
+        }
+    }
+
+    async function initEmojiPicker() {
+        const lib = await loadEmojiLib();
+        
+        const topEmojis = getTopEmojis(MAX_FREQUENT);
+        if (topEmojis.length > 0) {
+            frequentlyUsedSection.style.display = 'block';
+            renderEmojiButtons(topEmojis, frequentlyUsedGrid);
+        }
+
+        const allEmojis = Object.keys(lib);
+        renderEmojiButtons(allEmojis, allEmojiGrid);
+    }
+
+    emojiSearchInput.addEventListener('input', async (e) => {
+        const query = e.target.value.trim();
+        const lib = await loadEmojiLib();
+        
+        if (query) {
+            const results = searchEmojis(query, lib);
+            allEmojiGrid.innerHTML = '';
+            if (results.length > 0) {
+                renderEmojiButtons(results.slice(0, 100), allEmojiGrid);
+            } else {
+                allEmojiGrid.innerHTML = '<div class="no-results">No emojis found</div>';
+            }
+            frequentlyUsedSection.style.display = 'none';
+        } else {
+            const topEmojis = getTopEmojis(MAX_FREQUENT);
+            if (topEmojis.length > 0) {
+                frequentlyUsedSection.style.display = 'block';
+            }
+            const allEmojis = Object.keys(lib);
+            renderEmojiButtons(allEmojis, allEmojiGrid);
+        }
     });
+
+    initEmojiPicker();
 
     submitBtn.onclick = async () => {
         const instanceInput = document.getElementById('mastodon-instance');
@@ -326,10 +385,4 @@ function insertAtCursor(textarea, text) {
     const value = textarea.value;
     textarea.value = value.substring(0, start) + text + value.substring(end);
     textarea.selectionStart = textarea.selectionEnd = start + text.length;
-}
-
-function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
 }
