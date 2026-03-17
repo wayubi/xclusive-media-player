@@ -23,6 +23,10 @@ export function updateHeartIcon(heartElement, isFavorited) {
 }
 
 export async function updateFavoritesDisplay() {
+  if (!state.currentPath || state.currentPath === '') {
+    return;
+  }
+
   // Fetch updated count from server
   try {
     const response = await fetch('api.php', {
