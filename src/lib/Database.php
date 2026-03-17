@@ -96,6 +96,11 @@ abstract class Database
             $this->db->close();
         }
     }
+    
+    public function getDb(): SQLite3
+    {
+        return $this->db;
+    }
 
     public function __destruct()
     {

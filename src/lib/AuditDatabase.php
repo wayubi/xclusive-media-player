@@ -285,6 +285,20 @@ class AuditDatabase extends Database
     }
     
     /**
+     * Delete a file from audit database
+     * Also deletes related audit_log entries via CASCADE
+     */
+    public function deleteFile(string $absolutePath): bool
+    {
+        $normalizedPath = $this->normalizePath($absolutePath);
+        
+        $stmt = $this->db->prepare('DELETE FROM files WHERE file_path = :path');
+        $stmt->bindValue(':path', $normalizedPath, SQLITE3_TEXT);
+        
+        return $stmt->execute() !== false;
+    }
+    
+    /**
      * Get statistics
      */
     public function getStats() {
