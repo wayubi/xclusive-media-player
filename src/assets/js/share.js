@@ -91,6 +91,12 @@ export function openShareModal(file, isVideo, isAudio) {
                     <button type="button" class="emoji-btn" data-emoji="😋">😋</button>
                     <button type="button" class="emoji-btn" data-emoji="😈">😈</button>
                     <button type="button" class="emoji-btn" data-emoji="😉">😉</button>
+                    <button type="button" class="emoji-btn" data-emoji="😅">😅</button>
+                    <button type="button" class="emoji-btn" data-emoji="😜">😜</button>
+                    <button type="button" class="emoji-btn" data-emoji="🤭">🤭</button>
+                    <button type="button" class="emoji-btn" data-emoji="🥵">🥵</button>
+                    <button type="button" class="emoji-btn" data-emoji="🤤">🤤</button>
+                    <button type="button" class="emoji-btn" data-emoji="😭">😭</button>
                     <button type="button" class="emoji-btn" data-emoji="🫦">🫦</button>
                     <button type="button" class="emoji-btn" data-emoji="👅">👅</button>
                     <button type="button" class="emoji-btn" data-emoji="💋">💋</button>
@@ -118,16 +124,12 @@ export function openShareModal(file, isVideo, isAudio) {
                     <button type="button" class="emoji-btn" data-emoji="🍯">🍯</button>
                     <button type="button" class="emoji-btn" data-emoji="🍬">🍬</button>
                     <button type="button" class="emoji-btn" data-emoji="🍭">🍭</button>
-                    <button type="button" class="emoji-btn" data-emoji="😜">😜</button>
-                    <button type="button" class="emoji-btn" data-emoji="🤭">🤭</button>
-                    <button type="button" class="emoji-btn" data-emoji="🥵">🥵</button>
                     <button type="button" class="emoji-btn" data-emoji="😻">😻</button>
                     <button type="button" class="emoji-btn" data-emoji="🐈">🐈</button>
                     <button type="button" class="emoji-btn" data-emoji="🐱">🐱</button>
                     <button type="button" class="emoji-btn" data-emoji="🦊">🦊</button>
                     <button type="button" class="emoji-btn" data-emoji="🐰">🐰</button>
                     <button type="button" class="emoji-btn" data-emoji="🫶">🫶</button>
-                    <button type="button" class="emoji-btn" data-emoji="🤤">🤤</button>
                     <button type="button" class="emoji-btn" data-emoji="😼">😼</button>
                     <button type="button" class="emoji-btn" data-emoji="😹">😹</button>
                     <button type="button" class="emoji-btn" data-emoji="😽">😽</button>
@@ -135,8 +137,6 @@ export function openShareModal(file, isVideo, isAudio) {
                     <button type="button" class="emoji-btn" data-emoji="🕯️">🕯️</button>
                     <button type="button" class="emoji-btn" data-emoji="🌙">🌙</button>
                     <button type="button" class="emoji-btn" data-emoji="⭐">⭐</button>
-                    <button type="button" class="emoji-btn" data-emoji="💃">💃</button>
-                    <button type="button" class="emoji-btn" data-emoji="🕺">🕺</button>
                     <button type="button" class="emoji-btn" data-emoji="🥂">🥂</button>
                     <button type="button" class="emoji-btn" data-emoji="🍷">🍷</button>
                     <button type="button" class="emoji-btn" data-emoji="🛏️">🛏️</button>
