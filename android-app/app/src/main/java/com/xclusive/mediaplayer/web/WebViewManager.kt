@@ -9,6 +9,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.webkit.WebViewAssetLoader
+import com.xclusive.mediaplayer.BuildConfig
 import com.xclusive.mediaplayer.data.repository.ConfigRepository
 import com.xclusive.mediaplayer.ui.MainActivity
 import com.xclusive.mediaplayer.util.DeviceUtils
@@ -35,11 +36,10 @@ class WebViewManager(
             
             // Performance optimizations
             cacheMode = WebSettings.LOAD_DEFAULT
-            setAppCacheEnabled(true)
-            setAppCachePath(context.cacheDir.absolutePath)
             
             // Fire TV optimization
             if (DeviceUtils.isLowEndDevice(context)) {
+                @Suppress("DEPRECATION")
                 setRenderPriority(WebSettings.RenderPriority.HIGH)
             }
         }
@@ -85,7 +85,7 @@ class WebViewManager(
         }
         
         // Enable debugging in debug builds
-        if (android.os.BuildConfig.DEBUG) {
+        if (BuildConfig.DEBUG) {
             WebView.setWebContentsDebuggingEnabled(true)
         }
     }

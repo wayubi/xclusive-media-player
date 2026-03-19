@@ -60,7 +60,6 @@ dependencies {
     
     // Dependency Injection (Koin)
     implementation("io.insert-koin:koin-android:3.5.0")
-    implementation("io.insert-koin:koin-androidx-viewmodel:3.5.0")
     
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
@@ -70,6 +69,9 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:$media3_version")
     implementation("androidx.media3:media3-ui:$media3_version")
     implementation("androidx.media3:media3-common:$media3_version")
+    
+    // WebView
+    implementation("androidx.webkit:webkit:1.11.0")
     
     // Testing
     testImplementation(libs.junit)

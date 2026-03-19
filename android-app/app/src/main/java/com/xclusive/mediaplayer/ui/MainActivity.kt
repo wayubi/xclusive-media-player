@@ -15,6 +15,7 @@ import androidx.core.view.updatePadding
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
+import com.xclusive.mediaplayer.data.repository.ConfigRepository
 import com.xclusive.mediaplayer.databinding.ActivityMainBinding
 import com.xclusive.mediaplayer.di.appModule
 import com.xclusive.mediaplayer.player.PlayerManager
@@ -33,6 +34,7 @@ class MainActivity : AppCompatActivity() {
     private val viewModel: MainViewModel by viewModels()
     private val playerManager: PlayerManager by inject()
     private val webViewManager: WebViewManager by inject()
+    private val configRepository: ConfigRepository by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,7 +64,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupOrientation() {
         val deviceType = DeviceUtils.getDeviceType(this)
-        val configRepository = org.koin.android.ext.android.getKoin().get<com.xclusive.mediaplayer.data.repository.ConfigRepository>()
         val forceLandscapeOnTablets = configRepository.shouldForceLandscapeOnTablets()
 
         requestedOrientation = when {
