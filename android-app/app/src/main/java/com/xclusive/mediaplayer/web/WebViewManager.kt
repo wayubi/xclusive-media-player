@@ -2,17 +2,14 @@ package com.xclusive.mediaplayer.web
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.view.View
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import androidx.webkit.WebViewAssetLoader
 import com.xclusive.mediaplayer.BuildConfig
 import com.xclusive.mediaplayer.data.repository.ConfigRepository
 import com.xclusive.mediaplayer.ui.MainActivity
-import com.xclusive.mediaplayer.util.DeviceUtils
 
 class WebViewManager(
     private val context: Context,
@@ -20,6 +17,18 @@ class WebViewManager(
 ) {
     
     private var webView: WebView? = null
+    
+    init {
+        clearWebViewCache()
+    }
+    
+    private fun clearWebViewCache() {
+        try {
+            context.cacheDir.deleteRecursively()
+        } catch (e: Exception) {
+            // Ignore if clearing fails
+        }
+    }
     
     @SuppressLint("SetJavaScriptEnabled")
     fun configureWebView(webView: WebView, activity: MainActivity) {
@@ -34,14 +43,17 @@ class WebViewManager(
             useWideViewPort = true
             loadWithOverviewMode = true
             
+            // Disable caching to always get fresh content from server
+            cacheMode = WebSettings.LOAD_NO_CACHE
+
             // Performance optimizations
-            cacheMode = WebSettings.LOAD_DEFAULT
+            // cacheMode = WebSettings.LOAD_DEFAULT
             
             // Fire TV optimization
-            if (DeviceUtils.isLowEndDevice(context)) {
-                @Suppress("DEPRECATION")
-                setRenderPriority(WebSettings.RenderPriority.HIGH)
-            }
+            // if (DeviceUtils.isLowEndDevice(context)) {
+            //    @Suppress("DEPRECATION")
+            //    setRenderPriority(WebSettings.RenderPriority.HIGH)
+            //}
         }
         
         // Add JavaScript interface

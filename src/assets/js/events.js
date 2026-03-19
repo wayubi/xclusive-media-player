@@ -95,6 +95,9 @@ function setupGridNavigation() {
     // Don't process if fullscreen is active
     if (document.querySelector('div[style*="z-index:9999"]')) return;
     
+    // Don't process if fullscreen player is active
+    if (document.body.classList.contains('fullscreen-active')) return;
+    
     // Don't process if search overlay is open
     const searchOverlay = document.getElementById('search-overlay');
     if (searchOverlay && searchOverlay.style.display === 'flex') return;
@@ -113,16 +116,9 @@ function setupGridNavigation() {
     // Don't process if share modal is open
     if (document.getElementById('share-modal')) return;
     
-    switch(e.key) {
-      case 'ArrowRight':
-        e.preventDefault();
-        nextGrid();
-        break;
-      case 'ArrowLeft':
-        e.preventDefault();
-        prevGrid();
-        break;
-    }
+    // Note: ArrowLeft/ArrowRight are NOT intercepted here
+    // This allows D-pad navigation between menu buttons and focus movement
+    // Use the ◀/▶ buttons or other navigation methods for page scrolling
   });
   
   // Options form wheel
