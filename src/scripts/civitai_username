@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+shopt -s nullglob
+
+if [[ $# -lt 1 ]]; then
+  echo "Usage: $0 <image_id>"
+  echo "  Fetches the username for a CivitAI image by its ID"
+  exit 1
+fi
+
+IMAGE_ID="$1"
+
+# Fetch page and extract __NEXT_DATA__ JSON
+html=$(curl -s "https://civitai.com/images/${IMAGE_ID}")
+
+# Extract JSON from script tag
+json=$(echo "$html" | grep -oP '(?<=<script id="__NEXT_DATA__" type="application/json">)[^<]+')
+
+if [[ -z "$json" ]]; then
+  echo "Error: Could not find image data for ID ${IMAGE_ID}"
+  exit 1
+fi
+
+# Extract username - path: props.pageProps.trpcState.json.queries[0].state.data.user.username
+if command -v jq &> /dev/null; then
+  username=$(echo "$json" | jq -r '.props.pageProps.trpcState.json.queries[0].state.data.user.username // empty')
+else
+  # Fallback to grep
+  username=$(echo "$json" | grep -oP '"username":"[^"]+' | head -1 | sed 's/"username":"//')
+fi
+
+if [[ -z "$username" ]]; then
+  echo "Error: Could not extract username from image data"
+  exit 1
+fi
+
+echo "$username"
