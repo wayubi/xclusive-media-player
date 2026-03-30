@@ -160,7 +160,7 @@ function fetchMetadataBatch(grid, visibleFiles) {
 
       if (metaElem) {
         metaElem.dataset.filePath = file;
-        const parts = buildMetadataParts(meta);
+        const parts = buildMetadataParts(meta, file);
         metaElem.innerHTML = parts.join(' • ');
       }
 
@@ -336,12 +336,31 @@ function finalizeGridUI(grid) {
 /**
  * Build metadata display parts
  */
-function buildMetadataParts(meta) {
+function buildMetadataParts(meta, file) {
   const parts = [];
 
-  if (meta.folder) {
-    const folderLink = `<span class="folder-link" style="cursor: pointer; text-decoration: underline; pointer-events: auto;">${meta.folder}</span>`;
-    parts.push(folderLink);
+  // Build clickable folder path links
+  if (file) {
+    const pathParts = file.split('/').filter(p => p);
+    
+    // Remove 'volumes' prefix if present
+    if (pathParts[0] === 'volumes') pathParts.shift();
+    
+    // Remove filename (last part)
+    pathParts.pop();
+    
+    // Build folder path as a single cohesive unit with > separators
+    if (pathParts.length > 0) {
+      let folderPathHtml = '';
+      pathParts.forEach((segment, idx) => {
+        const targetPath = pathParts.slice(0, idx + 1).join('/');
+        if (idx > 0) {
+          folderPathHtml += ' > ';
+        }
+        folderPathHtml += `<span class="folder-link" data-folder-path="${targetPath}" style="cursor: pointer; text-decoration: underline; pointer-events: auto;">${segment}</span>`;
+      });
+      parts.push(folderPathHtml);
+    }
   }
 
   // Handle text file metadata
@@ -392,25 +411,13 @@ function buildMetadataParts(meta) {
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('grid')?.addEventListener('click', (e) => {
     const folderLink = e.target.closest('.folder-link');
-    if (folderLink) {
+    if (folderLink && folderLink.dataset.folderPath) {
       e.preventDefault();
       e.stopPropagation();
-
-      const metaElem = folderLink.closest('div[data-file-path]');
-      if (metaElem && metaElem.dataset.filePath) {
-        const filePath = decodeURIComponent(metaElem.dataset.filePath);
-        const pathParts = filePath.split('/').filter(p => p);
-
-        if (pathParts[0] === 'volumes') {
-          pathParts.shift();
-        }
-
-        pathParts.pop();
-        const folderPath = pathParts.join('/');
-
-        if (folderPath) {
-          navigateToFolder(folderPath);
-        }
+      
+      const folderPath = folderLink.dataset.folderPath;
+      if (folderPath) {
+        navigateToFolder(folderPath);
       }
     }
   });
