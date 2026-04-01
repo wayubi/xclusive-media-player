@@ -22,6 +22,7 @@ class MetadataDatabase extends Database
                 file_size INTEGER NOT NULL,
                 modified_time INTEGER NOT NULL,
                 extension TEXT,
+                filename TEXT,
                 
                 -- Media metadata
                 duration REAL,
@@ -54,6 +55,7 @@ class MetadataDatabase extends Database
             CREATE INDEX IF NOT EXISTS idx_file_path ON files(file_path);
             CREATE INDEX IF NOT EXISTS idx_web_path ON files(web_path);
             CREATE INDEX IF NOT EXISTS idx_updated_at ON files(updated_at);
+            CREATE INDEX IF NOT EXISTS idx_filename ON files(filename);
         ');
     }
 
@@ -176,6 +178,7 @@ class MetadataDatabase extends Database
                     file_size = :file_size,
                     modified_time = :modified_time,
                     extension = :extension,
+                    filename = :filename,
                     duration = :duration,
                     bitrate = :bitrate,
                     container = :container,
@@ -198,14 +201,14 @@ class MetadataDatabase extends Database
             // Insert new
             $stmt = $this->db->prepare('
                 INSERT INTO files (
-                    file_path, web_path, file_size, modified_time, extension,
+                    file_path, web_path, file_size, modified_time, extension, filename,
                     duration, bitrate, container,
                     video_codec, video_width, video_height, video_fps, video_pix_fmt,
                     audio_codec, audio_channels, audio_sample_rate,
                     text_encoding, is_optimized, optimization_issues, xxhash,
                     created_at, updated_at
                 ) VALUES (
-                    :file_path, :web_path, :file_size, :modified_time, :extension,
+                    :file_path, :web_path, :file_size, :modified_time, :extension, :filename,
                     :duration, :bitrate, :container,
                     :video_codec, :video_width, :video_height, :video_fps, :video_pix_fmt,
                     :audio_codec, :audio_channels, :audio_sample_rate,
@@ -222,6 +225,7 @@ class MetadataDatabase extends Database
         $stmt->bindValue(':file_size', filesize($fsPath), SQLITE3_INTEGER);
         $stmt->bindValue(':modified_time', filemtime($fsPath), SQLITE3_INTEGER);
         $stmt->bindValue(':extension', pathinfo($fsPath, PATHINFO_EXTENSION), SQLITE3_TEXT);
+        $stmt->bindValue(':filename', basename($fsPath), SQLITE3_TEXT);
         $stmt->bindValue(':duration', $metadata['duration'] ?? null, SQLITE3_FLOAT);
         $stmt->bindValue(':bitrate', $metadata['bitrate'] ?? null, SQLITE3_INTEGER);
         $stmt->bindValue(':container', $metadata['container'] ?? null, SQLITE3_TEXT);
@@ -337,18 +341,26 @@ class MetadataDatabase extends Database
     }
     
     /**
-     * Get all files in a folder from database (sorted by modified_time DESC like filesystem scan)
+     * Get all files in a folder from database with dynamic sorting
      * Returns array of absolute file paths
+     * 
+     * @param string $folderPath The folder path to scan
+     * @param string $sortField Field to sort by: modified, name, duration, filesize, resolution, bitrate, fps
+     * @param string $sortDirection Direction: asc or desc
+     * @return array Array of file paths
      */
-    public function getFilesByFolder(string $folderPath): array
+    public function getFilesByFolder(string $folderPath, string $sortField = 'modified', string $sortDirection = 'desc'): array
     {
         $normalizedFolder = $this->normalizePath($folderPath);
         
-        $stmt = $this->db->prepare('
+        // Build ORDER BY clause based on sort parameters
+        $orderBy = $this->buildOrderByClause($sortField, $sortDirection);
+        
+        $stmt = $this->db->prepare("
             SELECT file_path FROM files
             WHERE file_path LIKE :path_prefix
-            ORDER BY modified_time DESC
-        ');
+            $orderBy
+        ");
         
         $stmt->bindValue(':path_prefix', $normalizedFolder . '/%', SQLITE3_TEXT);
         $result = $stmt->execute();
@@ -359,6 +371,42 @@ class MetadataDatabase extends Database
         }
         
         return $files;
+    }
+    
+    /**
+     * Build SQL ORDER BY clause based on sort field and direction
+     */
+    private function buildOrderByClause(string $sortField, string $sortDirection): string
+    {
+        // Normalize direction
+        $direction = strtolower($sortDirection) === 'asc' ? 'ASC' : 'DESC';
+        
+        // Map sort field to SQL column/expression
+        switch ($sortField) {
+            case 'name':
+                // Sort by filename column (stored as basename)
+                return "ORDER BY COALESCE(filename, '') $direction";
+                
+            case 'duration':
+                return "ORDER BY COALESCE(duration, 0) $direction";
+                
+            case 'filesize':
+                return "ORDER BY file_size $direction";
+                
+            case 'resolution':
+                // Sort by pixel count (width * height)
+                return "ORDER BY COALESCE(video_width * video_height, 0) $direction";
+                
+            case 'bitrate':
+                return "ORDER BY COALESCE(bitrate, 0) $direction";
+                
+            case 'fps':
+                return "ORDER BY COALESCE(video_fps, 0) $direction";
+                
+            case 'modified':
+            default:
+                return "ORDER BY modified_time $direction";
+        }
     }
 
     /**

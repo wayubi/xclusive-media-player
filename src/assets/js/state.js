@@ -18,6 +18,10 @@ export const state = {
   currentPath: '',
   deleteEnabled: false, // NEW: Track if deletes are enabled
   
+  // Sort configuration (set from server-side)
+  sortField: 'modified',
+  sortDirection: 'desc',
+  
   // Seek configuration (CTRL+SCROLL seek amount in seconds)
   seekStepSeconds: 5,
   
@@ -66,6 +70,12 @@ export const state = {
     this.rootDirAbs = config.rootDirAbs;
     this.currentPath = config.currentPath;
     this.deleteEnabled = config.deleteEnabled || false;
+    
+    // Sort configuration
+    if (config.sort) {
+      this.sortField = config.sort.field || 'modified';
+      this.sortDirection = config.sort.direction || 'desc';
+    }
   },
   
   // Helper methods

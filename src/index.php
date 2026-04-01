@@ -120,6 +120,7 @@ if ($nav_action !== null) {
     if (isset($_GET['columns'])) $query[] = 'columns=' . (int)$_GET['columns'];
     if (isset($_GET['rows']))    $query[] = 'rows=' . (int)$_GET['rows'];
     if (isset($_GET['muted']))   $query[] = 'muted=' . $_GET['muted'];
+    if (isset($_GET['sort']))    $query[] = 'sort=' . urlencode($_GET['sort']);
 
     // Cache buster
     $query[] = 't=' . time();
@@ -136,6 +137,23 @@ $selected_rows    = $is_mobile ? 1 : max(1, min(6, (int)($_GET['rows'] ?? 2)));
 $total_cells = $selected_columns * $selected_rows;
 
 $muted = !isset($_GET['muted']) || $_GET['muted'] === 'true';
+
+// Parse sort parameter (format: field_direction, e.g., "modified_desc", "name_asc")
+$sort_param = $_GET['sort'] ?? 'modified_desc';
+$sort_parts = explode('_', $sort_param, 2);
+$sort_field = $sort_parts[0] ?? 'modified';
+$sort_direction = $sort_parts[1] ?? 'desc';
+
+// Validate sort values
+$valid_sort_fields = ['modified', 'name', 'duration', 'filesize', 'resolution', 'bitrate', 'fps'];
+$valid_sort_directions = ['asc', 'desc'];
+
+if (!in_array($sort_field, $valid_sort_fields)) {
+    $sort_field = 'modified';
+}
+if (!in_array($sort_direction, $valid_sort_directions)) {
+    $sort_direction = 'desc';
+}
 
 // ================================
 // FILESYSTEM HELPERS (using Utils)
@@ -210,8 +228,8 @@ $auditDb = new AuditDatabase();
 $favDb = new FavoritesDatabase();
 $metaDb = new MetadataDatabase();
 
-// Get files from database (DB is source of truth)
-$allFilesRaw = $metaDb->getFilesByFolder($current_path);
+// Get files from database (DB is source of truth) with sorting
+$allFilesRaw = $metaDb->getFilesByFolder($current_path, $sort_field, $sort_direction);
 $webRoot = '/' . trim($root_directory, './');
 $allFiles = array_map(fn($f) => Utils::filesystemToWebPath($f, $root_directory_absolute, $webRoot), $allFilesRaw);
 $allFilesCount = count($allFiles);
@@ -324,7 +342,7 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
             <!-- Navigation controls -->
             <div id="folder-select-container" style="display: flex; align-items: center; gap: 10px;">
                 <?php
-                // Build home URL with preserved parameters
+                // Build home URL - NO sort parameter (reset to default on home)
                 $homeParams = [];
                 if (isset($_GET['columns'])) $homeParams[] = 'columns=' . (int)$_GET['columns'];
                 if (isset($_GET['rows'])) $homeParams[] = 'rows=' . (int)$_GET['rows'];
@@ -360,6 +378,24 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
                 <?php for ($r=1;$r<=6;$r++): ?>
                     <option value="<?= $r ?>" <?= $r==$selected_rows?'selected':'' ?>><?= $r ?> row</option>
                 <?php endfor; ?>
+            </select>
+
+            <!-- Sort control -->
+            <select name="sort" onchange="this.form.submit()" title="Sort order">
+                <option value="modified_desc" <?= $sort_field === 'modified' && $sort_direction === 'desc' ? 'selected' : '' ?>>🕐 Newest</option>
+                <option value="modified_asc" <?= $sort_field === 'modified' && $sort_direction === 'asc' ? 'selected' : '' ?>>🕑 Oldest</option>
+                <option value="name_asc" <?= $sort_field === 'name' && $sort_direction === 'asc' ? 'selected' : '' ?>>📛 A-Z</option>
+                <option value="name_desc" <?= $sort_field === 'name' && $sort_direction === 'desc' ? 'selected' : '' ?>>📛 Z-A</option>
+                <option value="duration_asc" <?= $sort_field === 'duration' && $sort_direction === 'asc' ? 'selected' : '' ?>>⏱️ Shortest</option>
+                <option value="duration_desc" <?= $sort_field === 'duration' && $sort_direction === 'desc' ? 'selected' : '' ?>>⏱️ Longest</option>
+                <option value="filesize_asc" <?= $sort_field === 'filesize' && $sort_direction === 'asc' ? 'selected' : '' ?>>📦 Smallest</option>
+                <option value="filesize_desc" <?= $sort_field === 'filesize' && $sort_direction === 'desc' ? 'selected' : '' ?>>📦 Largest</option>
+                <option value="resolution_asc" <?= $sort_field === 'resolution' && $sort_direction === 'asc' ? 'selected' : '' ?>>📐 Lowest Res</option>
+                <option value="resolution_desc" <?= $sort_field === 'resolution' && $sort_direction === 'desc' ? 'selected' : '' ?>>📐 Highest Res</option>
+                <option value="bitrate_asc" <?= $sort_field === 'bitrate' && $sort_direction === 'asc' ? 'selected' : '' ?>>📶 Lowest Bitrate</option>
+                <option value="bitrate_desc" <?= $sort_field === 'bitrate' && $sort_direction === 'desc' ? 'selected' : '' ?>>📶 Highest Bitrate</option>
+                <option value="fps_asc" <?= $sort_field === 'fps' && $sort_direction === 'asc' ? 'selected' : '' ?>>🎬 Lowest FPS</option>
+                <option value="fps_desc" <?= $sort_field === 'fps' && $sort_direction === 'desc' ? 'selected' : '' ?>>🎬 Highest FPS</option>
             </select>
 
             <!-- Hidden state -->
@@ -452,6 +488,10 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
                 muted: <?= $muted ? 'true' : 'false' ?>,
                 totalCells: <?= $total_cells ?>,
                 selectedColumns: <?= $selected_columns ?>,
+                sort: {
+                    field: <?= json_encode($sort_field) ?>,
+                    direction: <?= json_encode($sort_direction) ?>
+                },
                 webRoot: <?= json_encode($webRoot) ?>,
                 rootDirAbs: <?= json_encode($root_directory_absolute) ?>,
                 currentPath: <?= json_encode(str_replace($root_directory_absolute, '', $current_path)) ?>,

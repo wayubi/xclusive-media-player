@@ -1,0 +1,52 @@
+#!/usr/bin/env php
+<?php
+/**
+ * update_filename_column - Populate filename column from file_path
+ * 
+ * Usage: update_filename_column [--dry-run]
+ * Database: data/db/metadata.db (relative to script location)
+ */
+
+$dryRun = false;
+
+// Parse arguments
+for ($i = 1; $i < count($argv); $i++) {
+    if ($argv[$i] === '--dry-run') {
+        $dryRun = true;
+    }
+}
+
+$dbPath = __DIR__ . '/../../db/metadata.db';
+
+if (!file_exists($dbPath)) {
+    fprintf(STDERR, "Error: Database not found at %s\n", $dbPath);
+    exit(1);
+}
+
+$db = new SQLite3($dbPath);
+
+// Get all records
+$result = $db->query('SELECT id, file_path FROM files');
+
+$count = 0;
+while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+    $id = $row['id'];
+    $filePath = $row['file_path'];
+    $filename = basename($filePath);
+    
+    if ($dryRun) {
+        echo "Would update ID $id: $filePath -> $filename\n";
+    } else {
+        $stmt = $db->prepare('UPDATE files SET filename = :filename WHERE id = :id');
+        $stmt->bindValue(':filename', $filename, SQLITE3_TEXT);
+        $stmt->bindValue(':id', $id, SQLITE3_INTEGER);
+        $stmt->execute();
+    }
+    $count++;
+}
+
+if ($dryRun) {
+    echo "\nDry run complete. Would update $count records.\n";
+} else {
+    echo "Updated $count records.\n";
+}
