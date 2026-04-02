@@ -357,7 +357,7 @@ class MetadataDatabase extends Database
         $orderBy = $this->buildOrderByClause($sortField, $sortDirection);
         
         $stmt = $this->db->prepare("
-            SELECT file_path FROM files
+            SELECT file_path, filename FROM files
             WHERE file_path LIKE :path_prefix
             $orderBy
         ");
@@ -367,10 +367,22 @@ class MetadataDatabase extends Database
         
         $files = [];
         while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
-            $files[] = $row['file_path'];
+            $files[] = [
+                'file_path' => $row['file_path'],
+                'filename' => $row['filename'] ?? basename($row['file_path'])
+            ];
         }
         
-        return $files;
+        // Apply natural sorting for name field in PHP (handles numeric strings correctly)
+        if ($sortField === 'name') {
+            usort($files, function($a, $b) use ($sortDirection) {
+                $cmp = strnatcmp($a['filename'], $b['filename']);
+                return $sortDirection === 'asc' ? $cmp : -$cmp;
+            });
+        }
+        
+        // Extract just file_path for backward compatibility
+        return array_map(fn($f) => $f['file_path'], $files);
     }
     
     /**
