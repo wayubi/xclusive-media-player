@@ -21,13 +21,16 @@ class TerminalAction extends ActionHandler
 
         $fsDir = Utils::resolveWebPathForDir($currentDir, $this->root);
         $trimmedCmd = trim($commandLine);
+        $sync = $this->data['sync'] ?? false;
+        
+        // cd always handled via handleCdCommand, never streamed
         $isCdCommand = (strpos($trimmedCmd, 'cd ') === 0 || $trimmedCmd === 'cd');
-
         if ($isCdCommand) {
             $this->handleCdCommand($trimmedCmd, $fsDir);
-        } else {
-            $this->handleExecCommand($commandLine, $fsDir);
+            return;
         }
+
+        $this->handleExecCommand($commandLine, $fsDir, $sync);
     }
 
     private function handleListScripts(): void
@@ -94,11 +97,20 @@ class TerminalAction extends ActionHandler
         ]);
     }
 
-    private function handleExecCommand(string $commandLine, string $fsDir): void
+    private function handleExecCommand(string $commandLine, string $fsDir, bool $sync = false): void
     {
         $scriptsDir = __DIR__ . '/../../scripts';
+
+        if ($sync) {
+            $fullCommand = "cd " . escapeshellarg($fsDir) . " && export PATH=" . escapeshellarg($scriptsDir) . ":\$PATH && " . $commandLine . " 2>&1";
+            $output = shell_exec($fullCommand) ?? '';
+
+            $this->json([
+                'output' => base64_encode($output)
+            ]);
+            return;
+        }
         
-        // All commands go through background job streaming
         $jobId = $this->startBackgroundJob($commandLine, $fsDir, $scriptsDir);
         
         $relativePath = ltrim(str_replace($this->root, '', $fsDir), '/');

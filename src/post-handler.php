@@ -73,6 +73,7 @@ switch ($data['action']) {
             'action' => 'terminal',
             'command' => $data['command'],
             'currentDir' => $data['currentDir'] ?? '/volumes',
+            'sync' => $data['sync'] ?? false,
         ];
         break;
 
