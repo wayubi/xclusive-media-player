@@ -116,9 +116,7 @@ class TerminalAction extends ActionHandler
         }
         
 // All commands go through background job streaming
-        // Pass currentDirectory as second argument to scripts
-        $commandWithArgs = escapeshellarg($commandLine) . ' ' . escapeshellarg($currentDir);
-        $jobId = $this->startBackgroundJob($commandWithArgs, $fsDir, $scriptsDir);
+        $jobId = $this->startBackgroundJob($commandLine, $fsDir, $scriptsDir);
         
         $webDir = '/volumes' . ($relativePath ? '/' . $relativePath : '');
         
