@@ -1,0 +1,25 @@
+#!/bin/bash
+# video-dedup - Run video duplicate detection
+# Usage: video-dedup <path> [options]
+# Second argument is currentDirectory from terminal
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VIDEO_DEDUP_DIR="$(dirname "$SCRIPT_DIR")"
+
+# Get path and currentDirectory
+user_path="$1"
+current_dir="$2"
+
+# Translate path: . or ./ -> currentDirectory
+if [ "$user_path" = "." ] || [ "$user_path" = "./" ]; then
+    user_path="$current_dir"
+fi
+
+# Replace /var/www/html/volumes with /videos
+translated_path="${user_path//\/var\/www\/html\/volumes/\/videos}"
+
+# Get remaining arguments
+shift
+shift
+
+exec docker compose exec -T video-dedup python /opt/video-dedup/scripts/find_video_duplicates.py "$translated_path" "$@"

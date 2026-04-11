@@ -48,5 +48,17 @@ services:
     networks:
       - app_network
 
+  video-dedup:
+    build:
+      context: ./video-dedup
+      dockerfile: Dockerfile
+    volumes:
+      - ./video-dedup/scripts:/opt/video-dedup/scripts
+      - ./volumes:/videos
+    working_dir: /opt/video-dedup
+    networks:
+      - app_network
+    command: tail -f /dev/null
+
 networks:
   app_network:

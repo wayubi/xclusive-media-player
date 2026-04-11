@@ -96,12 +96,17 @@ class TerminalAction extends ActionHandler
 
     private function handleExecCommand(string $commandLine, string $fsDir): void
     {
+        // Get current directory in web path format (e.g., /volumes/pocket)
+        $relativePath = ltrim(str_replace($this->root, '', $fsDir), '/');
+        $currentDir = '/volumes' . ($relativePath ? '/' . $relativePath : '');
+        
         $scriptsDir = __DIR__ . '/../../scripts';
         
         // All commands go through background job streaming
-        $jobId = $this->startBackgroundJob($commandLine, $fsDir, $scriptsDir);
+        // Pass currentDirectory as second argument to scripts
+        $commandWithArgs = escapeshellarg($commandLine) . ' ' . escapeshellarg($currentDir);
+        $jobId = $this->startBackgroundJob($commandWithArgs, $fsDir, $scriptsDir);
         
-        $relativePath = ltrim(str_replace($this->root, '', $fsDir), '/');
         $webDir = '/volumes' . ($relativePath ? '/' . $relativePath : '');
         
         $this->json([

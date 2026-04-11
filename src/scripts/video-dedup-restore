@@ -1,0 +1,8 @@
+#!/bin/bash
+# video-dedup-restore - Restore files from .deduped folder
+# Usage: video-dedup-restore <path>
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VIDEO_DEDUP_DIR="$(dirname "$SCRIPT_DIR")"
+
+exec docker compose -f "$VIDEO_DEDUP_DIR/compose.yml" -f "$VIDEO_DEDUP_DIR/compose.override.yml" exec video-dedup python /opt/video-dedup/scripts/dedup_restore.py "$@"

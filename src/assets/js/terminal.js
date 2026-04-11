@@ -333,6 +333,11 @@ function showHelp() {
   printToTerminal('  - Jailed to /volumes for security');
   printToTerminal('  - All commands have audit trail in /var/www/jobs');
   printToTerminal('');
+  printToTerminal('Video Dedup Commands:', 'info');
+  printToTerminal('  video-dedup . [--dry-run] [--include-subfolders] [--detect-upscaling]');
+  printToTerminal('  video-dedup-delete . [--confirm]');
+  printToTerminal('  video-dedup-restore .');
+  printToTerminal('');
   
   // Show available scripts if any
   if (availableScripts.length > 0) {
