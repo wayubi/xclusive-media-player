@@ -97,36 +97,81 @@ class TerminalAction extends ActionHandler
     private function handleExecCommand(string $commandLine, string $fsDir): void
     {
         $scriptsDir = __DIR__ . '/../../scripts';
-        $trimmed = trim($commandLine);
         
-        // Check for & at end (with optional leading whitespace) - run in background
-        if (preg_match('/\s+&$/', $trimmed)) {
-            $cmd = rtrim($trimmed, '&');
-            $cmd = trim($cmd);
-            
-            $bgCommand = "cd " . escapeshellarg($fsDir) . " && export PATH=" . escapeshellarg($scriptsDir) . ":\$PATH && nohup " . $cmd . " > /dev/null 2>&1 &";
-            shell_exec($bgCommand);
-            
-            $relativePath = ltrim(str_replace($this->root, '', $fsDir), '/');
-            $webDir = '/volumes' . ($relativePath ? '/' . $relativePath : '');
-            
-            $this->json([
-                'output' => base64_encode("Started: $cmd (background)"),
-                'currentDir' => $webDir
-            ]);
+        // All commands go through background job streaming
+        $jobId = $this->startBackgroundJob($commandLine, $fsDir, $scriptsDir);
+        
+        $relativePath = ltrim(str_replace($this->root, '', $fsDir), '/');
+        $webDir = '/volumes' . ($relativePath ? '/' . $relativePath : '');
+        
+        $this->json([
+            'output' => base64_encode("Started job: $jobId"),
+            'currentDir' => $webDir,
+            'jobId' => $jobId
+        ]);
+    }
+
+    private function startBackgroundJob(string $command, string $fsDir, string $scriptsDir): string
+    {
+        // Use timestamp + microtime as job ID for natural sorting and uniqueness
+        $jobId = time() . '_' . substr(str_replace('.', '', microtime(true)), -6);
+        $jobDir = '/var/www/jobs';
+        
+        if (!is_dir($jobDir)) {
+            mkdir($jobDir, 0777, true);
+        }
+        
+        $outputFile = "$jobDir/$jobId.output";
+        $doneFile = "$jobDir/$jobId.done";
+        
+        // Build the command - write command first, then output
+        $command = str_replace("'", "'\\''", $command);
+        $outputFileEscaped = escapeshellarg($outputFile);
+        $doneFileEscaped = escapeshellarg($doneFile);
+        
+        $fullCommand = "cd " . escapeshellarg($fsDir) . " && export PATH=" . escapeshellarg($scriptsDir) . ":\$PATH && echo 'Command: " . $command . "' > " . $outputFileEscaped . " && echo '' >> " . $outputFileEscaped . " && (" . $command . " 2>&1 | tee -a " . $outputFileEscaped . "; echo \${PIPESTATUS[0]} > " . $doneFileEscaped . ")";
+        
+        // Run in background with nohup
+        $bgCommand = "nohup bash -c " . escapeshellarg($fullCommand) . " > /dev/null 2>&1 &";
+        shell_exec($bgCommand);
+        
+        return $jobId;
+    }
+
+    public function streamJob(string $jobId): void
+    {
+        $jobDir = '/var/www/jobs';
+        
+        // Validate jobId - only allow safe characters (timestamp_microtime format)
+        if (!preg_match('/^\d+_\d+$/', $jobId)) {
+            $this->json(['error' => 'Invalid job ID']);
             return;
         }
         
-        $fullCommand = "cd " . escapeshellarg($fsDir) . " && export PATH=" . escapeshellarg($scriptsDir) . ":\$PATH && " . $commandLine . " 2>&1";
-
-        $output = shell_exec($fullCommand) ?? '';
-
-        $relativePath = ltrim(str_replace($this->root, '', $fsDir), '/');
-        $webDir = '/volumes' . ($relativePath ? '/' . $relativePath : '');
-
-        $this->json([
-            'output' => base64_encode($output),
-            'currentDir' => $webDir
-        ]);
+        $outputFile = "$jobDir/$jobId.output";
+        $doneFile = "$jobDir/$jobId.done";
+        
+        $response = [
+            'output' => '',
+            'done' => false,
+            'exitCode' => null
+        ];
+        
+        // Read output file
+        if (file_exists($outputFile)) {
+            $content = file_get_contents($outputFile);
+            if ($content) {
+                $response['output'] = base64_encode($content);
+            }
+        }
+        
+        // Check if job is finished via .done file
+        if (file_exists($doneFile)) {
+            $response['done'] = true;
+            $response['exitCode'] = trim(file_get_contents($doneFile));
+            @unlink($doneFile);
+        }
+        
+        $this->json($response);
     }
 }

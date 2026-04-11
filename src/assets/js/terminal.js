@@ -257,36 +257,8 @@ async function processCommand(commandLine) {
       return;
   }
   
-  // Execute command via API through post-handler (routes to root-privileged php-cli)
-  try {
-    const response = await fetch('/post-handler.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'terminal',
-        command: commandLine,
-        currentDir: currentDirectory
-      })
-    });
-    
-    const data = await response.json();
-    
-    if (data.error) {
-      printToTerminal(data.error, 'error');
-    } else {
-      if (data.output) {
-        // Decode base64-encoded output with UTF-8 support
-        printToTerminal(decodeBase64UTF8(data.output));
-      }
-      // Update current directory if it changed
-      if (data.currentDir) {
-        currentDirectory = data.currentDir;
-        updatePrompt();
-      }
-    }
-  } catch (error) {
-    printToTerminal(`Error executing command: ${error.message}`, 'error');
-  }
+  // All non-builtin commands go through streaming
+  await runStreamingCommand(commandLine);
 }
 
 function parseCommand(commandLine) {
@@ -359,6 +331,7 @@ function showHelp() {
   printToTerminal('  - Full bash shell with pipes, wildcards, and redirects');
   printToTerminal('  - All paths relative to current directory');
   printToTerminal('  - Jailed to /volumes for security');
+  printToTerminal('  - All commands have audit trail in /var/www/jobs');
   printToTerminal('');
   
   // Show available scripts if any
@@ -442,6 +415,107 @@ async function runFfmpegCommand(cmd, args, fullCommandLine) {
     printToTerminal(`${cmd} completed`, 'success');
   } catch (error) {
     printToTerminal(`Error running ${cmd}: ${error.message}`, 'error');
+  }
+}
+
+async function runStreamingCommand(commandLine) {
+  printToTerminal(`Starting streaming execution...`, 'info');
+  printToTerminal('');
+  
+  try {
+    // First, start the background job
+    const response = await fetch('/post-handler.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'terminal',
+        command: commandLine,
+        currentDir: currentDirectory
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (data.error) {
+      printToTerminal(data.error, 'error');
+      return;
+    }
+    
+    if (!data.jobId) {
+      printToTerminal('Failed to start streaming job', 'error');
+      return;
+    }
+    
+    const jobId = data.jobId;
+    printToTerminal(`Job started: ${jobId}`, 'info');
+    printToTerminal('Streaming output...', 'info');
+    printToTerminal('');
+    
+    // Use polling fallback instead of EventSource for better compatibility
+    let pollingInterval = null;
+    let jobFinished = false;
+    let lastOutputLength = 0;
+    
+    async function pollOutput() {
+      try {
+        const response = await fetch(`/post-handler.php?stream=1&jobId=${encodeURIComponent(jobId)}`, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' }
+        });
+        
+        const text = await response.text();
+        
+        if (!response.ok || !text.trim()) {
+          return;
+        }
+        
+        const result = JSON.parse(text);
+        
+        // Print only the delta (new output since last poll)
+        if (result.output) {
+          const output = decodeBase64UTF8(result.output);
+          if (output && output.length > lastOutputLength) {
+            const delta = output.substring(lastOutputLength);
+            printToTerminal(delta);
+            lastOutputLength = output.length;
+          }
+        }
+        
+        // Only handle completion once
+        if (result.done && !jobFinished) {
+          jobFinished = true;
+          clearInterval(pollingInterval);
+          printToTerminal('');
+          printToTerminal(`Exit code: ${result.exitCode}`, result.exitCode === 0 ? 'success' : 'error');
+          printToTerminal('Stream completed', 'info');
+        }
+      } catch (error) {
+        // Silent fail on polling errors
+      }
+    }
+    
+    let maxPolls = 1800; // 30 minutes max
+    let pollCount = 0;
+    
+    // Start polling - first poll happens at 1 second, then every second
+    pollingInterval = setInterval(() => {
+      pollCount++;
+      if (pollCount >= maxPolls || jobFinished) {
+        // Final poll to capture any remaining output
+        if (!jobFinished) {
+          pollOutput();
+        }
+        clearInterval(pollingInterval);
+        if (!jobFinished && pollCount >= maxPolls) {
+          printToTerminal('Polling timeout', 'error');
+        }
+      } else {
+        pollOutput();
+      }
+    }, 1000);
+    
+  } catch (error) {
+    printToTerminal(`Error starting streaming: ${error.message}`, 'error');
   }
 }
 

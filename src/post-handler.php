@@ -1,5 +1,18 @@
 <?php
 
+// Handle streaming requests (GET with jobId) - must be before POST check
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && !empty($_GET['stream']) && !empty($_GET['jobId'])) {
+    require_once __DIR__ . '/lib/actions/ActionHandler.php';
+    require_once __DIR__ . '/lib/actions/TerminalAction.php';
+    require_once __DIR__ . '/lib/Utils.php';
+    require_once __DIR__ . '/lib/MetadataDatabase.php';
+    
+    $metaDb = new MetadataDatabase('/var/www/db/metadata.db');
+    $action = new TerminalAction(['command' => 'stream', 'jobId' => $_GET['jobId']], '/var/www/html', $metaDb);
+    $action->streamJob($_GET['jobId']);
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     return;
 }

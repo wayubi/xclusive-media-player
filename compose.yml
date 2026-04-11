@@ -29,6 +29,7 @@ services:
       - ./src:/var/www/html
       - ./.env:/var/www/.env:ro
       - ./data/db:/var/www/db
+      - ./data/jobs:/var/www/jobs
       - ./volumes:/var/www/html/volumes
     networks:
       - app_network
@@ -42,6 +43,7 @@ services:
       - ./src:/var/www/html
       - ./.env:/var/www/.env:ro
       - ./data/db:/var/www/db
+      - ./data/jobs:/var/www/jobs
       - ./volumes:/var/www/html/volumes
     networks:
       - app_network
