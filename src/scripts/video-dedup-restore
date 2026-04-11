@@ -5,4 +5,25 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VIDEO_DEDUP_DIR="$(dirname "$SCRIPT_DIR")"
 
-exec docker compose -f "$VIDEO_DEDUP_DIR/compose.yml" -f "$VIDEO_DEDUP_DIR/compose.override.yml" exec video-dedup python /opt/video-dedup/scripts/dedup_restore.py "$@"
+# Detect if path is provided or not
+if [ -z "$1" ] || [[ "$1" == -* ]]; then
+    user_path="."
+else
+    user_path="$1"
+    shift
+fi
+
+current_dir="$(pwd)"
+
+# Translate path: . or ./ -> current directory
+if [ "$user_path" = "." ] || [ "$user_path" = "./" ]; then
+    user_path="$current_dir"
+fi
+
+# Replace /var/www/html/volumes with /videos
+translated_path="${user_path//\/var\/www\/html\/volumes/\/videos}"
+
+# Execute inside container
+exec docker exec -i xclusive-video-dedup-1 \
+    python /opt/video-dedup/scripts/dedup_restore.py \
+    "$translated_path" "$@"

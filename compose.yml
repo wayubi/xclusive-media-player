@@ -45,6 +45,7 @@ services:
       - ./data/db:/var/www/db
       - ./data/jobs:/var/www/jobs
       - ./volumes:/var/www/html/volumes
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - app_network
 
