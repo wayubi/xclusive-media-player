@@ -255,10 +255,21 @@ async function processCommand(commandLine) {
       printToTerminal('Initiating matrix visualization...', 'success');
       startMatrixRain();
       return;
+      
+    case 'cd':
+      handleCdCommand(commandLine);
+      return;
   }
   
-  // All non-builtin commands go through streaming
-  await runStreamingCommand(commandLine);
+  // Check if this is a fast command that should run synchronously
+  const fastCommands = ['ls', 'cat', 'pwd', 'echo', 'mkdir', 'rmdir', 'touch', 'rm', 'cp', 'mv', 'find', 'head', 'tail', 'grep', 'du', 'df', 'which', 'file', 'stat', 'wc', 'sort', 'uniq', 'cut', 'awk', 'sed'];
+  const firstArg = trimmedCmd.split(/\s+/)[0];
+  
+  if (fastCommands.includes(firstArg)) {
+    await runSyncCommand(commandLine);
+  } else {
+    await runStreamingCommand(commandLine);
+  }
 }
 
 function parseCommand(commandLine) {
@@ -383,6 +394,64 @@ async function runScript(scriptName, args) {
     printToTerminal(`Script completed: ${scriptName}`, 'success');
   } catch (error) {
     printToTerminal(`Error running script: ${error.message}`, 'error');
+  }
+}
+
+async function handleCdCommand(commandLine) {
+  try {
+    const response = await fetch('/post-handler.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'terminal',
+        command: commandLine,
+        currentDir: currentDirectory,
+        sync: true
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (data.error) {
+      printToTerminal(data.error, 'error');
+    } else if (data.output) {
+      const output = decodeBase64UTF8(data.output);
+      if (output.trim()) {
+        printToTerminal(output, 'error');
+      }
+    }
+    
+    if (data.currentDir) {
+      currentDirectory = data.currentDir;
+      updatePrompt();
+    }
+  } catch (error) {
+    printToTerminal(`Error: ${error.message}`, 'error');
+  }
+}
+
+async function runSyncCommand(commandLine) {
+  try {
+    const response = await fetch('/post-handler.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'terminal',
+        command: commandLine,
+        currentDir: currentDirectory,
+        sync: true
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (data.error) {
+      printToTerminal(data.error, 'error');
+    } else if (data.output) {
+      printToTerminal(decodeBase64UTF8(data.output));
+    }
+  } catch (error) {
+    printToTerminal(`Error: ${error.message}`, 'error');
   }
 }
 
@@ -658,7 +727,8 @@ async function handleTabCompletion() {
       body: JSON.stringify({
         action: 'terminal',
         command: 'ls -la',
-        currentDir: currentDirectory
+        currentDir: currentDirectory,
+        sync: true
       })
     });
     
