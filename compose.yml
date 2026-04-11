@@ -49,6 +49,7 @@ services:
     networks:
       - app_network
 
+  # https://github.com/wayubi/video-dedup/
   video-dedup:
     build:
       context: ./video-dedup
