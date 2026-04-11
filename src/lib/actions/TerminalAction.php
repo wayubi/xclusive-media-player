@@ -106,7 +106,7 @@ class TerminalAction extends ActionHandler
         $scriptsDir = __DIR__ . '/../../scripts';
 
         if ($sync) {
-            $fullCommand = "cd " . escapeshellarg($fsDir) . " && export PATH=" . escapeshellarg($scriptsDir) . ":\$PATH && " . $commandLine . " 2>&1";
+            $fullCommand = "cd " . escapeshellarg($fsDir) . " && export PATH=" . escapeshellarg($scriptsDir) . ":\$PATH && export CURRENT_DIR=" . escapeshellarg($currentDir) . " && " . $commandLine . " 2>&1";
             $output = shell_exec($fullCommand) ?? '';
 
             $this->json([
@@ -116,7 +116,7 @@ class TerminalAction extends ActionHandler
         }
         
 // All commands go through background job streaming
-        $jobId = $this->startBackgroundJob($commandLine, $fsDir, $scriptsDir);
+        $jobId = $this->startBackgroundJob($commandLine, $fsDir, $scriptsDir, $currentDir);
         
         $webDir = '/volumes' . ($relativePath ? '/' . $relativePath : '');
         
@@ -127,7 +127,7 @@ class TerminalAction extends ActionHandler
         ]);
     }
 
-    private function startBackgroundJob(string $command, string $fsDir, string $scriptsDir): string
+    private function startBackgroundJob(string $command, string $fsDir, string $scriptsDir, string $currentDir = ''): string
     {
         // Use timestamp + microtime as job ID for natural sorting and uniqueness
         $jobId = time() . '_' . substr(str_replace('.', '', microtime(true)), -6);
@@ -145,7 +145,7 @@ class TerminalAction extends ActionHandler
         $outputFileEscaped = escapeshellarg($outputFile);
         $doneFileEscaped = escapeshellarg($doneFile);
         
-        $fullCommand = "cd " . escapeshellarg($fsDir) . " && export PATH=" . escapeshellarg($scriptsDir) . ":\$PATH && echo 'Command: " . $command . "' > " . $outputFileEscaped . " && echo '' >> " . $outputFileEscaped . " && (" . $command . " 2>&1 | tee -a " . $outputFileEscaped . "; echo \${PIPESTATUS[0]} > " . $doneFileEscaped . ")";
+        $fullCommand = "cd " . escapeshellarg($fsDir) . " && export PATH=" . escapeshellarg($scriptsDir) . ":\$PATH && export CURRENT_DIR=" . escapeshellarg($currentDir) . " && echo 'Command: " . $command . "' > " . $outputFileEscaped . " && echo '' >> " . $outputFileEscaped . " && (" . $command . " 2>&1 | tee -a " . $outputFileEscaped . "; echo \${PIPESTATUS[0]} > " . $doneFileEscaped . ")";
         
         // Run in background with nohup
         $bgCommand = "nohup bash -c " . escapeshellarg($fullCommand) . " > /dev/null 2>&1 &";
