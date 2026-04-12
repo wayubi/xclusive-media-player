@@ -170,8 +170,7 @@ function renderSingleFolderSelect(array $selected_parts, string $current_abs_pat
     $current_folder_name = $current_icon . ' ' . ($is_root ? 'Root' : basename($current_abs_path)) . ' (' . $current_file_count . ')';
     ?>
     <select name="goto_folder" id="folder-select" class="folder-select-mobile"
-            onchange="this.form.submit()"
-            autofocus>
+            onchange="this.form.submit()">
         <option value="" disabled selected>
             <?= $current_folder_name ?><?= $has_children ? ' ▾' : '' ?>
         </option>
