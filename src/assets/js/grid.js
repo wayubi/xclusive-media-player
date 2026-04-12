@@ -234,9 +234,26 @@ function startPrioritizedLoading(grid, visibleFiles) {
 function loadMediaElement(element, isPriority = false) {
   if (!element.dataset.src) return;
 
-  element.src = element.dataset.src;
-  delete element.dataset.src;
-  element.load();
+  const file = element.dataset.src;
+
+  fetch(file, { method: 'HEAD' })
+    .then(response => {
+      if (!response.ok) {
+        element.dataset.error = 'true';
+        return;
+      }
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('text/html') || contentType.includes('application/octet-stream')) {
+        element.dataset.error = 'true';
+        return;
+      }
+      element.src = file;
+      delete element.dataset.src;
+      element.load();
+    })
+    .catch(() => {
+      element.dataset.error = 'true';
+    });
 
   if (element.tagName === 'VIDEO') {
     element.addEventListener('loadedmetadata', () => {

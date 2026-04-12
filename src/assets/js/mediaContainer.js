@@ -257,6 +257,9 @@ export function loadTextContent(wrapper) {
       return response.text();
     })
     .then(text => {
+      if (text.startsWith('<!DOCTYPE') || text.startsWith('<html')) {
+        throw new Error('Not a text file');
+      }
       // Clear placeholder
       wrapper.innerHTML = '';
 
