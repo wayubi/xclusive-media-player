@@ -272,26 +272,52 @@ export function loadTextContent(wrapper) {
 }
 
 /**
- * Show text file in fullscreen
+ * Show text file in fullscreen with editing support
  */
 export function showTextFullscreen(file) {
   const container = document.createElement('div');
   container.className = 'text-fullscreen-container';
 
-  // Close button
+  const fileName = decodeURIComponent(file.split('/').pop());
+
   const closeBtn = document.createElement('button');
   closeBtn.className = 'text-fullscreen-close';
   closeBtn.innerHTML = '✕';
-  closeBtn.onclick = () => container.remove();
+  closeBtn.onclick = () => {
+    if (hasChanges) {
+      if (confirm('Discard unsaved changes?')) {
+        container.remove();
+        document.removeEventListener('keydown', keyHandler);
+      }
+    } else {
+      container.remove();
+      document.removeEventListener('keydown', keyHandler);
+    }
+  };
   container.appendChild(closeBtn);
 
-  // Title
   const title = document.createElement('div');
   title.className = 'text-fullscreen-title';
-  title.textContent = decodeURIComponent(file.split('/').pop());
+  title.textContent = fileName;
   container.appendChild(title);
 
-  // Content area
+  const actionButtons = document.createElement('div');
+  actionButtons.className = 'text-fullscreen-actions';
+
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'text-action-save';
+  saveBtn.textContent = '💾 Save';
+  saveBtn.disabled = true;
+  actionButtons.appendChild(saveBtn);
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'text-action-cancel';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.disabled = true;
+  actionButtons.appendChild(cancelBtn);
+
+  container.appendChild(actionButtons);
+
   const contentArea = document.createElement('div');
   contentArea.className = 'text-fullscreen-content';
   contentArea.innerHTML = '<div class="text-loading">Loading...</div>';
@@ -299,39 +325,132 @@ export function showTextFullscreen(file) {
 
   document.body.appendChild(container);
 
-  // Load content
+  let originalContent = '';
+  let hasChanges = false;
+
+  const setEditable = (text) => {
+    originalContent = text;
+    contentArea.innerHTML = '';
+
+    const textarea = document.createElement('textarea');
+    textarea.className = 'text-editor';
+    textarea.value = text;
+    textarea.spellcheck = false;
+
+    const markChanged = () => {
+      hasChanges = textarea.value !== originalContent;
+      saveBtn.disabled = !hasChanges;
+      cancelBtn.disabled = !hasChanges;
+    };
+
+    textarea.addEventListener('input', markChanged);
+    contentArea.appendChild(textarea);
+
+    saveBtn.disabled = true;
+    cancelBtn.disabled = true;
+    textarea.focus();
+  };
+
+  const saveFile = async () => {
+    const textarea = contentArea.querySelector('textarea');
+    if (!textarea) return;
+
+    const newContent = textarea.value;
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+
+    try {
+      const response = await fetch('/post-handler.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'edit_text',
+          file: file,
+          content: newContent
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.status === 'success') {
+        originalContent = newContent;
+        hasChanges = false;
+        saveBtn.textContent = '💾 Saved!';
+        saveBtn.disabled = true;
+        cancelBtn.disabled = true;
+
+        setTimeout(() => {
+          saveBtn.textContent = '💾 Save';
+          container.remove();
+        }, 800);
+      } else {
+        saveBtn.textContent = '💾 Save';
+        saveBtn.disabled = false;
+        alert('Failed to save: ' + (result.error || 'Unknown error'));
+      }
+    } catch (err) {
+      saveBtn.textContent = '💾 Save';
+      saveBtn.disabled = false;
+      alert('Error saving file: ' + err.message);
+    }
+  };
+
+  const discardChanges = () => {
+    const textarea = contentArea.querySelector('textarea');
+    if (textarea) {
+      textarea.value = originalContent;
+      hasChanges = false;
+      saveBtn.disabled = true;
+      cancelBtn.disabled = true;
+    }
+  };
+
+  saveBtn.addEventListener('click', saveFile);
+  cancelBtn.addEventListener('click', discardChanges);
+
   fetch(file)
     .then(response => {
       if (!response.ok) throw new Error('Failed to load');
       return response.text();
     })
-    .then(text => {
-      const pre = document.createElement('pre');
-      pre.textContent = text;
-      contentArea.innerHTML = '';
-      contentArea.appendChild(pre);
-    })
+    .then(text => setEditable(text))
     .catch(() => {
       contentArea.innerHTML = '<div class="text-loading" style="color: #ff6666;">Error loading file</div>';
     });
 
-  // Close on Escape key
   const keyHandler = (e) => {
-    // Don't process if terminal is active
     if (isTerminalActive()) return;
-    
-    if (e.key === 'Escape') {
+
+    if (e.key === 'Escape' && hasChanges) {
+      if (confirm('Discard unsaved changes?')) {
+        container.remove();
+        document.removeEventListener('keydown', keyHandler);
+      }
+    } else if (e.key === 'Escape') {
       container.remove();
       document.removeEventListener('keydown', keyHandler);
+    }
+
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault();
+      if (!saveBtn.disabled) {
+        saveFile();
+      }
     }
   };
   document.addEventListener('keydown', keyHandler);
 
-  // Close on click outside content
   container.addEventListener('click', (e) => {
     if (e.target === container) {
-      container.remove();
-      document.removeEventListener('keydown', keyHandler);
+      if (hasChanges) {
+        if (confirm('Discard unsaved changes?')) {
+          container.remove();
+          document.removeEventListener('keydown', keyHandler);
+        }
+      } else {
+        container.remove();
+        document.removeEventListener('keydown', keyHandler);
+      }
     }
   });
 }

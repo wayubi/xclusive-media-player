@@ -13,6 +13,7 @@ require_once __DIR__ . '/lib/actions/AuditStatusAction.php';
 require_once __DIR__ . '/lib/actions/FavoritesAction.php';
 require_once __DIR__ . '/lib/actions/ShareAction.php';
 require_once __DIR__ . '/lib/actions/TerminalAction.php';
+require_once __DIR__ . '/lib/actions/EditTextAction.php';
 
 header('Content-Type: application/json');
 
@@ -55,6 +56,7 @@ $actionMap = [
     'get_favorites_count' => FavoritesAction::class,
     'share' => ShareAction::class,
     'terminal' => TerminalAction::class,
+    'edit_text' => EditTextAction::class,
 ];
 
 if (!isset($actionMap[$action])) {

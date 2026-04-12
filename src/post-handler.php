@@ -84,6 +84,19 @@ switch ($data['action']) {
         ];
         break;
 
+    case 'edit_text':
+        if (empty($data['file']) || $data['content'] === null) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Missing file or content']);
+            exit;
+        }
+        $payload = [
+            'action' => 'edit_text',
+            'file' => $data['file'],
+            'content' => $data['content'],
+        ];
+        break;
+
     default:
         http_response_code(400);
         echo json_encode(['error' => 'Unknown action']);
