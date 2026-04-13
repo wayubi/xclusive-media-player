@@ -5,6 +5,9 @@ RUN apt-get update && \
     apt-get install -y ffmpeg cron util-linux xxhash xxd docker-cli && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Enable pcntl for parallel processing in refresh_metadata
+RUN docker-php-ext-install pcntl || true
+
 # Create log file for cron
 RUN touch /var/log/cron.log
 
