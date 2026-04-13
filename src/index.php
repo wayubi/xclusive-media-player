@@ -474,6 +474,19 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
             </div>
         </div>
 
+        <!-- Path browser overlay -->
+        <div id="path-overlay" style="display:none;">
+            <div class="search-container">
+                <span id="path-display" class="path-display">/volumes</span>
+                <input type="text" 
+                       id="path-input" 
+                       placeholder="Type path (e.g., /volumes/folder1) and press Enter" 
+                       autocomplete="off" 
+                       spellcheck="false" />
+                <button id="path-go" title="Go to path">⇨</button>
+            </div>
+        </div>
+
         <!-- App bootstrap data -->
         <script>
             window.APP = {

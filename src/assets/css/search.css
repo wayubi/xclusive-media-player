@@ -91,3 +91,84 @@
   background: rgba(168, 85, 247, 0.15);
   transform: translateY(-50%) scale(1.1);
 }
+
+#path-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 10, 15, 0.96);
+  backdrop-filter: blur(24px) saturate(150%);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10000;
+  animation: fadeIn 0.3s ease;
+}
+
+.path-display {
+  position: absolute;
+  top: -48px;
+  left: 28px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-family: monospace;
+  background: rgba(25, 25, 35, 0.8);
+  padding: 8px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+#path-input {
+  width: 100%;
+  padding: 24px 80px 24px 28px;
+  font-size: 1.5rem;
+  background: rgba(25, 25, 35, 0.8);
+  backdrop-filter: blur(16px);
+  border: 2px solid var(--border);
+  border-radius: 24px;
+  color: white;
+  outline: none;
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: all 0.3s ease;
+  font-weight: 500;
+}
+
+#path-input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+#path-input:focus {
+  border-color: var(--accent);
+  box-shadow: 
+    0 0 0 4px rgba(168, 85, 247, 0.2),
+    0 12px 48px rgba(168, 85, 247, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  background: rgba(30, 30, 45, 0.9);
+}
+
+#path-go {
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 1.8rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+#path-go:hover {
+  color: var(--accent-glow);
+  background: rgba(168, 85, 247, 0.15);
+  transform: translateY(-50%) scale(1.1);
+}
