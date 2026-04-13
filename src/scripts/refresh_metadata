@@ -5,406 +5,344 @@ require_once __DIR__ . '/../lib/MetadataExtractor.php';
 require_once __DIR__ . '/../lib/MetadataDatabase.php';
 require_once __DIR__ . '/../lib/AuditDatabase.php';
 
-// Detect available CPU cores
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
 function detect_cores(): int {
     if (function_exists('os_proc_cpu_count')) {
-        $count = os_proc_cpu_count();
-        if ($count > 0) return $count;
+        $n = os_proc_cpu_count();
+        if ($n > 0) return $n;
     }
-    
-    $result = @shell_exec('nproc');
-    if ($result && is_numeric(trim($result))) {
-        return (int)trim($result);
+    foreach (['nproc', 'grep -c ^processor /proc/cpuinfo'] as $cmd) {
+        $r = @shell_exec($cmd);
+        if ($r && is_numeric(trim($r))) return (int)trim($r);
     }
-    
-    $result = @shell_exec('grep -c ^processor /proc/cpuinfo');
-    if ($result && is_numeric(trim($result))) {
-        return (int)trim($result);
-    }
-    
     return 4;
 }
 
-// Process a chunk of files (used by workers)
-function process_chunk(array $files, int $workerId, bool $dryRun, bool $checkXxhash, bool $force, bool $showProgress): array {
+function run_sequential(array &$files, bool $dryRun, bool $checkXxhash, bool $force, bool $showProgress): array {
     global $root;
-    
-    $metaDb = new MetadataDatabase();
-    $total = count($files);
-    $refreshed = 0;
-    $skipped = 0;
-    $failed = 0;
-    $errors = [];
-    
+    $total     = count($files);
+    $metaDb    = new MetadataDatabase();
+    $refreshed = $skipped = $failed = 0;
+    $errors    = [];
+
     foreach ($files as $i => $fsPath) {
+        $num      = $i + 1;
         $filename = basename($fsPath);
-        
+
         if ($showProgress) {
-            $pct = round((($i + 1) / $total) * 100);
+            $pct    = round(($num / $total) * 100);
             $filled = (int)($pct / 5);
-            $bar = str_repeat('█', $filled) . str_repeat('░', 20 - $filled);
-            echo "\r[Worker " . ($workerId + 1) . "] [$bar] $pct% ";
-            flush();
+            $bar    = str_repeat('█', $filled) . str_repeat('░', 20 - $filled);
+            echo "\r[$bar] $pct% ";
         }
-        
-        $webPath = '/volumes' . str_replace($root, '', $fsPath);
+
+        $webPath      = '/volumes' . str_replace($root, '', $fsPath);
         $needsRefresh = false;
-        $reason = '';
-        
+        $reason       = '';
+
         if ($force) {
             $needsRefresh = true;
-            $reason = 'force';
+            $reason       = 'force';
         } else {
             $metadata = $metaDb->getMetadata($webPath, $fsPath);
-            
             if (!$metadata) {
                 $needsRefresh = true;
-                $reason = 'missing';
+                $reason       = 'missing';
             } elseif ($checkXxhash) {
                 $dbXxhash = $metadata['xxhash'] ?? null;
-                if ($dbXxhash) {
-                    $currentOutput = @shell_exec('xxhsum ' . escapeshellarg($fsPath) . ' 2>/dev/null');
-                    $currentXxhash = $currentOutput ? explode(' ', trim($currentOutput))[0] ?? null : null;
-                    if ($currentXxhash !== $dbXxhash) {
-                        $needsRefresh = true;
-                        $reason = 'xxhash mismatch';
-                    }
-                } else {
+                if (!$dbXxhash) {
                     $needsRefresh = true;
-                    $reason = 'xxhash missing';
+                    $reason       = 'xxhash missing';
+                } else {
+                    $out         = @shell_exec('xxhsum ' . escapeshellarg($fsPath) . ' 2>/dev/null');
+                    $currentHash = $out ? explode(' ', trim($out))[0] : null;
+                    if ($currentHash !== $dbXxhash) {
+                        $needsRefresh = true;
+                        $reason       = 'xxhash mismatch';
+                    }
                 }
             }
-            
-            if (!$needsRefresh) {
-                $skipped++;
-                continue;
-            }
         }
-        
+
+        if (!$needsRefresh) {
+            $skipped++;
+            continue;
+        }
+
         if ($dryRun) {
-            echo "[Worker " . ($workerId + 1) . "] $filename - Would refresh ($reason)\n";
+            echo "[$num/$total] $filename - Would refresh ($reason) [DRY RUN]\n";
             $refreshed++;
             continue;
         }
-        
+
         try {
             $metaDb->deleteMetadata($fsPath);
             $output = MetadataExtractor::extract($fsPath);
             $metaDb->saveMetadata($webPath, $fsPath, $output);
+            $type  = MetadataExtractor::isTextFile($fsPath) ? 'text' : 'media';
+            echo "[$num/$total] $filename - Refreshed ($type)\n";
             $refreshed++;
         } catch (Exception $e) {
             $failed++;
             $errors[] = "$filename: " . $e->getMessage();
-            echo "[Worker " . ($workerId + 1) . "] $filename - Failed: " . $e->getMessage() . "\n";
+            echo "[$num/$total] $filename - Failed\n";
         }
     }
-    
-    if ($showProgress) {
-        echo "\n";
-    }
-    
-    echo "[Worker " . ($workerId + 1) . "] Done: $refreshed refreshed, $skipped skipped, $failed failed\n";
-    
-    return [
-        'refreshed' => $refreshed,
-        'skipped' => $skipped,
-        'failed' => $failed,
-        'errors' => $errors
-    ];
+
+    if ($showProgress) echo "\n";
+
+    return ['refreshed' => $refreshed, 'skipped' => $skipped, 'failed' => $failed, 'errors' => $errors];
 }
 
-// Run parallel workers using PULL-BASED in-memory architecture
-// Workers inherit $files from parent via fork() - no tmp file needed for 67K entries
-// Only use small counter file for atomic index
-function run_parallel(array $files, int $numJobs, bool $dryRun, bool $checkXxhash, bool $force, bool $showProgress): void {
+function run_parallel(array &$files, int $numJobs, bool $dryRun, bool $checkXxhash, bool $force, bool $showProgress): void {
     global $root;
-    
     $totalFiles = count($files);
-    
-    echo "Starting $numJobs parallel workers for $totalFiles files (in-memory pull)...\n\n";
-    
+
     if (!function_exists('pcntl_fork')) {
         echo "pcntl not available, running sequentially...\n";
-        process_chunk($files, 0, $dryRun, $checkXxhash, $force, $showProgress);
+        run_sequential($files, $dryRun, $checkXxhash, $force, $showProgress);
         return;
     }
-    
-    // Only need small counter file (atomic index)
-    $counterFile = '/tmp/refresh_counter.txt';
+
+    echo "Starting $numJobs parallel workers for $totalFiles files...\n\n";
+
+    shuffle($files);
+
+    // Counter file lives in tmpfs (in-memory on most Linux systems).
+    // Namespaced by PID to allow concurrent script invocations without collision.
+    $counterFile = '/tmp/refresh_counter_' . getmypid() . '.txt';
     file_put_contents($counterFile, '0');
-    
-    echo "Counter initialized, spawning $numJobs workers...\n\n";
-    
-    $pids = [];
+
+    // Grab this many indices per lock acquisition to reduce flock contention.
+    $batchSize = 50;
+
+    $pids      = [];
     $startTime = time();
-    
-    // Fork workers - they inherit $files from parent memory automatically
+
     for ($i = 0; $i < $numJobs; $i++) {
+        // Stream socket pair: zero disk I/O, kernel-buffered, used to return
+        // per-worker results to the parent without any tmp files.
+        $sockPair = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
+
         $pid = pcntl_fork();
-        
-        if ($pid == -1) {
-            echo "Fork failed for worker $i, skipping...\n";
-        } elseif ($pid == 0) {
-            // Child: pull-based worker using inherited $files array
+        if ($pid === -1) {
+            echo "Fork failed for worker $i\n";
+            fclose($sockPair[0]);
+            fclose($sockPair[1]);
+            continue;
+        }
+
+        if ($pid === 0) {
+            // ----- Child worker -----
+            fclose($sockPair[0]); // close parent-side socket
+
+            // One DB connection per worker, not per file.
+            $metaDb          = new MetadataDatabase();
             $workerRefreshed = 0;
-            $workerSkipped = 0;
-            $workerFailed = 0;
-            
-            // $files is automatically available from parent (fork copies memory)
-            $totalToProcess = count($files);
-            
+            $workerSkipped   = 0;
+            $workerFailed    = 0;
+
             while (true) {
-                // Atomic increment to get next file index
-                $idxFp = fopen($counterFile, 'c+');
-                if (!$idxFp) {
-                    echo "Worker $i: ERROR - could not open counter\n";
+                // Atomically grab the next batch of file indices.
+                $fp = fopen($counterFile, 'c+');
+                flock($fp, LOCK_EX);
+                $index = (int)fgets($fp);
+                if ($index >= $totalFiles) {
+                    flock($fp, LOCK_UN);
+                    fclose($fp);
                     break;
                 }
-                
-                if (!flock($idxFp, LOCK_EX | LOCK_NB)) {
-                    fclose($idxFp);
-                    usleep(1000);
-                    continue;
-                }
-                
-                $index = (int)trim(fgets($idxFp));
-                if ($index >= $totalToProcess) {
-                    flock($idxFp, LOCK_UN);
-                    fclose($idxFp);
-                    break;  // No more files
-                }
-                
-                // Increment for next worker
-                ftruncate($idxFp, 0);
-                rewind($idxFp);
-                fwrite($idxFp, ($index + 1));
-                flock($idxFp, LOCK_UN);
-                fclose($idxFp);
-                
-                // Process this file - $files array is already in memory!
-                $fsPath = $files[$index];
-                $filename = basename($fsPath);
-                
-                if ($showProgress && $index % 1000 === 0) {
-                    $pct = round(($index / $totalToProcess) * 100);
-                    echo "[$i] progress: $pct% ($index/$totalToProcess)\n";
-                }
-                
-                // Process this single file
-                $metaDb = new MetadataDatabase();
-                $webPath = '/volumes' . str_replace($root, '', $fsPath);
-                $needsRefresh = false;
-                
-                if ($force) {
-                    $needsRefresh = true;
-                } else {
-                    $metadata = $metaDb->getMetadata($webPath, $fsPath);
-                    if (!$metadata) {
+                $batchEnd = min($index + $batchSize, $totalFiles);
+                ftruncate($fp, 0);
+                rewind($fp);
+                fwrite($fp, $batchEnd);
+                flock($fp, LOCK_UN);
+                fclose($fp);
+
+                for ($j = $index; $j < $batchEnd; $j++) {
+                    $fsPath  = $files[$j];
+                    $webPath = '/volumes' . str_replace($root, '', $fsPath);
+
+                    if ($force) {
                         $needsRefresh = true;
+                    } else {
+                        $metadata     = $metaDb->getMetadata($webPath, $fsPath);
+                        $needsRefresh = !$metadata;
+
+                        if (!$needsRefresh && $checkXxhash) {
+                            $dbXxhash = $metadata['xxhash'] ?? null;
+                            if (!$dbXxhash) {
+                                $needsRefresh = true;
+                            } else {
+                                $out          = @shell_exec('xxhsum ' . escapeshellarg($fsPath) . ' 2>/dev/null');
+                                $currentHash  = $out ? explode(' ', trim($out))[0] : null;
+                                $needsRefresh = ($currentHash !== $dbXxhash);
+                            }
+                        }
                     }
-                }
-                
-                if ($needsRefresh) {
-                    if (!$dryRun) {
-                        try {
-                            $metaDb->deleteMetadata($fsPath);
-                            $output = MetadataExtractor::extract($fsPath);
-                            $metaDb->saveMetadata($webPath, $fsPath, $output);
+
+                    if ($needsRefresh) {
+                        if ($dryRun) {
                             $workerRefreshed++;
-                        } catch (Exception $e) {
-                            $workerFailed++;
+                        } else {
+                            try {
+                                $metaDb->deleteMetadata($fsPath);
+                                $output = MetadataExtractor::extract($fsPath);
+                                $metaDb->saveMetadata($webPath, $fsPath, $output);
+                                $workerRefreshed++;
+                            } catch (Exception $e) {
+                                $workerFailed++;
+                            }
                         }
                     } else {
-                        $workerRefreshed++;
+                        $workerSkipped++;
                     }
-                } else {
-                    $workerSkipped++;
+                }
+
+                if ($showProgress) {
+                    $pct = round(($batchEnd / $totalFiles) * 100);
+                    echo "[$i] $pct% ($batchEnd/$totalFiles)\n";
                 }
             }
-            
+
             echo "[$i] Done: $workerRefreshed refreshed, $workerSkipped skipped, $workerFailed failed\n";
-            
-            // Write result
-            $resultFile = '/tmp/refresh_result_' . getmypid() . '.json';
-            file_put_contents($resultFile, json_encode([
-                'refreshed' => $workerRefreshed,
-                'skipped' => $workerSkipped,
-                'failed' => $workerFailed
-            ]));
-            
+
+            // Send results to parent over the socket (no tmp file).
+            fwrite($sockPair[1], json_encode(['r' => $workerRefreshed, 's' => $workerSkipped, 'f' => $workerFailed]) . "\n");
+            fclose($sockPair[1]);
             exit(0);
-        } else {
-            $pids[$pid] = $i;
         }
+
+        // ----- Parent -----
+        fclose($sockPair[1]); // close child-side socket
+        $pids[$pid] = $sockPair[0];
     }
-    
-    // Parent: wait for all children
+
     $totalRefreshed = 0;
-    $totalSkipped = 0;
-    $totalFailed = 0;
-    
-    foreach ($pids as $pid => $workerId) {
-        $status = 0;
+    $totalSkipped   = 0;
+    $totalFailed    = 0;
+
+    foreach ($pids as $pid => $sock) {
         pcntl_waitpid($pid, $status);
-        
-        $resultFile = '/tmp/refresh_result_' . $pid . '.json';
-        if (file_exists($resultFile)) {
-            $result = json_decode(file_get_contents($resultFile), true);
-            if ($result) {
-                $totalRefreshed += $result['refreshed'];
-                $totalSkipped += $result['skipped'];
-                $totalFailed += $result['failed'];
-            }
-            @unlink($resultFile);
+        $line = fgets($sock);
+        fclose($sock);
+        if ($line) {
+            $r = json_decode(trim($line), true) ?? [];
+            $totalRefreshed += $r['r'] ?? 0;
+            $totalSkipped   += $r['s'] ?? 0;
+            $totalFailed    += $r['f'] ?? 0;
         }
     }
-    
-// Cleanup counter file
+
     @unlink($counterFile);
-    
+
     $elapsed = time() - $startTime;
-    echo "\n[Summary] $numJobs workers completed in " . $elapsed . "s\n";
-    echo "         Total: $totalFiles files\n";
-    echo "         Refreshed: $totalRefreshed, Skipped: $totalSkipped, Failed: $totalFailed\n";
+    echo "\n[Summary] $numJobs workers | {$elapsed}s elapsed\n";
+    echo "         Total: $totalFiles | Refreshed: $totalRefreshed | Skipped: $totalSkipped | Failed: $totalFailed\n";
 }
 
-// Parse command line arguments
-$force = false;
-$all = false;
-$dryRun = false;
-$checkXxhash = false;
-$prune = false;
-$refresh = false;
-$showHelp = false;
-$singleFile = null;
+// ---------------------------------------------------------------------------
+// Argument parsing
+// ---------------------------------------------------------------------------
+
+$force          = false;
+$all            = false;
+$dryRun         = false;
+$checkXxhash    = false;
+$prune          = false;
+$refresh        = false;
+$showHelp       = false;
+$singleFile     = null;
 $includeAuditDb = false;
-$numJobs = null;
-$showProgress = false;
-$workerMode = false;
-$workerId = 0;
-$chunkFilePath = '';
+$numJobs        = null;
+$showProgress   = false;
 
 for ($i = 1; $i < count($argv); $i++) {
     $arg = $argv[$i];
-    
-    if (strpos($arg, '--') === 0) {
-        $opt = substr($arg, 2);
-        switch ($opt) {
-            case 'force':
-                $force = true;
-                break;
-            case 'all':
-                $all = true;
-                break;
-            case 'dry-run':
-                $dryRun = true;
-                break;
-            case 'xxhash':
-                $checkXxhash = true;
-                break;
-            case 'prune':
-                $prune = true;
-                break;
-            case 'refresh':
-                $refresh = true;
-                break;
-            case 'include-audit-db':
-                $includeAuditDb = true;
-                break;
-            case 'help':
-                $showHelp = true;
-                break;
+    if (str_starts_with($arg, '--')) {
+        switch (substr($arg, 2)) {
+            case 'force':            $force          = true; break;
+            case 'all':              $all            = true; break;
+            case 'dry-run':          $dryRun         = true; break;
+            case 'xxhash':           $checkXxhash    = true; break;
+            case 'prune':            $prune          = true; break;
+            case 'refresh':          $refresh        = true; break;
+            case 'include-audit-db': $includeAuditDb = true; break;
+            case 'progress':         $showProgress   = true; break;
+            case 'help':             $showHelp       = true; break;
             case 'jobs':
-                $nextArg = $argv[$i + 1] ?? 'auto';
-                $i++;
-                if ($nextArg === 'auto' || $nextArg === '') {
-                    $numJobs = 'auto';
-                } else {
-                    $numJobs = $nextArg;
-                }
-                if ($numJobs === 'auto') {
-                    $numJobs = (string)detect_cores();
-                }
-                break;
-            case 'progress':
-                $showProgress = true;
-                break;
-            case 'worker':
-                $workerMode = true;
-                $chunkFilePath = $argv[++$i] ?? '';
-                $workerId = (int)($argv[++$i] ?? 0);
-                break;
-            case 'dry-run':
-                $dryRun = true;
+                $next    = $argv[$i + 1] ?? '';
+                $numJobs = ($next === '' || $next === 'auto' || str_starts_with($next, '-'))
+                    ? detect_cores()
+                    : (int)$next;
+                if (!str_starts_with($next, '-') && $next !== '') $i++;
                 break;
         }
-    } elseif (strpos($arg, '-') === 0) {
+    } elseif (str_starts_with($arg, '-')) {
         $opts = substr($arg, 1);
         for ($j = 0; $j < strlen($opts); $j++) {
             switch ($opts[$j]) {
-                case 'f':
-                    $force = true;
-                    break;
-                case 'a':
-                    $all = true;
-                    break;
-                case 'h':
-                    $showHelp = true;
-                    break;
+                case 'f': $force       = true; break;
+                case 'a': $all         = true; break;
+                case 'h': $showHelp    = true; break;
                 case 'j':
-                    $numJobs = $argv[++$i] ?? 'auto';
+                    $next    = $argv[++$i] ?? 'auto';
+                    $numJobs = ($next === 'auto') ? detect_cores() : (int)$next;
                     break;
             }
         }
-    } elseif (!$workerMode) {
+    } else {
         $singleFile = $arg;
     }
 }
 
-// Handle worker mode
-if ($workerMode && $chunkFilePath) {
-    $files = json_decode(file_get_contents($chunkFilePath), true);
-    @unlink($chunkFilePath);
-    
-    $metaDb = new MetadataDatabase();
-    $root = realpath(__DIR__ . '/../volumes');
-    
-    $results = process_chunk($files, $workerId, $dryRun, $checkXxhash, $force, $showProgress);
-    exit(0);
+if ($numJobs === null) {
+    $numJobs = detect_cores();
 }
 
-// Show help
+// ---------------------------------------------------------------------------
+// Help
+// ---------------------------------------------------------------------------
+
 if ($showHelp) {
     echo <<<HELP
 refresh_metadata - Manage file metadata in the SQLite database
 
 Usage: refresh_metadata [file] [options]
-       refresh_metadata [options] --jobs N
 
 Options:
-  --force      Refresh all files, even if up to date
-  --all       Operate on all files under /volumes
-  --dry-run   Preview changes without modifying database
-  --xxhash    Verify file integrity using xxhash
-  --prune     Remove stale records (deleted files)
-  --include-audit-db  Also prune audit.db (with --prune)
-  --refresh   After pruning, continue with refresh
-  --jobs N    Run N parallel processes (default: auto-detect cores)
-  --progress  Show progress bars per worker
-  --help      Display this help message
+  --force              Refresh all files, even if up to date
+  --all                Operate on all files under /volumes
+  --dry-run            Preview changes without modifying database
+  --xxhash             Verify file integrity using xxhash
+  --prune              Remove stale records (deleted files)
+  --include-audit-db   Also prune audit.db (requires --prune)
+  --refresh            After pruning, continue with refresh
+  --jobs N|auto        Run N parallel processes (default: auto-detect cores)
+  --progress           Show progress per worker
+  --help               Display this help message
+
+Short options: -f (force), -a (all), -h (help), -j N (jobs)
 
 Examples:
-  refresh_metadata --all                    Refresh all files (auto-detect cores)
-  refresh_metadata --all --jobs 8             Refresh with 8 workers
+  refresh_metadata --all                     Refresh all files
+  refresh_metadata --all --jobs 8            Refresh with 8 workers
   refresh_metadata --all --jobs auto         Auto-detect CPU cores
-  refresh_metadata --all --jobs 28 --progress 28 workers with progress
+  refresh_metadata --all --progress          Show progress per worker
   refresh_metadata video.mp4 --force         Refresh single file
+  refresh_metadata --prune --all             Remove stale records
 
 HELP;
     exit(0);
 }
 
-// Validate options
+// ---------------------------------------------------------------------------
+// Validation
+// ---------------------------------------------------------------------------
+
 if ($includeAuditDb && !$prune) {
     fprintf(STDERR, "Error: --include-audit-db requires --prune\n");
     exit(1);
@@ -418,186 +356,160 @@ if ($singleFile !== null) {
     $singleFile = realpath($singleFile);
 }
 
-$root = realpath(__DIR__ . '/../volumes');
+$root      = realpath(__DIR__ . '/../volumes');
 $targetDir = $all ? $root : getcwd();
 
-// Determine number of jobs
-if ($numJobs === null || $numJobs === 'auto') {
-    $numJobs = detect_cores();
-} else {
-    $numJobs = (int)$numJobs;
-}
+// ---------------------------------------------------------------------------
+// Prune mode
+// ---------------------------------------------------------------------------
 
-// Prune mode (unchanged)
 if ($prune) {
     echo "Pruning stale database records...\n";
-    $metaDb = new MetadataDatabase();
-    $pruned = 0;
+    $metaDb  = new MetadataDatabase();
+    $pruned  = 0;
     $checked = 0;
-    
+
     $stmt = $metaDb->query('SELECT id, file_path, xxhash FROM files');
-    
+
     while ($row = $stmt->fetchArray(SQLITE3_ASSOC)) {
         $dbFilePath = $row['file_path'];
-        $filename = basename($dbFilePath);
-        
-        $inScope = false;
-        if ($singleFile) {
-            $inScope = ($dbFilePath === $singleFile);
-        } elseif ($all) {
-            $inScope = (strpos($dbFilePath, $root . '/') === 0);
-        } else {
-            $inScope = (dirname($dbFilePath) === $targetDir);
-        }
-        if (!$inScope) { continue; }
-        
+
+        $inScope = $singleFile
+            ? ($dbFilePath === $singleFile)
+            : ($all
+                ? str_starts_with($dbFilePath, $root . '/')
+                : (dirname($dbFilePath) === $targetDir));
+
+        if (!$inScope) continue;
+
         $checked++;
         $shouldPrune = false;
-        $reason = '';
-        
+        $reason      = '';
+
         if (!is_file($dbFilePath)) {
             $shouldPrune = true;
-            $reason = 'not-a-file';
-        } elseif (!$shouldPrune) {
-            $parts = explode('/', $dbFilePath);
-            foreach ($parts as $part) {
-                if (strlen($part) > 0 && $part[0] === '.') {
+            $reason      = 'not-a-file';
+        } else {
+            foreach (explode('/', $dbFilePath) as $part) {
+                if ($part !== '' && $part[0] === '.') {
                     $shouldPrune = true;
-                    $reason = 'hidden';
+                    $reason      = 'hidden';
                     break;
                 }
             }
         }
-        
+
         if (!$shouldPrune) {
             if ($force) {
                 $shouldPrune = true;
-                $reason = 'force';
-            } elseif (!file_exists($dbFilePath)) {
-                $shouldPrune = true;
-                $reason = 'missing';
+                $reason      = 'force';
             } elseif ($checkXxhash) {
                 $dbXxhash = $row['xxhash'] ?? null;
-                if ($dbXxhash) {
-                    $currentOutput = @shell_exec('xxhsum ' . escapeshellarg($dbFilePath) . ' 2>/dev/null');
-                    $currentXxhash = $currentOutput ? explode(' ', trim($currentOutput))[0] ?? null : null;
-                    if ($currentXxhash !== $dbXxhash) {
-                        $shouldPrune = true;
-                        $reason = 'xxhash mismatch';
-                    }
-                } else {
+                if (!$dbXxhash) {
                     $shouldPrune = true;
-                    $reason = 'xxhash missing';
-                }
-            }
-        }
-        
-        if ($shouldPrune) {
-            if ($dryRun) {
-                echo "[$checked] $filename - Would prune ($reason) [DRY RUN]\n";
-                $pruned++;
-            } else {
-                try {
-                    $metaDb->deleteMetadata($dbFilePath);
-                    if ($includeAuditDb) {
-                        $auditDb = new AuditDatabase();
-                        $auditDb->deleteFile($dbFilePath);
+                    $reason      = 'xxhash missing';
+                } else {
+                    $out         = @shell_exec('xxhsum ' . escapeshellarg($dbFilePath) . ' 2>/dev/null');
+                    $currentHash = $out ? explode(' ', trim($out))[0] : null;
+                    if ($currentHash !== $dbXxhash) {
+                        $shouldPrune = true;
+                        $reason      = 'xxhash mismatch';
                     }
-                    echo "[$checked] $filename - Pruned ($reason)\n";
-                    $pruned++;
-                } catch (Exception $e) {
-                    echo "[$checked] $filename - Failed: " . $e->getMessage() . "\n";
                 }
             }
         }
+
+        if (!$shouldPrune) continue;
+
+        $filename = basename($dbFilePath);
+
+        if ($dryRun) {
+            echo "[$checked] $filename - Would prune ($reason) [DRY RUN]\n";
+            $pruned++;
+        } else {
+            try {
+                $metaDb->deleteMetadata($dbFilePath);
+                if ($includeAuditDb) {
+                    (new AuditDatabase())->deleteFile($dbFilePath);
+                }
+                echo "[$checked] $filename - Pruned ($reason)\n";
+                $pruned++;
+            } catch (Exception $e) {
+                echo "[$checked] $filename - Failed: " . $e->getMessage() . "\n";
+            }
+        }
     }
-    
+
     echo "\n";
-    if ($dryRun) {
-        echo "Dry run: Would prune $pruned of $checked records.\n";
-    } else {
-        echo "Pruned $pruned of $checked records.\n";
-    }
-    
+    echo $dryRun
+        ? "Dry run: Would prune $pruned of $checked records.\n"
+        : "Pruned $pruned of $checked records.\n";
+
     if ($includeAuditDb && !$dryRun) {
         echo "\nPruning orphan audit records...\n";
-        
-        $auditDb = new AuditDatabase();
-        $metaDbForOrphanCheck = new MetadataDatabase();
+
+        $auditDb      = new AuditDatabase();
+        $metaDbCheck  = new MetadataDatabase();
         $orphanPruned = 0;
-        
+
         $metadataPaths = [];
-        $metaStmt = $metaDbForOrphanCheck->getDb()->query('SELECT file_path FROM files');
-        while ($metaRow = $metaStmt->fetchArray(SQLITE3_ASSOC)) {
-            $metadataPaths[$metaRow['file_path']] = true;
+        $metaStmt = $metaDbCheck->getDb()->query('SELECT file_path FROM files');
+        while ($r = $metaStmt->fetchArray(SQLITE3_ASSOC)) {
+            $metadataPaths[$r['file_path']] = true;
         }
-        
+
         $auditStmt = $auditDb->getDb()->query('SELECT file_path FROM files');
-        
         while ($row = $auditStmt->fetchArray(SQLITE3_ASSOC)) {
             $dbFilePath = $row['file_path'];
-            
-            if (isset($metadataPaths[$dbFilePath])) {
-                continue;
-            }
-            
-            $inScope = false;
-            if ($singleFile) {
-                $inScope = ($dbFilePath === $singleFile);
-            } elseif ($all) {
-                $inScope = (strpos($dbFilePath, $root . '/') === 0);
-            } else {
-                $inScope = (dirname($dbFilePath) === $targetDir);
-            }
-            
+            if (isset($metadataPaths[$dbFilePath])) continue;
+
+            $inScope = $singleFile
+                ? ($dbFilePath === $singleFile)
+                : ($all
+                    ? str_starts_with($dbFilePath, $root . '/')
+                    : (dirname($dbFilePath) === $targetDir));
+
             if ($inScope) {
                 $auditDb->deleteFile($dbFilePath);
                 $orphanPruned++;
             }
         }
-        
+
         echo "Orphan audit records pruned: $orphanPruned\n";
     }
-    
-    if (!$refresh) {
-        exit(0);
-    }
+
+    if (!$refresh) exit(0);
     echo "\n";
 }
 
-// Scan files
+// ---------------------------------------------------------------------------
+// File scanning
+// ---------------------------------------------------------------------------
+
 if ($singleFile) {
     $files = [$singleFile];
     echo "Processing single file: " . basename($singleFile) . "\n\n";
 } else {
-    echo "Scanning all files under /volumes...\n";
-    
+    echo "Scanning files...\n";
     $files = [];
+
     if ($all) {
         $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($targetDir, RecursiveDirectoryIterator::SKIP_DOTS),
-            RecursiveIteratorIterator::SELF_FIRST
+            new RecursiveDirectoryIterator($targetDir, RecursiveDirectoryIterator::SKIP_DOTS)
         );
         foreach ($iterator as $file) {
-            if ($file->isFile()) {
-                $path = $file->getPathname();
-                $parts = explode('/', $path);
-                $shouldSkip = false;
-                foreach ($parts as $part) {
-                    if (strlen($part) > 0 && $part[0] === '.') {
-                        $shouldSkip = true;
-                        break;
-                    }
-                }
-                if (!$shouldSkip) {
-                    $files[] = $path;
-                }
+            if (!$file->isFile()) continue;
+            $parts = explode('/', $file->getPathname());
+            $skip  = false;
+            foreach ($parts as $part) {
+                if ($part !== '' && $part[0] === '.') { $skip = true; break; }
             }
+            if (!$skip) $files[] = $file->getPathname();
         }
     } else {
         foreach (scandir($targetDir) as $f) {
-            if ($f !== '.' && $f !== '..' && $f[0] !== '.' && is_file($targetDir . '/' . $f)) {
-                $files[] = $targetDir . '/' . $f;
+            if ($f[0] !== '.' && is_file("$targetDir/$f")) {
+                $files[] = "$targetDir/$f";
             }
         }
     }
@@ -611,95 +523,25 @@ if ($total === 0) {
     exit(0);
 }
 
-// Run in parallel if jobs > 1
+// ---------------------------------------------------------------------------
+// Process
+// ---------------------------------------------------------------------------
+
 if ($numJobs > 1 && !$singleFile) {
     run_parallel($files, $numJobs, $dryRun, $checkXxhash, $force, $showProgress);
     exit(0);
 }
 
-// Single-threaded mode
-$metaDb = new MetadataDatabase();
-$refreshed = 0;
-$skipped = 0;
-$failed = 0;
-$errors = [];
-
-foreach ($files as $i => $fsPath) {
-    $num = $i + 1;
-    $filename = basename($fsPath);
-    
-    if ($showProgress && $numJobs <= 1) {
-        $pct = round(($num / $total) * 100);
-        $filled = (int)($pct / 5);
-        $bar = str_repeat('█', $filled) . str_repeat('░', 20 - $filled);
-        echo "\r[$bar] $pct% ";
-    }
-    
-    $webPath = '/volumes' . str_replace($root, '', $fsPath);
-    $needsRefresh = false;
-    $reason = '';
-    
-    if ($force) {
-        $needsRefresh = true;
-        $reason = 'force';
-    } else {
-        $metadata = $metaDb->getMetadata($webPath, $fsPath);
-        
-        if (!$metadata) {
-            $needsRefresh = true;
-            $reason = 'missing';
-        } elseif ($checkXxhash) {
-            $dbXxhash = $metadata['xxhash'] ?? null;
-            if ($dbXxhash) {
-                $currentOutput = @shell_exec('xxhsum ' . escapeshellarg($fsPath) . ' 2>/dev/null');
-                $currentXxhash = $currentOutput ? explode(' ', trim($currentOutput))[0] ?? null : null;
-                if ($currentXxhash !== $dbXxhash) {
-                    $needsRefresh = true;
-                    $reason = 'xxhash mismatch';
-                }
-            } else {
-                $needsRefresh = true;
-                $reason = 'xxhash missing';
-            }
-        }
-        
-        if (!$needsRefresh) {
-            $skipped++;
-            continue;
-        }
-    }
-    
-    if ($dryRun) {
-        echo "[$num/$total] $filename - Would refresh ($reason) [DRY RUN]\n";
-        $refreshed++;
-        continue;
-    }
-    
-    try {
-        $metaDb->deleteMetadata($fsPath);
-        $output = MetadataExtractor::extract($fsPath);
-        $metaDb->saveMetadata($webPath, $fsPath, $output);
-        
-        $type = MetadataExtractor::isTextFile($fsPath) ? 'text' : 'media';
-        echo "[$num/$total] $filename - Refreshed ($type)\n";
-        $refreshed++;
-    } catch (Exception $e) {
-        $failed++;
-        $errors[] = "$filename: " . $e->getMessage();
-        echo "[$num/$total] $filename - Failed\n";
-    }
-}
+$result = run_sequential($files, $dryRun, $checkXxhash, $force, $showProgress);
 
 echo "\n";
 if ($dryRun) {
-    echo "Dry run complete. $refreshed files would be refreshed, $skipped up to date, $failed failed.\n";
+    echo "Dry run complete. {$result['refreshed']} files would be refreshed, {$result['skipped']} up to date, {$result['failed']} failed.\n";
 } else {
-    echo "Refresh complete. $refreshed files refreshed, $skipped up to date, $failed failed.\n";
+    echo "Refresh complete. {$result['refreshed']} files refreshed, {$result['skipped']} up to date, {$result['failed']} failed.\n";
 }
 
-if (!empty($errors)) {
+if (!empty($result['errors'])) {
     echo "\nErrors:\n";
-    foreach ($errors as $error) {
-        echo "  - $error\n";
-    }
+    foreach ($result['errors'] as $e) echo "  - $e\n";
 }
