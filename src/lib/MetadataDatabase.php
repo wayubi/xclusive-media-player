@@ -146,103 +146,88 @@ class MetadataDatabase extends Database
      */
     public function saveMetadata($webPath, $fsPath, $metadata) {
         $normalizedPath = $this->normalizePath($fsPath);
-        $now = time();
-        
-        // Extract optimization status
-        $isOptimized = 1;
+        $now            = time();
+
+        $isOptimized        = 1;
         $optimizationIssues = null;
         if (isset($metadata['optimizationStatus'])) {
-            $isOptimized = $metadata['optimizationStatus']['isOptimized'] ? 1 : 0;
+            $isOptimized        = $metadata['optimizationStatus']['isOptimized'] ? 1 : 0;
             $optimizationIssues = json_encode($metadata['optimizationStatus']['issues'] ?? []);
         }
-        
-        // Check if record exists
-        $stmt = $this->db->prepare('SELECT id FROM files WHERE file_path = :path');
-        $stmt->bindValue(':path', $normalizedPath, SQLITE3_TEXT);
-        $result = $stmt->execute();
-        $existing = $result->fetchArray(SQLITE3_ASSOC);
-        
-        // Calculate xxhash
+
+        // Compute xxhash BEFORE touching the DB so the write transaction
+        // isn't held open while waiting for a shell exec to finish.
         $xxhash = null;
         $xxhashOutput = Utils::executeCommand('xxhsum ' . escapeshellarg($fsPath));
         if ($xxhashOutput) {
-            $xxhashParts = explode(' ', trim($xxhashOutput));
-            $xxhash = $xxhashParts[0] ?? null;
+            $xxhash = explode(' ', trim($xxhashOutput))[0] ?? null;
         }
-        
-        if ($existing) {
-            // Update existing
-            $stmt = $this->db->prepare('
-                UPDATE files SET
-                    web_path = :web_path,
-                    file_size = :file_size,
-                    modified_time = :modified_time,
-                    extension = :extension,
-                    filename = :filename,
-                    duration = :duration,
-                    bitrate = :bitrate,
-                    container = :container,
-                    video_codec = :video_codec,
-                    video_width = :video_width,
-                    video_height = :video_height,
-                    video_fps = :video_fps,
-                    video_pix_fmt = :video_pix_fmt,
-                    audio_codec = :audio_codec,
-                    audio_channels = :audio_channels,
-                    audio_sample_rate = :audio_sample_rate,
-                    text_encoding = :text_encoding,
-                    is_optimized = :is_optimized,
-                    optimization_issues = :optimization_issues,
-                    xxhash = :xxhash,
-                    updated_at = :updated_at
-                WHERE file_path = :file_path
-            ');
-        } else {
-            // Insert new
-            $stmt = $this->db->prepare('
-                INSERT INTO files (
-                    file_path, web_path, file_size, modified_time, extension, filename,
-                    duration, bitrate, container,
-                    video_codec, video_width, video_height, video_fps, video_pix_fmt,
-                    audio_codec, audio_channels, audio_sample_rate,
-                    text_encoding, is_optimized, optimization_issues, xxhash,
-                    created_at, updated_at
-                ) VALUES (
-                    :file_path, :web_path, :file_size, :modified_time, :extension, :filename,
-                    :duration, :bitrate, :container,
-                    :video_codec, :video_width, :video_height, :video_fps, :video_pix_fmt,
-                    :audio_codec, :audio_channels, :audio_sample_rate,
-                    :text_encoding, :is_optimized, :optimization_issues, :xxhash,
-                    :created_at, :updated_at
-                )
-            ');
-            $stmt->bindValue(':created_at', $now, SQLITE3_INTEGER);
-        }
-        
-        // Bind common values
-        $stmt->bindValue(':file_path', $normalizedPath, SQLITE3_TEXT);
-        $stmt->bindValue(':web_path', $webPath, SQLITE3_TEXT);
-        $stmt->bindValue(':file_size', filesize($fsPath), SQLITE3_INTEGER);
-        $stmt->bindValue(':modified_time', filemtime($fsPath), SQLITE3_INTEGER);
-        $stmt->bindValue(':extension', pathinfo($fsPath, PATHINFO_EXTENSION), SQLITE3_TEXT);
-        $stmt->bindValue(':filename', basename($fsPath), SQLITE3_TEXT);
-        $stmt->bindValue(':duration', $metadata['duration'] ?? null, SQLITE3_FLOAT);
-        $stmt->bindValue(':bitrate', $metadata['bitrate'] ?? null, SQLITE3_INTEGER);
-        $stmt->bindValue(':container', $metadata['container'] ?? null, SQLITE3_TEXT);
-        $stmt->bindValue(':video_codec', $metadata['video']['codec'] ?? null, SQLITE3_TEXT);
-        $stmt->bindValue(':video_width', $metadata['video']['width'] ?? null, SQLITE3_INTEGER);
-        $stmt->bindValue(':video_height', $metadata['video']['height'] ?? null, SQLITE3_INTEGER);
-        $stmt->bindValue(':video_fps', $metadata['video']['fps'] ?? null, SQLITE3_FLOAT);
-        $stmt->bindValue(':video_pix_fmt', $metadata['video']['pix_fmt'] ?? null, SQLITE3_TEXT);
-        $stmt->bindValue(':audio_codec', $metadata['audio']['codec'] ?? null, SQLITE3_TEXT);
-        $stmt->bindValue(':audio_channels', $metadata['audio']['channels'] ?? null, SQLITE3_INTEGER);
-        $stmt->bindValue(':audio_sample_rate', $metadata['audio']['sample_rate'] ?? null, SQLITE3_INTEGER);
-        $stmt->bindValue(':text_encoding', $metadata['text']['encoding'] ?? null, SQLITE3_TEXT);
-        $stmt->bindValue(':is_optimized', $isOptimized, SQLITE3_INTEGER);
-        $stmt->bindValue(':optimization_issues', $optimizationIssues, SQLITE3_TEXT);
-        $stmt->bindValue(':xxhash', $xxhash, SQLITE3_TEXT);
-        $stmt->bindValue(':updated_at', $now, SQLITE3_INTEGER);
-        
+
+        // Single UPSERT: no prior SELECT needed, no stale-snapshot risk.
+        // ON CONFLICT preserves the original id and created_at of existing rows.
+        $stmt = $this->db->prepare('
+            INSERT INTO files (
+                file_path, web_path, file_size, modified_time, extension, filename,
+                duration, bitrate, container,
+                video_codec, video_width, video_height, video_fps, video_pix_fmt,
+                audio_codec, audio_channels, audio_sample_rate,
+                text_encoding, is_optimized, optimization_issues, xxhash,
+                created_at, updated_at
+            ) VALUES (
+                :file_path, :web_path, :file_size, :modified_time, :extension, :filename,
+                :duration, :bitrate, :container,
+                :video_codec, :video_width, :video_height, :video_fps, :video_pix_fmt,
+                :audio_codec, :audio_channels, :audio_sample_rate,
+                :text_encoding, :is_optimized, :optimization_issues, :xxhash,
+                :now, :now
+            )
+            ON CONFLICT(file_path) DO UPDATE SET
+                web_path            = excluded.web_path,
+                file_size           = excluded.file_size,
+                modified_time       = excluded.modified_time,
+                extension           = excluded.extension,
+                filename            = excluded.filename,
+                duration            = excluded.duration,
+                bitrate             = excluded.bitrate,
+                container           = excluded.container,
+                video_codec         = excluded.video_codec,
+                video_width         = excluded.video_width,
+                video_height        = excluded.video_height,
+                video_fps           = excluded.video_fps,
+                video_pix_fmt       = excluded.video_pix_fmt,
+                audio_codec         = excluded.audio_codec,
+                audio_channels      = excluded.audio_channels,
+                audio_sample_rate   = excluded.audio_sample_rate,
+                text_encoding       = excluded.text_encoding,
+                is_optimized        = excluded.is_optimized,
+                optimization_issues = excluded.optimization_issues,
+                xxhash              = excluded.xxhash,
+                updated_at          = excluded.updated_at
+        ');
+
+        $stmt->bindValue(':file_path',          $normalizedPath,                          SQLITE3_TEXT);
+        $stmt->bindValue(':web_path',           $webPath,                                 SQLITE3_TEXT);
+        $stmt->bindValue(':file_size',          filesize($fsPath),                        SQLITE3_INTEGER);
+        $stmt->bindValue(':modified_time',      filemtime($fsPath),                       SQLITE3_INTEGER);
+        $stmt->bindValue(':extension',          pathinfo($fsPath, PATHINFO_EXTENSION),    SQLITE3_TEXT);
+        $stmt->bindValue(':filename',           basename($fsPath),                        SQLITE3_TEXT);
+        $stmt->bindValue(':duration',           $metadata['duration']            ?? null, SQLITE3_FLOAT);
+        $stmt->bindValue(':bitrate',            $metadata['bitrate']             ?? null, SQLITE3_INTEGER);
+        $stmt->bindValue(':container',          $metadata['container']           ?? null, SQLITE3_TEXT);
+        $stmt->bindValue(':video_codec',        $metadata['video']['codec']      ?? null, SQLITE3_TEXT);
+        $stmt->bindValue(':video_width',        $metadata['video']['width']      ?? null, SQLITE3_INTEGER);
+        $stmt->bindValue(':video_height',       $metadata['video']['height']     ?? null, SQLITE3_INTEGER);
+        $stmt->bindValue(':video_fps',          $metadata['video']['fps']        ?? null, SQLITE3_FLOAT);
+        $stmt->bindValue(':video_pix_fmt',      $metadata['video']['pix_fmt']    ?? null, SQLITE3_TEXT);
+        $stmt->bindValue(':audio_codec',        $metadata['audio']['codec']      ?? null, SQLITE3_TEXT);
+        $stmt->bindValue(':audio_channels',     $metadata['audio']['channels']   ?? null, SQLITE3_INTEGER);
+        $stmt->bindValue(':audio_sample_rate',  $metadata['audio']['sample_rate']?? null, SQLITE3_INTEGER);
+        $stmt->bindValue(':text_encoding',      $metadata['text']['encoding']    ?? null, SQLITE3_TEXT);
+        $stmt->bindValue(':is_optimized',       $isOptimized,                             SQLITE3_INTEGER);
+        $stmt->bindValue(':optimization_issues',$optimizationIssues,                      SQLITE3_TEXT);
+        $stmt->bindValue(':xxhash',             $xxhash,                                  SQLITE3_TEXT);
+        $stmt->bindValue(':now',                $now,                                      SQLITE3_INTEGER);
+
         return $stmt->execute() !== false;
     }
     
