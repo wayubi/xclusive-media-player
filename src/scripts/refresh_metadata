@@ -21,7 +21,7 @@ function detect_cores(): int {
     return 4;
 }
 
-function run_sequential(array &$files, bool $dryRun, bool $checkXxhash, bool $force, bool $showProgress): array {
+function run_sequential(array &$files, bool $dryRun, bool $checkXxhash, bool $force, bool $showProgress, bool $verbose = false): array {
     global $root;
     $total     = count($files);
     $metaDb    = new MetadataDatabase();
@@ -68,6 +68,7 @@ function run_sequential(array &$files, bool $dryRun, bool $checkXxhash, bool $fo
         }
 
         if (!$needsRefresh) {
+            if ($verbose) echo "[$num/$total] $filename - Skipped\n";
             $skipped++;
             continue;
         }
@@ -97,18 +98,23 @@ function run_sequential(array &$files, bool $dryRun, bool $checkXxhash, bool $fo
     return ['refreshed' => $refreshed, 'skipped' => $skipped, 'failed' => $failed, 'errors' => $errors];
 }
 
-function run_parallel(array &$files, int $numJobs, bool $dryRun, bool $checkXxhash, bool $force, bool $showProgress): void {
+function run_parallel(array &$files, int $numJobs, bool $dryRun, bool $checkXxhash, bool $force, bool $showProgress, bool $verbose = false): void {
     global $root;
     $totalFiles = count($files);
 
     if (!function_exists('pcntl_fork')) {
         echo "pcntl not available, running sequentially...\n";
-        run_sequential($files, $dryRun, $checkXxhash, $force, $showProgress);
+        run_sequential($files, $dryRun, $checkXxhash, $force, $showProgress, $verbose);
         return;
     }
 
     echo "Starting $numJobs parallel workers for $totalFiles files...\n\n";
 
+    // Break up filesystem-order clustering: files needing a refresh are often
+    // concentrated in a single recently-added directory, which appears as a
+    // contiguous block in the recursive scan. Without shuffling, only the
+    // workers whose batches happen to cover that block do any real work.
+    // Shuffling spreads refresh candidates evenly across all workers' batches.
     shuffle($files);
 
     // Counter file lives in tmpfs (in-memory on most Linux systems).
@@ -186,14 +192,20 @@ function run_parallel(array &$files, int $numJobs, bool $dryRun, bool $checkXxha
 
                     if ($needsRefresh) {
                         if ($dryRun) {
+                            if ($verbose) echo "[$i] " . basename($fsPath) . " - Would refresh\n";
                             $workerRefreshed++;
                         } else {
                             try {
                                 $metaDb->deleteMetadata($fsPath);
                                 $output = MetadataExtractor::extract($fsPath);
                                 $metaDb->saveMetadata($webPath, $fsPath, $output);
+                                if ($verbose) {
+                                    $type = MetadataExtractor::isTextFile($fsPath) ? 'text' : 'media';
+                                    echo "[$i] " . basename($fsPath) . " - Refreshed ($type)\n";
+                                }
                                 $workerRefreshed++;
                             } catch (Exception $e) {
+                                if ($verbose) echo "[$i] " . basename($fsPath) . " - Failed: " . $e->getMessage() . "\n";
                                 $workerFailed++;
                             }
                         }
@@ -259,6 +271,7 @@ $singleFile     = null;
 $includeAuditDb = false;
 $numJobs        = null;
 $showProgress   = false;
+$verbose        = false;
 
 for ($i = 1; $i < count($argv); $i++) {
     $arg = $argv[$i];
@@ -272,6 +285,7 @@ for ($i = 1; $i < count($argv); $i++) {
             case 'refresh':          $refresh        = true; break;
             case 'include-audit-db': $includeAuditDb = true; break;
             case 'progress':         $showProgress   = true; break;
+            case 'verbose':          $verbose        = true; break;
             case 'help':             $showHelp       = true; break;
             case 'jobs':
                 $next    = $argv[$i + 1] ?? '';
@@ -288,6 +302,7 @@ for ($i = 1; $i < count($argv); $i++) {
                 case 'f': $force       = true; break;
                 case 'a': $all         = true; break;
                 case 'h': $showHelp    = true; break;
+                case 'v': $verbose     = true; break;
                 case 'j':
                     $next    = $argv[++$i] ?? 'auto';
                     $numJobs = ($next === 'auto') ? detect_cores() : (int)$next;
@@ -323,9 +338,10 @@ Options:
   --refresh            After pruning, continue with refresh
   --jobs N|auto        Run N parallel processes (default: auto-detect cores)
   --progress           Show progress per worker
+  --verbose            Print each file as it is refreshed or failed
   --help               Display this help message
 
-Short options: -f (force), -a (all), -h (help), -j N (jobs)
+Short options: -f (force), -a (all), -h (help), -j N (jobs), -v (verbose)
 
 Examples:
   refresh_metadata --all                     Refresh all files
@@ -528,11 +544,11 @@ if ($total === 0) {
 // ---------------------------------------------------------------------------
 
 if ($numJobs > 1 && !$singleFile) {
-    run_parallel($files, $numJobs, $dryRun, $checkXxhash, $force, $showProgress);
+    run_parallel($files, $numJobs, $dryRun, $checkXxhash, $force, $showProgress, $verbose);
     exit(0);
 }
 
-$result = run_sequential($files, $dryRun, $checkXxhash, $force, $showProgress);
+$result = run_sequential($files, $dryRun, $checkXxhash, $force, $showProgress, $verbose);
 
 echo "\n";
 if ($dryRun) {
