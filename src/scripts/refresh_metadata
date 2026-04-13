@@ -179,7 +179,7 @@ function run_parallel(array $files, int $numJobs, bool $dryRun, bool $checkXxhas
     $elapsed = time() - $startTime;
     echo "\n[Summary] $numJobs workers completed in {$elapsed}s\n";
     echo "         Total: $totalFiles files\n";
-    echo "         Refreshed: $totalRefreshed, Skipped: $totalSkipped, Failed: ${$totalFailed}\n";
+    echo "         Refreshed: $totalRefreshed, Skipped: $totalSkipped, Failed: $totalFailed\n";
 }
 
 // Parse command line arguments
