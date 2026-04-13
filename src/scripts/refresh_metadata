@@ -113,48 +113,132 @@ function process_chunk(array $files, int $workerId, bool $dryRun, bool $checkXxh
     ];
 }
 
-// Run parallel workers using pcntl_fork for real-time monitoring
+// Run parallel workers using PULL-BASED in-memory architecture
+// Workers inherit $files from parent via fork() - no tmp file needed for 67K entries
+// Only use small counter file for atomic index
 function run_parallel(array $files, int $numJobs, bool $dryRun, bool $checkXxhash, bool $force, bool $showProgress): void {
     global $root;
     
     $totalFiles = count($files);
-    $chunkSize = (int)ceil($totalFiles / $numJobs);
-    $chunks = array_chunk($files, $chunkSize);
     
-    echo "Starting $numJobs parallel workers for $totalFiles files...\n\n";
+    echo "Starting $numJobs parallel workers for $totalFiles files (in-memory pull)...\n\n";
     
     if (!function_exists('pcntl_fork')) {
-        // Fallback to sequential if pcntl not available
         echo "pcntl not available, running sequentially...\n";
         process_chunk($files, 0, $dryRun, $checkXxhash, $force, $showProgress);
         return;
     }
     
+    // Only need small counter file (atomic index)
+    $counterFile = '/tmp/refresh_counter.txt';
+    file_put_contents($counterFile, '0');
+    
+    echo "Counter initialized, spawning $numJobs workers...\n\n";
+    
     $pids = [];
     $startTime = time();
     
-    foreach ($chunks as $workerId => $chunk) {
+    // Fork workers - they inherit $files from parent memory automatically
+    for ($i = 0; $i < $numJobs; $i++) {
         $pid = pcntl_fork();
         
         if ($pid == -1) {
-            // Fork failed, process in main thread
-            echo "Fork failed for worker $workerId, processing in main thread...\n";
-            process_chunk($chunk, $workerId, $dryRun, $checkXxhash, $force, $showProgress);
+            echo "Fork failed for worker $i, skipping...\n";
         } elseif ($pid == 0) {
-            // Child process - do work
-            $result = process_chunk($chunk, $workerId, $dryRun, $checkXxhash, $force, $showProgress);
+            // Child: pull-based worker using inherited $files array
+            $workerRefreshed = 0;
+            $workerSkipped = 0;
+            $workerFailed = 0;
             
-            // Write result to temp file for parent to collect
-            $resultFile = sys_get_temp_dir() . '/refresh_result_' . getmypid() . '.json';
-            file_put_contents($resultFile, json_encode($result));
+            // $files is automatically available from parent (fork copies memory)
+            $totalToProcess = count($files);
+            
+            while (true) {
+                // Atomic increment to get next file index
+                $idxFp = fopen($counterFile, 'c+');
+                if (!$idxFp) {
+                    echo "Worker $i: ERROR - could not open counter\n";
+                    break;
+                }
+                
+                if (!flock($idxFp, LOCK_EX | LOCK_NB)) {
+                    fclose($idxFp);
+                    usleep(1000);
+                    continue;
+                }
+                
+                $index = (int)trim(fgets($idxFp));
+                if ($index >= $totalToProcess) {
+                    flock($idxFp, LOCK_UN);
+                    fclose($idxFp);
+                    break;  // No more files
+                }
+                
+                // Increment for next worker
+                ftruncate($idxFp, 0);
+                rewind($idxFp);
+                fwrite($idxFp, ($index + 1));
+                flock($idxFp, LOCK_UN);
+                fclose($idxFp);
+                
+                // Process this file - $files array is already in memory!
+                $fsPath = $files[$index];
+                $filename = basename($fsPath);
+                
+                if ($showProgress && $index % 1000 === 0) {
+                    $pct = round(($index / $totalToProcess) * 100);
+                    echo "[$i] progress: $pct% ($index/$totalToProcess)\n";
+                }
+                
+                // Process this single file
+                $metaDb = new MetadataDatabase();
+                $webPath = '/volumes' . str_replace($root, '', $fsPath);
+                $needsRefresh = false;
+                
+                if ($force) {
+                    $needsRefresh = true;
+                } else {
+                    $metadata = $metaDb->getMetadata($webPath, $fsPath);
+                    if (!$metadata) {
+                        $needsRefresh = true;
+                    }
+                }
+                
+                if ($needsRefresh) {
+                    if (!$dryRun) {
+                        try {
+                            $metaDb->deleteMetadata($fsPath);
+                            $output = MetadataExtractor::extract($fsPath);
+                            $metaDb->saveMetadata($webPath, $fsPath, $output);
+                            $workerRefreshed++;
+                        } catch (Exception $e) {
+                            $workerFailed++;
+                        }
+                    } else {
+                        $workerRefreshed++;
+                    }
+                } else {
+                    $workerSkipped++;
+                }
+            }
+            
+            echo "[$i] Done: $workerRefreshed refreshed, $workerSkipped skipped, $workerFailed failed\n";
+            
+            // Write result
+            $resultFile = '/tmp/refresh_result_' . getmypid() . '.json';
+            file_put_contents($resultFile, json_encode([
+                'refreshed' => $workerRefreshed,
+                'skipped' => $workerSkipped,
+                'failed' => $workerFailed
+            ]));
             
             exit(0);
         } else {
-            $pids[$pid] = $workerId;
+            $pids[$pid] = $i;
         }
     }
     
-    // Parent: wait for all children and collect results
+    // Parent: wait for all children
     $totalRefreshed = 0;
     $totalSkipped = 0;
     $totalFailed = 0;
@@ -163,8 +247,7 @@ function run_parallel(array $files, int $numJobs, bool $dryRun, bool $checkXxhas
         $status = 0;
         pcntl_waitpid($pid, $status);
         
-        // Try to collect result from child
-        $resultFile = sys_get_temp_dir() . '/refresh_result_' . $pid . '.json';
+        $resultFile = '/tmp/refresh_result_' . $pid . '.json';
         if (file_exists($resultFile)) {
             $result = json_decode(file_get_contents($resultFile), true);
             if ($result) {
@@ -175,6 +258,9 @@ function run_parallel(array $files, int $numJobs, bool $dryRun, bool $checkXxhas
             @unlink($resultFile);
         }
     }
+    
+// Cleanup counter file
+    @unlink($counterFile);
     
     $elapsed = time() - $startTime;
     echo "\n[Summary] $numJobs workers completed in " . $elapsed . "s\n";
