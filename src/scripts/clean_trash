@@ -1,0 +1,151 @@
+#!/usr/bin/env php
+<?php
+$confirm      = false;
+$showHelp     = false;
+$verbose      = false;
+
+for ($i = 1; $i < count($argv); $i++) {
+    $arg = $argv[$i];
+    if (str_starts_with($arg, '--')) {
+        switch (substr($arg, 2)) {
+            case 'confirm':
+                $confirm = true;
+                break;
+            case 'verbose':
+            case 'v':
+                $verbose = true;
+                break;
+            case 'help':
+            case 'h':
+                $showHelp = true;
+                break;
+        }
+    } elseif (str_starts_with($arg, '-')) {
+        $opts = substr($arg, 1);
+        for ($j = 0; $j < strlen($opts); $j++) {
+            switch ($opts[$j]) {
+                case 'y':
+                    $confirm = true;
+                    break;
+                case 'v':
+                    $verbose = true;
+                    break;
+                case 'h':
+                    $showHelp = true;
+                    break;
+            }
+        }
+    }
+}
+
+if ($showHelp) {
+    echo <<<HELP
+clean_trash - Remove .trash-<timestamp> directories
+
+Usage: clean_trash [options]
+
+Options:
+  --confirm     Actually delete trash directories (default is dry-run)
+  -v, --verbose Show each deletion as it happens
+  -h, --help   Display this help message
+
+Examples:
+  clean_trash           # Show what would be deleted (dry-run)
+  clean_trash --confirm # Delete all trash directories
+  clean_trash -vy     # Delete with verbose output
+
+HELP;
+    exit(0);
+}
+
+$root = realpath(__DIR__ . '/../volumes');
+
+if (!$root || !is_dir($root)) {
+    fprintf(STDERR, "Error: volumes directory not found\n");
+    exit(1);
+}
+
+echo "Scanning for .trash-* directories under $root...\n\n";
+
+$findCmd = sprintf(
+    'find %s -type d -name ".trash-*[0-9]" 2>/dev/null',
+    escapeshellarg($root)
+);
+
+$trashDirs = [];
+exec($findCmd, $trashDirs, $ret);
+
+if (empty($trashDirs)) {
+    echo "No trash directories found.\n";
+    exit(0);
+}
+
+$totalSize  = 0;
+$totalDirs  = 0;
+$totalFiles = 0;
+
+foreach ($trashDirs as $dir) {
+    if (!is_dir($dir)) continue;
+
+    $totalDirs++;
+
+    $sizeCmd  = sprintf('du -sb %s 2>/dev/null | cut -f1', escapeshellarg($dir));
+    $sizeExec = trim(shell_exec($sizeCmd));
+    $size     = $sizeExec ? (int)$sizeExec : 0;
+
+    $countCmd  = sprintf('find %s -print 2>/dev/null | wc -l', escapeshellarg($dir));
+    $countExec = trim(shell_exec($countCmd));
+    $fileCount = $countExec ? ((int)$countExec - 1) : 0;
+
+    $totalSize  += $size;
+    $totalFiles += $fileCount;
+
+    $sizeFormatted = format_bytes($size);
+
+    printf("  %s  %s (%d files)\n", $dir, $sizeFormatted, $fileCount);
+}
+
+echo "\n";
+
+if ($totalDirs === 0) {
+    echo "No trash directories found.\n";
+    exit(0);
+}
+
+$totalFormatted = format_bytes($totalSize);
+
+if ($confirm) {
+    echo "Deleting $totalDirs directories...\n\n";
+
+    foreach ($trashDirs as $dir) {
+        if (!is_dir($dir)) continue;
+
+        if ($verbose) {
+            echo "Deleting $dir...\n";
+        }
+
+        $rmCmd = sprintf('rm -rf %s 2>&1', escapeshellarg($dir));
+        exec($rmCmd, $output, $ret);
+
+        if ($ret !== 0) {
+            fprintf(STDERR, "Error deleting %s: %s\n", $dir, implode(' ', $output));
+        }
+    }
+
+    echo "\nReclaimed $totalFormatted ($totalDirs directories deleted)\n";
+} else {
+    echo "Found $totalDirs trash directories totaling $totalFormatted ($totalFiles files)\n";
+    echo "Run with --confirm to delete\n";
+}
+
+function format_bytes(int $bytes): string {
+    if ($bytes >= 1073741824) {
+        return sprintf("%.1fGB", $bytes / 1073741824);
+    } elseif ($bytes >= 1048576) {
+        return sprintf("%.0fMB", $bytes / 1048576);
+    } elseif ($bytes >= 1024) {
+        return sprintf("%.0fKB", $bytes / 1024);
+    } else {
+        return $bytes . "B";
+    }
+}
