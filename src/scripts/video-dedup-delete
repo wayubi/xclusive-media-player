@@ -24,6 +24,8 @@ fi
 translated_path="${user_path//\/var\/www\/html\/volumes/\/videos}"
 
 # Execute inside container
-exec docker exec -i xclusive-video-dedup-1 \
+docker exec -i xclusive-video-dedup-1 \
     python /opt/video-dedup/scripts/dedup_delete.py \
     "$translated_path" "$@"
+
+refresh_metadata --all --prune --refresh --include-audit-db
