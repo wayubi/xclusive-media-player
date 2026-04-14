@@ -28,4 +28,4 @@ docker exec -i xclusive-video-dedup-1 \
     python /opt/video-dedup/scripts/dedup_delete.py \
     "$translated_path" "$@"
 
-refresh_metadata --all --prune --refresh --include-audit-db
+refresh_metadata

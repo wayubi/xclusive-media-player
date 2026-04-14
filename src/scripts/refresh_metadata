@@ -262,10 +262,11 @@ function run_parallel(array &$files, int $numJobs, bool $dryRun, bool $checkXxha
 
 $force          = false;
 $all            = false;
+$noSubfolders   = false;
 $dryRun         = false;
 $checkXxhash    = false;
-$prune          = false;
-$refresh        = false;
+$prune          = true;
+$refresh       = true;
 $showHelp       = false;
 $singleFile     = null;
 $includeAuditDb = false;
@@ -279,10 +280,13 @@ for ($i = 1; $i < count($argv); $i++) {
         switch (substr($arg, 2)) {
             case 'force':            $force          = true; break;
             case 'all':              $all            = true; break;
+            case 'no-subfolders':    $noSubfolders   = true; break;
             case 'dry-run':          $dryRun         = true; break;
             case 'xxhash':           $checkXxhash    = true; break;
-            case 'prune':            $prune          = true; break;
-            case 'refresh':          $refresh        = true; break;
+            case 'prune':            $prune     = true; $refresh = false; break;
+            case 'refresh':         $refresh  = true; $prune    = false; break;
+            case 'no-prune':         $prune          = false; break;
+            case 'no-refresh':       $refresh       = false; break;
             case 'include-audit-db': $includeAuditDb = true; break;
             case 'progress':         $showProgress   = true; break;
             case 'verbose':          $verbose        = true; break;
@@ -301,8 +305,11 @@ for ($i = 1; $i < count($argv); $i++) {
             switch ($opts[$j]) {
                 case 'f': $force       = true; break;
                 case 'a': $all         = true; break;
+                case 'n': $noSubfolders = true; break;
                 case 'h': $showHelp    = true; break;
                 case 'v': $verbose     = true; break;
+                case 'p': $prune       = true; break;
+                case 'r': $refresh    = true; break;
                 case 'j':
                     $next    = $argv[++$i] ?? 'auto';
                     $numJobs = ($next === 'auto') ? detect_cores() : (int)$next;
@@ -331,25 +338,33 @@ Usage: refresh_metadata [file] [options]
 Options:
   --force              Refresh all files, even if up to date
   --all                Operate on all files under /volumes
+  --no-subfolders       Only process current directory (no subdirectories)
   --dry-run            Preview changes without modifying database
   --xxhash             Verify file integrity using xxhash
-  --prune              Remove stale records (deleted files)
+  --prune              Remove stale records only (skip refresh)
+  --no-prune           Skip pruning (only do refresh)
   --include-audit-db   Also prune audit.db (requires --prune)
-  --refresh            After pruning, continue with refresh
+  --refresh            Run refresh only (skip prune)
+  --no-refresh        Skip refresh (only do prune)
   --jobs N|auto        Run N parallel processes (default: auto-detect cores)
   --progress           Show progress per worker
   --verbose            Print each file as it is refreshed or failed
   --help               Display this help message
 
-Short options: -f (force), -a (all), -h (help), -j N (jobs), -v (verbose)
+Notes:
+  By default, BOTH prune and refresh are run on current directory + subdirectories.
+  Use --all to operate on all files under /volumes.
+  Use --no-subfolders to only scan the current directory (no recursion).
+
+Short options: -f (force), -a (all), -n (no-subfolders), -h (help), -j N (jobs), -v (verbose)
 
 Examples:
-  refresh_metadata --all                     Refresh all files
-  refresh_metadata --all --jobs 8            Refresh with 8 workers
-  refresh_metadata --all --jobs auto         Auto-detect CPU cores
-  refresh_metadata --all --progress          Show progress per worker
-  refresh_metadata video.mp4 --force         Refresh single file
-  refresh_metadata --prune --all             Remove stale records
+  refresh_metadata                   Prune + refresh current dir + subdirs
+  refresh_metadata --all            Prune + refresh all under volumes
+  refresh_metadata --no-subfolders   Prune + refresh current directory only
+  refresh_metadata --prune           Prune only (skip refresh)
+  refresh_metadata --refresh        Refresh only (skip prune)
+  refresh_metadata --all --jobs 8     Prune + refresh with 8 workers
 
 HELP;
     exit(0);
@@ -364,6 +379,11 @@ if ($includeAuditDb && !$prune) {
     exit(1);
 }
 
+if ($all && $noSubfolders) {
+    fprintf(STDERR, "Error: cannot use --all with --no-subfolders\n");
+    exit(1);
+}
+
 if ($singleFile !== null) {
     if (!file_exists($singleFile)) {
         fprintf(STDERR, "Error: File not found: %s\n", $singleFile);
@@ -374,6 +394,7 @@ if ($singleFile !== null) {
 
 $root      = realpath(__DIR__ . '/../volumes');
 $targetDir = $all ? $root : getcwd();
+$recursive = !$noSubfolders;
 
 // ---------------------------------------------------------------------------
 // Prune mode
@@ -394,7 +415,9 @@ if ($prune) {
             ? ($dbFilePath === $singleFile)
             : ($all
                 ? str_starts_with($dbFilePath, $root . '/')
-                : (dirname($dbFilePath) === $targetDir));
+                : ($noSubfolders
+                    ? (dirname($dbFilePath) === $targetDir)
+                    : str_starts_with($dbFilePath, $targetDir . '/')));
 
         if (!$inScope) continue;
 
@@ -522,11 +545,24 @@ if ($singleFile) {
             }
             if (!$skip) $files[] = $file->getPathname();
         }
-    } else {
+    } elseif ($noSubfolders) {
         foreach (scandir($targetDir) as $f) {
             if ($f[0] !== '.' && is_file("$targetDir/$f")) {
                 $files[] = "$targetDir/$f";
             }
+        }
+    } else {
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($targetDir, RecursiveDirectoryIterator::SKIP_DOTS)
+        );
+        foreach ($iterator as $file) {
+            if (!$file->isFile()) continue;
+            $parts = explode('/', $file->getPathname());
+            $skip  = false;
+            foreach ($parts as $part) {
+                if ($part !== '' && $part[0] === '.') { $skip = true; break; }
+            }
+            if (!$skip) $files[] = $file->getPathname();
         }
     }
 }
@@ -540,24 +576,26 @@ if ($total === 0) {
 }
 
 // ---------------------------------------------------------------------------
-// Process
+// Refresh (only if $refresh is true)
 // ---------------------------------------------------------------------------
 
-if ($numJobs > 1 && !$singleFile) {
-    run_parallel($files, $numJobs, $dryRun, $checkXxhash, $force, $showProgress, $verbose);
-    exit(0);
-}
+if ($refresh) {
+    if ($numJobs > 1 && !$singleFile) {
+        run_parallel($files, $numJobs, $dryRun, $checkXxhash, $force, $showProgress, $verbose);
+        exit(0);
+    }
 
-$result = run_sequential($files, $dryRun, $checkXxhash, $force, $showProgress, $verbose);
+    $result = run_sequential($files, $dryRun, $checkXxhash, $force, $showProgress, $verbose);
 
-echo "\n";
-if ($dryRun) {
-    echo "Dry run complete. {$result['refreshed']} files would be refreshed, {$result['skipped']} up to date, {$result['failed']} failed.\n";
-} else {
-    echo "Refresh complete. {$result['refreshed']} files refreshed, {$result['skipped']} up to date, {$result['failed']} failed.\n";
-}
+    echo "\n";
+    if ($dryRun) {
+        echo "Dry run complete. {$result['refreshed']} files would be refreshed, {$result['skipped']} up to date, {$result['failed']} failed.\n";
+    } else {
+        echo "Refresh complete. {$result['refreshed']} files refreshed, {$result['skipped']} up to date, {$result['failed']} failed.\n";
+    }
 
-if (!empty($result['errors'])) {
-    echo "\nErrors:\n";
-    foreach ($result['errors'] as $e) echo "  - $e\n";
+    if (!empty($result['errors'])) {
+        echo "\nErrors:\n";
+        foreach ($result['errors'] as $e) echo "  - $e\n";
+    }
 }

@@ -25,4 +25,4 @@ docker exec -i xclusive-video-dedup-1 \
     python /opt/video-dedup/scripts/find_video_duplicates.py \
     "$translated_path" "$@"
 
-refresh_metadata --all --prune --refresh --include-audit-db
+refresh_metadata
