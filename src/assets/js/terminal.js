@@ -568,7 +568,7 @@ async function runStreamingCommand(commandLine) {
       }
     }
     
-    let maxPolls = 1800; // 30 minutes max
+    let maxPolls = 7200; // 30 minutes max
     let pollCount = 0;
     
     // Start polling - first poll happens at 1 second, then every second
