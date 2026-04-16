@@ -55,7 +55,7 @@ services:
       context: ./video-dedup
       dockerfile: Dockerfile
     volumes:
-      - ./video-dedup/scripts:/opt/video-dedup/scripts
+      - ./video-dedup/src:/opt/video-dedup/src
       - ./data/video-dedup-cache:/opt/video-dedup/.dedup_cache
       - ./volumes:/videos
     working_dir: /opt/video-dedup
