@@ -8,8 +8,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VIDEO_DEDUP_DIR="$SCRIPT_DIR"
 
 # Check if first argument is a command
-if [[ "$1" == "delete" || "$1" == "restore" ]]; then
-    command="$1"
+if [[ "$1" == "--delete" || "$1" == "--restore" || "$1" == "delete" || "$1" == "restore" ]]; then
+    command="${1#--}"
     shift
 else
     command="scan"
