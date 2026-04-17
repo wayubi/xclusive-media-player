@@ -37,3 +37,5 @@ translated_path="${user_path//\/var\/www\/html\/volumes/\/videos}"
 docker exec -i xclusive-video-dedup-1 \
     python /opt/video-dedup/src/dedup.py \
     "$translated_path" --"$command" "$@"
+
+refresh_metadata
