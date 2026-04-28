@@ -363,7 +363,7 @@ export function showTextFullscreen(file) {
     saveBtn.textContent = 'Saving...';
 
     try {
-      const response = await fetch('/post-handler.php', {
+      const response = await fetch('/api.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

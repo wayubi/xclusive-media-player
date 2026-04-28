@@ -261,7 +261,7 @@ export async function confirmDelete() {
     const confirmed = await showScaryDeleteConfirmation();
     if (!confirmed) return;
     
-    fetch('post-handler.php', {
+    fetch('api.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
@@ -292,7 +292,7 @@ export async function confirmDelete() {
     // Original single/multi file deletion
     if (!confirm(`Delete ${filesToDelete.length} file(s)?`)) return;
     
-    fetch('post-handler.php', {
+    fetch('api.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'delete', files: filesToDelete })

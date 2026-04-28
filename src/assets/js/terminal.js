@@ -22,7 +22,7 @@ export function initTerminal() {
 
 async function loadScripts() {
   try {
-    const response = await fetch('/post-handler.php', {
+    const response = await fetch('/api.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'list_scripts' })
@@ -365,7 +365,7 @@ async function runScript(scriptName, args) {
   printToTerminal('');
   
   try {
-    const response = await fetch('/post-handler.php', {
+    const response = await fetch('/api.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -399,7 +399,7 @@ async function runScript(scriptName, args) {
 
 async function handleCdCommand(commandLine) {
   try {
-    const response = await fetch('/post-handler.php', {
+    const response = await fetch('/api.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -432,7 +432,7 @@ async function handleCdCommand(commandLine) {
 
 async function runSyncCommand(commandLine) {
   try {
-    const response = await fetch('/post-handler.php', {
+    const response = await fetch('/api.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -459,7 +459,7 @@ async function runFfmpegCommand(cmd, args, fullCommandLine) {
   printToTerminal(`Running ${cmd}...`, 'info');
   
   try {
-    const response = await fetch('/post-handler.php', {
+    const response = await fetch('/api.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -498,7 +498,7 @@ async function runStreamingCommand(commandLine) {
   
   try {
     // First, start the background job
-    const response = await fetch('/post-handler.php', {
+    const response = await fetch('/api.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -532,7 +532,7 @@ async function runStreamingCommand(commandLine) {
     
     async function pollOutput() {
       try {
-        const response = await fetch(`/post-handler.php?stream=1&jobId=${encodeURIComponent(jobId)}`, {
+        const response = await fetch(`/api.php?stream=1&jobId=${encodeURIComponent(jobId)}`, {
           method: 'GET',
           headers: { 'Accept': 'application/json' }
         });
@@ -721,7 +721,7 @@ async function handleTabCompletion() {
   
   // Get directory contents via API
   try {
-    const response = await fetch('/post-handler.php', {
+    const response = await fetch('/api.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

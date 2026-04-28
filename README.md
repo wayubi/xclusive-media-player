@@ -115,17 +115,16 @@ Docker Compose Stack
 │   ├── Throttling (50MB/s after 10MB burst)
 │   └── Connection limits (200 per IP)
 │
-├── php-fpm
+├── php-fpm (root)
 │   ├── Page generation (index.php)
 │   ├── Folder traversal
 │   ├── Audio thumbnail extraction
-│   └── Authentication
-│
-├── php-cli (API)
+│   ├── Authentication
 │   ├── Metadata extraction (ffprobe)
 │   ├── SQLite operations
-│   ├── File operations (delete)
-│   └── Audit/favorites management
+│   ├── File operations (delete, edit)
+│   ├── Audit/favorites management
+│   └── Cron jobs (refresh_metadata)
 │
 └── Reverse Proxy (Optional)
     ├── SSL termination
@@ -535,19 +534,22 @@ mediaPool.clearQueues();        // Stop all loading
 
 This frees up browser connections for the fullscreen video to seek efficiently.
 
-### API Endpoints (`api.php`)
+### API Endpoints
 
-| Action | Method | Parameters | Description | Response |
-|--------|--------|------------|-------------|----------|
-| `delete` | POST | `files[]` | Delete specific files permanently | `{status, results}` |
-| `delete` | POST | `recursive=true`, `delete_folder=true`, `folder` | Recursively delete folder and all contents (including hidden files) | `{status, deleted: {files, hidden_files, subfolders}, parent_path}` |
-| `audit` | POST | `file_paths[]` | Mark files as audited | `{status, date, count, stats}` |
-| `audit_status_batch` | POST | `file_paths[]` | Get audit status for files | `{status, audit_statuses}` |
-| `metadata` | POST | `files[]` | Get full metadata (single) | Metadata object |
-| `metadata_batch` | POST | `files[]` | Get metadata for multiple | `{file: metadata}` |
-| `toggle_favorite` | POST | `file` | Toggle favorite status | `{status, favorited, file}` |
-| `favorites_status_batch` | POST | `file_paths[]` | Get favorites status | `{status, favorite_statuses}` |
-| `get_favorites_count` | POST | `folder_path` | Count favorites in folder | `{status, count}` |
+All API calls are POST to `api.php` (GET for terminal streaming):
+
+| Action | Parameters | Description | Response |
+|--------|------------|-------------|----------|
+| `delete` | `files[]` | Delete specific files permanently (requires cookie) | `{status, results}` |
+| `delete` | `recursive=true`, `delete_folder=true`, `folder` | Recursively delete folder | `{status, deleted, parent_path}` |
+| `metadata_batch` | `files[]` | Get metadata for multiple files | `{file: metadata}` |
+| `audit` | `file_paths[]` | Mark files as audited | `{status, date, count, stats}` |
+| `toggle_favorite` | `file` | Toggle favorite status | `{status, favorited, file}` |
+| `get_favorites_count` | `folder_path` | Count favorites in folder | `{status, count}` |
+| `share` | `file`, `platform` | Social sharing | `{status}` |
+| `terminal` | `command`, `currentDir` | Execute terminal command | `{status, output, jobId}` |
+| `list_scripts` | — | List available scripts | `{status, scripts}` |
+| `edit_text` | `file`, `content` | Write text file contents | `{status}` |
 
 **Metadata Extraction**:
 - Uses `ffprobe` for video/audio metadata
@@ -624,8 +626,7 @@ This frees up browser connections for the fullscreen video to seek efficiently.
 | Service | Port | Purpose | Scaling |
 |---------|------|---------|---------|
 | nginx | 8050 | Web server, static assets, video streaming | Fixed |
-| php-fpm | 9000 (internal) | Page generation, thumbnails | Fixed |
-| php-cli | 9000 (internal) | API, metadata, database | Fixed |
+| php-fpm | 9000 (internal) | Page generation, API, metadata, database, cron (root) | Fixed |
 
 ### Environment Variables
 
@@ -640,17 +641,17 @@ This frees up browser connections for the fullscreen video to seek efficiently.
 ```bash
 # View real-time logs
 docker-compose logs -f nginx
-docker-compose logs -f php-cli
+docker-compose logs -f php-fpm
 
 # Restart specific service
 docker-compose restart nginx
 
 # Shell access for debugging
 docker-compose exec nginx sh
-docker-compose exec php-cli bash
+docker-compose exec php-fpm bash
 
 # Check database
-docker-compose exec php-cli sqlite3 /var/www/html/data/db/audit.db "SELECT * FROM audit_status LIMIT 10;"
+docker-compose exec php-fpm sqlite3 /var/www/db/audit.db "SELECT * FROM audit_status LIMIT 10;"
 
 # Rebuild after config changes
 docker-compose down && docker-compose up -d --build
@@ -665,7 +666,6 @@ xclusive-media-player/
 ├── 📁 src/                          # Application source
 │   ├── 📄 index.php                 # Main entry, grid configuration
 │   ├── 📄 api.php                   # REST API endpoint
-│   ├── 📄 post-handler.php          # Request proxy/router
 │   ├── 📁 lib/                      # PHP libraries
 │   │   ├── 📄 AuditDatabase.php     # Audit tracking
 │   │   ├── 📄 FavoritesDatabase.php # Favorites management
@@ -692,8 +692,7 @@ xclusive-media-player/
 │   │   ├── 📄 nginx.conf           # Main nginx config
 │   │   ├── 📄 default.conf         # Server blocks
 │   │   └── 📄 reverse-proxy-optimized.conf  # Production reverse proxy
-│   ├── 📁 php-fpm/                  # PHP-FPM configuration
-│   └── 📁 php-cli/                  # PHP-CLI configuration
+│   └── 📁 php-fpm/                  # PHP-FPM configuration (root, includes cron)
 │
 ├── 📁 volumes/                      # Your media files (mounted)
 │   └── 📁 ...                       # Your folder structure

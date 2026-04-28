@@ -10,7 +10,6 @@ services:
         hard: 8192
     depends_on:
       - php-fpm
-      - php-cli
     ports:
       - "8050:80"
     volumes:
@@ -25,20 +24,6 @@ services:
     build:
       context: ./docker/php-fpm
       dockerfile: Dockerfile
-    volumes:
-      - ./src:/var/www/html
-      - ./.env:/var/www/.env:ro
-      - db:/var/www/db
-      - jobs:/var/www/jobs
-      - ./volumes:/var/www/html/volumes
-    networks:
-      - app_network
-
-  php-cli:
-    build:
-      context: ./docker/php-cli
-      dockerfile: Dockerfile
-    working_dir: /var/www/html
     volumes:
       - ./src:/var/www/html
       - ./.env:/var/www/.env:ro

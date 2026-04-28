@@ -9,13 +9,20 @@ require_once __DIR__ . '/lib/actions/ActionHandler.php';
 require_once __DIR__ . '/lib/actions/DeleteAction.php';
 require_once __DIR__ . '/lib/actions/MetadataAction.php';
 require_once __DIR__ . '/lib/actions/AuditAction.php';
-require_once __DIR__ . '/lib/actions/AuditStatusAction.php';
 require_once __DIR__ . '/lib/actions/FavoritesAction.php';
 require_once __DIR__ . '/lib/actions/ShareAction.php';
 require_once __DIR__ . '/lib/actions/TerminalAction.php';
 require_once __DIR__ . '/lib/actions/EditTextAction.php';
 
 header('Content-Type: application/json');
+
+// Streaming endpoint for terminal job output
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && !empty($_GET['stream']) && !empty($_GET['jobId'])) {
+    $metaDb = new MetadataDatabase();
+    $handler = new TerminalAction(['command' => 'stream', 'jobId' => $_GET['jobId']], '/var/www/html', $metaDb);
+    $handler->streamJob($_GET['jobId']);
+    exit;
+}
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -33,30 +40,32 @@ if (!$action) {
 }
 
 if ($action === 'delete') {
-    $deleteEnabled = isset($_COOKIE['delete_enabled']) && $_COOKIE['delete_enabled'] === '1';
-    
-    if (!$deleteEnabled) {
+    if (!(isset($_COOKIE['delete_enabled']) && $_COOKIE['delete_enabled'] === '1')) {
         http_response_code(403);
         echo json_encode(['error' => 'Delete functionality is disabled. Authorization required.']);
         exit;
     }
 }
 
+// list_scripts is a terminal subcommand
+if ($action === 'list_scripts') {
+    $data['action'] = 'terminal';
+    $data['command'] = 'list_scripts';
+    $action = 'terminal';
+}
+
 $root = realpath(__DIR__ . '/volumes');
 $metaDb = new MetadataDatabase();
 
 $actionMap = [
-    'delete' => DeleteAction::class,
-    'metadata' => MetadataAction::class,
-    'metadata_batch' => MetadataAction::class,
-    'audit' => AuditAction::class,
-    'audit_status_batch' => AuditStatusAction::class,
-    'toggle_favorite' => FavoritesAction::class,
-    'favorites_status_batch' => FavoritesAction::class,
+    'delete'              => DeleteAction::class,
+    'metadata_batch'      => MetadataAction::class,
+    'audit'               => AuditAction::class,
+    'toggle_favorite'     => FavoritesAction::class,
     'get_favorites_count' => FavoritesAction::class,
-    'share' => ShareAction::class,
-    'terminal' => TerminalAction::class,
-    'edit_text' => EditTextAction::class,
+    'share'               => ShareAction::class,
+    'terminal'            => TerminalAction::class,
+    'edit_text'           => EditTextAction::class,
 ];
 
 if (!isset($actionMap[$action])) {

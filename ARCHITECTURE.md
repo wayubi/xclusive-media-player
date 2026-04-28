@@ -28,7 +28,7 @@ Xclusive Media Player is a high-performance, browser-based media management and 
 | Component | Technology | Purpose |
 |-----------|------------|---------|
 | Web Application | PHP + Vanilla JS | Media browsing, grid display, playback |
-| Backend Services | PHP-FPM + PHP-CLI | API, metadata extraction, database operations |
+| Backend Services | PHP-FPM | API, metadata extraction, database operations |
 | Mobile Client | Android (Kotlin) | Native media player using ExoPlayer |
 
 ---
@@ -54,10 +54,10 @@ Xclusive Media Player is a high-performance, browser-based media management and 
 ┌───────────────────────────────────────────────────────────────────────────┐
 │                           DOCKER NETWORK                                   │
 │                                                                           │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐                   │
-│  │   nginx     │    │   php-fpm   │    │  php-cli    │                   │
-│  │  (Port 80)  │◄──►│  (Port 9000)│    │ (API/Cron)  │                   │
-│  └──────┬──────┘    └─────────────┘    └─────────────┘                   │
+│  ┌─────────────┐    ┌─────────────────────────────────┐                   │
+│  │   nginx     │    │            php-fpm              │                   │
+│  │  (Port 80)  │◄──►│  (Port 9000) API + Cron (root) │                   │
+│  └──────┬──────┘    └─────────────────────────────────┘                   │
 │         │                                                                  │
 │         │         ┌──────────────────────────────────────────┐             │
 │         │         │         Volumes (Media Files)           │             │
@@ -584,7 +584,6 @@ case 'Delete':
 |------|---------|
 | `index.php` | Main page, grid rendering, folder navigation |
 | `api.php` | REST API endpoint for all actions |
-| `post-handler.php` | Request proxy to php-cli service |
 
 ### PHP Class Structure
 
@@ -603,11 +602,11 @@ src/lib/
     ├── ActionHandler.php    # Base action handler
     ├── DeleteAction.php     # File/folder deletion
     ├── MetadataAction.php   # Metadata retrieval
-    ├── AuditAction.php     # Audit operations
-    ├── AuditStatusAction.php # Batch audit status
+    ├── AuditAction.php      # Audit operations
     ├── FavoritesAction.php  # Favorites operations
-    ├── ShareAction.php     # Social sharing
-    └── TerminalAction.php  # Boss screen commands
+    ├── ShareAction.php      # Social sharing
+    ├── TerminalAction.php   # Boss screen commands
+    └── EditTextAction.php   # Text file editing
 ```
 
 ### Request Flow
@@ -620,26 +619,18 @@ Browser Request
 │   nginx:80       │ ─── Static files (CSS, JS, images)
 │                  │ ─── Video streaming (range requests)
 └────────┬─────────┘
-         │ PHP-FPM
+         │ PHP-FPM (root)
          ▼
 ┌──────────────────┐
 │   index.php      │ ─── Grid rendering
 │                  │ ─── Folder navigation
 └────────┬─────────┘
          │
-         ├────────────────────────┐
-         ▼                        ▼
-┌─────────────────┐     ┌──────────────────┐
-│ post-handler.php│     │    api.php       │
-│ (POST requests) │     │  (CLI requests)  │
-└────────┬────────┘     └────────┬─────────┘
-         │                       │
-         │ Curl                   │ Direct
-         ▼                       ▼
-┌─────────────────┐     ┌──────────────────┐
-│  php-cli:8080   │     │   php-cli:8080   │
-│    api.php      │     │    api.php       │
-└─────────────────┘     └──────────────────┘
+         │
+         ▼
+┌──────────────────┐
+│    api.php       │ ─── All actions (delete, terminal, metadata,
+└──────────────────┘     audit, favorites, share, edit_text)
 ```
 
 ---
@@ -746,8 +737,7 @@ $this->db->exec('PRAGMA busy_timeout = 5000;');
 | Service | Image | Ports | Purpose |
 |---------|-------|-------|---------|
 | nginx | nginx:alpine | 8050:80 | Web server, media streaming |
-| php-fpm | php:8.4-fpm | 9000 (internal) | Page generation |
-| php-cli | php:8.4-cli | 9000 (internal) | API, cron jobs |
+| php-fpm | php:8.4-fpm | 9000 (internal) | Page generation, API, cron jobs (runs as root) |
 
 ### nginx Configuration
 
@@ -764,19 +754,12 @@ $this->db->exec('PRAGMA busy_timeout = 5000;');
 - Audio files: Throttling (20MB/s after 5MB)
 - PHP-FPM proxy for dynamic content
 
-### PHP Images
+### PHP Image
 
 **php-fpm/Dockerfile:**
 ```dockerfile
 FROM php:8.4-fpm
-RUN apt-get update && apt-get install -y ffmpeg
-WORKDIR /var/www/html
-```
-
-**php-cli/Dockerfile:**
-```dockerfile
-FROM php:8.4-cli
-RUN apt-get update && apt-get install -y ffmpeg cron util-linux xxhash xxd
+RUN apt-get install -y ffmpeg cron util-linux xxhash xxd docker-cli
 COPY crontab /etc/cron.d/crontab
 COPY entrypoint.sh /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
@@ -784,7 +767,7 @@ ENTRYPOINT ["/entrypoint.sh"]
 
 ### Cron Jobs
 
-Runs hourly via php-cli:
+Runs hourly via php-fpm:
 ```
 0 * * * * root /usr/local/bin/run-refresh-metadata
 ```
@@ -959,20 +942,19 @@ Solutions:
 
 ### Endpoints
 
-All API calls are POST to `api.php`:
+All API calls are POST to `api.php` (GET for terminal streaming):
 
 | Action | Parameters | Description |
 |--------|------------|-------------|
-| `delete` | `files[]` or `recursive`+`folder` | Delete files/folder |
-| `audit` | `path`, `filenames[]` | Mark as audited |
-| `audit_status_batch` | `file_paths[]` | Get audit statuses |
-| `metadata` | `files[]` | Get single file metadata |
-| `metadata_batch` | `files[]` | Get multiple metadata |
-| `toggle_favorite` | `file` | Toggle favorite |
-| `favorites_status_batch` | `file_paths[]` | Get favorite statuses |
-| `get_favorites_count` | `folder_path` | Count folder favorites |
+| `delete` | `files[]` or `recursive`+`folder` | Delete files/folder (requires cookie) |
+| `metadata_batch` | `files[]` | Get metadata for multiple files |
+| `audit` | `file_paths[]` | Mark files as audited |
+| `toggle_favorite` | `file` | Toggle favorite status |
+| `get_favorites_count` | `folder_path` | Count favorites in folder |
 | `share` | `file`, `platform` | Social sharing |
-| `terminal` | `command` | Boss screen commands |
+| `terminal` | `command`, `currentDir` | Execute terminal command |
+| `list_scripts` | — | List available scripts |
+| `edit_text` | `file`, `content` | Write text file contents |
 
 ### Request Format
 
@@ -1098,11 +1080,11 @@ docker-compose up -d
 
 # View logs
 docker-compose logs -f nginx
-docker-compose logs -f php-cli
+docker-compose logs -f php-fpm
 
 # Shell access
 docker-compose exec nginx sh
-docker-compose exec php-cli bash
+docker-compose exec php-fpm bash
 ```
 
 ### Android Build

@@ -1,2 +1,0 @@
-# Run refresh_metadata daily at 2:00 AM (skip if already running)
-0 * * * * root /usr/local/bin/run-refresh-metadata

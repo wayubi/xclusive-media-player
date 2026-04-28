@@ -1,7 +1,5 @@
 <?php
 
-require_once __DIR__ . '/post-handler.php';
-
 // ================================
 // DELETE PROTECTION
 // ================================
