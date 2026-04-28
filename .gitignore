@@ -24,3 +24,6 @@ data/video-dedup-cache/
 
 # https://github.com/wayubi/video-dedup
 video-dedup/
+
+snapshot.json
+snapshots/

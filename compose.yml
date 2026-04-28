@@ -28,8 +28,8 @@ services:
     volumes:
       - ./src:/var/www/html
       - ./.env:/var/www/.env:ro
-      - ./data/db:/var/www/db
-      - ./data/jobs:/var/www/jobs
+      - db:/var/www/db
+      - jobs:/var/www/jobs
       - ./volumes:/var/www/html/volumes
     networks:
       - app_network
@@ -42,8 +42,8 @@ services:
     volumes:
       - ./src:/var/www/html
       - ./.env:/var/www/.env:ro
-      - ./data/db:/var/www/db
-      - ./data/jobs:/var/www/jobs
+      - db:/var/www/db
+      - jobs:/var/www/jobs
       - ./volumes:/var/www/html/volumes
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
@@ -56,7 +56,7 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ./video-dedup/src:/opt/video-dedup/src
-      - ./data/video-dedup-cache:/opt/video-dedup/.dedup_cache
+      - video-dedup-cache:/opt/video-dedup/.dedup_cache
       - ./volumes:/videos
     working_dir: /opt/video-dedup
     networks:
@@ -65,3 +65,8 @@ services:
 
 networks:
   app_network:
+
+volumes:
+  db:
+  jobs:
+  video-dedup-cache:
