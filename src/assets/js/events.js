@@ -5,7 +5,7 @@ import { playAll, shufflePlay } from './fullscreen.js';
 import { setupSearchListeners } from './search.js';
 import { runAudit, auditCurrentView } from './audit.js';
 import { setupUnauditedFilter } from './filter.js';
-import { toggleTileSelection, confirmDelete, selectAllFiles, clearAllSelections, isSelectAllMode, getSelectedTileCount, syncMuteIcons } from './ui.js';
+import { toggleTileSelection, confirmDelete, selectAllFiles, clearAllSelections, isSelectAllMode, getSelectedTileCount, syncMuteIcons, selectAllVisibleTiles, areAllVisibleTilesSelected } from './ui.js';
 import { toggleTerminal, isTerminalActive, hideTerminal } from './terminal.js';
 
 let scrollDebounce = false;
@@ -359,6 +359,17 @@ function setupDeleteHotkeys() {
       // 'a' key - audit (double-press for all files in folder)
       e.preventDefault();
       runAudit();
+      return;
+    } else if (key === '.') {
+      // '.' key - toggle select all / deselect all visible tiles
+      e.preventDefault();
+      if (!state.deleteEnabled) return;
+      
+      if (areAllVisibleTilesSelected()) {
+        clearAllSelections();
+      } else {
+        selectAllVisibleTiles();
+      }
       return;
     }
     

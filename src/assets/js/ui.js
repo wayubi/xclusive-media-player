@@ -371,6 +371,31 @@ export function clearAllSelections() {
   selectAllMode = false;
 }
 
+export function selectAllVisibleTiles() {
+  // Select all visible tiles WITHOUT setting selectAllMode (normal multi-select)
+  const containers = document.querySelectorAll('#grid .video-container');
+  containers.forEach((container, index) => {
+    const selectBtn = container.querySelector('button[data-file]');
+    if (selectBtn && selectBtn.dataset.selected === 'false') {
+      selectBtn.dataset.selected = 'true';
+      selectBtn.classList.add('selected');
+      container.classList.add('selected-for-delete');
+      selectedTiles.add(index);
+    }
+  });
+  // NOTE: Do NOT set selectAllMode = true here
+}
+
+export function areAllVisibleTilesSelected() {
+  const containers = document.querySelectorAll('#grid .video-container');
+  if (containers.length === 0) return false;
+  
+  return Array.from(containers).every(container => {
+    const selectBtn = container.querySelector('button[data-file]');
+    return selectBtn && selectBtn.dataset.selected === 'true';
+  });
+}
+
 function getCurrentFolderPath() {
   if (!state.currentPath || state.currentPath === '') {
     return null;
