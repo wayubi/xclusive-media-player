@@ -74,6 +74,7 @@ done
 for f in "$CSS_DIR"/*.css; do
     [ -f "$f" ] || continue
     bn=$(basename "$f")
+    [ "$bn" = "app.css" ] && continue  # keep fresh mtime for index.php filemtime()
     orig="${css_mtimes[$bn]:-0}"
     [ "$orig" != "0" ] && touch -d "@$orig" "$f"
 done
@@ -81,6 +82,7 @@ done
 for f in "$JS_DIR"/*.js; do
     [ -f "$f" ] || continue
     bn=$(basename "$f")
+    [ "$bn" = "main.js" ] && continue  # keep fresh mtime for index.php filemtime()
     orig="${js_mtimes[$bn]:-0}"
     [ "$orig" != "0" ] && touch -d "@$orig" "$f"
 done
