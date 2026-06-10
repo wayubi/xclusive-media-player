@@ -1,5 +1,5 @@
 // share.js - Mastodon sharing functionality
-import { state } from './state.js';
+import { state } from './state.js?v=1781077253';
 
 const COOKIE_DAYS = 365;
 let shareModal = null;

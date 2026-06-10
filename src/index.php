@@ -508,7 +508,7 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
                 deleteEnabled: <?= $deleteEnabled ? 'true' : 'false' ?>
             };
         </script>
-        <script type="module" src="/assets/js/main.js"></script>
+        <script type="module" src="/assets/js/main.js?v=<?= filemtime(__DIR__ . '/assets/js/main.js') ?>"></script>
 
     </body>
 </html>

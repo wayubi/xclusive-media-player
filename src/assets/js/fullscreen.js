@@ -1,8 +1,8 @@
 // fullscreen.js - Fullscreen player functionality
-import { state } from './state.js';
-import { renderGrid } from './grid.js';
-import { mediaPool } from './mediaPool.js';
-import { isTerminalActive } from './terminal.js';
+import { state } from './state.js?v=1781077253';
+import { renderGrid } from './grid.js?v=1781077182';
+import { mediaPool } from './mediaPool.js?v=1781077182';
+import { isTerminalActive } from './terminal.js?v=1781077182';
 
 let fullscreenDeleteUsed = false;
 

@@ -1,9 +1,9 @@
 // mediaContainer.js - Create media containers for grid
-import { state } from './state.js';
-import { mediaPool } from './mediaPool.js';
-import { addCentralOverlay, addFileInfoOverlay } from './ui.js';
-import { startFullscreenFrom } from './fullscreen.js';
-import { isTerminalActive } from './terminal.js';
+import { state } from './state.js?v=1781077253';
+import { mediaPool } from './mediaPool.js?v=1781077182';
+import { addCentralOverlay, addFileInfoOverlay } from './ui.js?v=1781077182';
+import { startFullscreenFrom } from './fullscreen.js?v=1781077182';
+import { isTerminalActive } from './terminal.js?v=1781077182';
 
 // Lazy loading offset - start loading when element is within this many pixels of viewport
 export const LAZY_LOAD_OFFSET = 200;
@@ -33,7 +33,7 @@ export function createMediaContainer(file, index = 0) {
   }
   heart.onclick = (e) => {
     e.stopPropagation();
-    import('./favorites.js').then(module => {
+    import('./favorites.js?v=1781077182').then(module => {
       module.toggleFavorite(file, heart);
     });
   };
