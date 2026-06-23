@@ -142,7 +142,7 @@ class UserDatabase extends Database
     {
         static $map = [
             'admin' => ['delete', 'audit', 'optimize', 'terminal', 'favorites'],
-            'user'  => [],
+            'user'  => ['favorites'],
         ];
         return $map[$role] ?? [];
     }

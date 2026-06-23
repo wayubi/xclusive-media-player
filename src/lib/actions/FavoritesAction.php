@@ -25,6 +25,11 @@ class FavoritesAction extends ActionHandler
 
     private function handleToggle(): void
     {
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+        if ($userId <= 0) {
+            $this->error('Not authenticated', 401);
+        }
+
         $files = $this->getFiles();
         $file = $files[0] ?? null;
 
@@ -40,7 +45,7 @@ class FavoritesAction extends ActionHandler
 
         try {
             $favDb = new FavoritesDatabase();
-            $isFavorited = $favDb->toggleFavorite($fsPath);
+            $isFavorited = $favDb->toggleFavorite($fsPath, $userId);
 
             $this->json([
                 'status' => 'ok',
@@ -54,6 +59,11 @@ class FavoritesAction extends ActionHandler
 
     private function handleStatusBatch(): void
     {
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+        if ($userId <= 0) {
+            $this->error('Not authenticated', 401);
+        }
+
         $filePaths = $this->data['file_paths'] ?? [];
 
         if (!is_array($filePaths)) {
@@ -64,7 +74,7 @@ class FavoritesAction extends ActionHandler
 
         try {
             $favDb = new FavoritesDatabase();
-            $statuses = $favDb->getFavoriteStatusBatch($filePaths);
+            $statuses = $favDb->getFavoriteStatusBatch($filePaths, $userId);
 
             $this->json([
                 'status' => 'ok',
@@ -77,6 +87,11 @@ class FavoritesAction extends ActionHandler
 
     private function handleCount(): void
     {
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+        if ($userId <= 0) {
+            $this->error('Not authenticated', 401);
+        }
+
         $folderPath = $this->data['folder_path'] ?? null;
 
         if (!$folderPath) {
@@ -87,7 +102,7 @@ class FavoritesAction extends ActionHandler
 
         try {
             $favDb = new FavoritesDatabase();
-            $count = $favDb->getFavoritesCountInFolder($fsFolderPath);
+            $count = $favDb->getFavoritesCountInFolder($fsFolderPath, $userId);
 
             $this->json([
                 'status' => 'ok',

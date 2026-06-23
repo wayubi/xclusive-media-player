@@ -1,5 +1,5 @@
 <?php
-// lib/FavoritesDatabase.php - Global favorites management with SQLite
+// lib/FavoritesDatabase.php - Per-user favorites management with SQLite
 
 require_once __DIR__ . '/Database.php';
 
@@ -30,85 +30,73 @@ class FavoritesDatabase extends Database
         $this->db->exec('
             CREATE TABLE IF NOT EXISTS favorites (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                file_id INTEGER NOT NULL UNIQUE,
+                file_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
                 favorited_at INTEGER NOT NULL,
                 FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
             );
             
-            CREATE INDEX IF NOT EXISTS idx_file_id ON favorites(file_id);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_file_user ON favorites(file_id, user_id);
+            CREATE INDEX IF NOT EXISTS idx_user_id ON favorites(user_id);
             CREATE INDEX IF NOT EXISTS idx_favorited_at ON favorites(favorited_at);
         ');
     }
-    
-    /**
-     * Register a file and return its unique ID
-     * Uses full absolute path as unique identifier
-     */
+
     public function registerFile($absolutePath): ?int
     {
         return parent::registerFile($absolutePath);
     }
-    
-    /**
-     * Toggle favorite status for a file
-     * Returns true if now favorited, false if unfavorited
-     */
-    public function toggleFavorite($absolutePath) {
+
+    public function toggleFavorite($absolutePath, int $userId) {
         $fileId = $this->registerFile($absolutePath);
         if (!$fileId) {
             return null;
         }
         
-        // Check if already favorited
         $stmt = $this->db->prepare('
-            SELECT id FROM favorites WHERE file_id = :file_id
+            SELECT id FROM favorites WHERE file_id = :file_id AND user_id = :user_id
         ');
         $stmt->bindValue(':file_id', $fileId, SQLITE3_INTEGER);
+        $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
         $result = $stmt->execute();
         $existing = $result->fetchArray(SQLITE3_ASSOC);
         
         if ($existing) {
-            // Remove from favorites
-            $stmt = $this->db->prepare('DELETE FROM favorites WHERE file_id = :file_id');
+            $stmt = $this->db->prepare('DELETE FROM favorites WHERE file_id = :file_id AND user_id = :user_id');
             $stmt->bindValue(':file_id', $fileId, SQLITE3_INTEGER);
+            $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
             $stmt->execute();
             return false;
         } else {
-            // Add to favorites
             $stmt = $this->db->prepare('
-                INSERT INTO favorites (file_id, favorited_at)
-                VALUES (:file_id, :favorited_at)
+                INSERT INTO favorites (file_id, user_id, favorited_at)
+                VALUES (:file_id, :user_id, :favorited_at)
             ');
             $stmt->bindValue(':file_id', $fileId, SQLITE3_INTEGER);
+            $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
             $stmt->bindValue(':favorited_at', time(), SQLITE3_INTEGER);
             $stmt->execute();
             return true;
         }
     }
-    
-    /**
-     * Add a file to favorites
-     */
-    public function addFavorite($absolutePath) {
+
+    public function addFavorite($absolutePath, int $userId) {
         $fileId = $this->registerFile($absolutePath);
         if (!$fileId) {
             return false;
         }
         
-        // Insert or ignore if already exists
         $stmt = $this->db->prepare('
-            INSERT OR IGNORE INTO favorites (file_id, favorited_at)
-            VALUES (:file_id, :favorited_at)
+            INSERT OR IGNORE INTO favorites (file_id, user_id, favorited_at)
+            VALUES (:file_id, :user_id, :favorited_at)
         ');
         $stmt->bindValue(':file_id', $fileId, SQLITE3_INTEGER);
+        $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
         $stmt->bindValue(':favorited_at', time(), SQLITE3_INTEGER);
         
         return $stmt->execute() !== false;
     }
-    
-    /**
-     * Remove a file from favorites
-     */
+
     public function removeFavorite($absolutePath) {
         $normalizedPath = $this->normalizePath($absolutePath);
         
@@ -122,60 +110,52 @@ class FavoritesDatabase extends Database
         
         return $stmt->execute() !== false;
     }
-    
-    /**
-     * Check if a file is favorited
-     */
-    public function isFavorited($absolutePath) {
+
+    public function isFavorited($absolutePath, int $userId) {
         $normalizedPath = $this->normalizePath($absolutePath);
         
         $stmt = $this->db->prepare('
             SELECT fav.favorited_at
             FROM favorites fav
             JOIN files f ON f.id = fav.file_id
-            WHERE f.file_path = :path
+            WHERE f.file_path = :path AND fav.user_id = :user_id
         ');
         
         $stmt->bindValue(':path', $normalizedPath, SQLITE3_TEXT);
+        $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
         $result = $stmt->execute();
         $row = $result->fetchArray(SQLITE3_ASSOC);
         
         return $row !== false;
     }
-    
-    /**
-     * Get favorite status for multiple files (batch operation)
-     * Returns array with absolute paths as keys and favorite status as values
-     */
-    public function getFavoriteStatusBatch($absolutePaths) {
+
+    public function getFavoriteStatusBatch($absolutePaths, int $userId) {
         if (empty($absolutePaths)) {
             return [];
         }
 
-        // Check cache first
-        $cacheKey = md5(implode('|', $absolutePaths));
+        $cacheKey = md5(implode('|', $absolutePaths)) . '_u' . $userId;
         if (isset($this->statusCache[$cacheKey])) {
             return $this->statusCache[$cacheKey];
         }
         
         $results = [];
         
-        // Normalize all paths
         $normalizedPaths = array_map([$this, 'normalizePath'], $absolutePaths);
         $pathMap = array_combine($normalizedPaths, $absolutePaths);
         
-        // Build IN clause
         $placeholders = implode(',', array_fill(0, count($normalizedPaths), '?'));
         
         $stmt = $this->db->prepare("
             SELECT f.file_path, fav.favorited_at
             FROM files f
-            LEFT JOIN favorites fav ON f.id = fav.file_id
+            LEFT JOIN favorites fav ON f.id = fav.file_id AND fav.user_id = :user_id
             WHERE f.file_path IN ($placeholders)
         ");
         
+        $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
         foreach ($normalizedPaths as $i => $path) {
-            $stmt->bindValue($i + 1, $path, SQLITE3_TEXT);
+            $stmt->bindValue($i + 2, $path, SQLITE3_TEXT);
         }
         
         $result = $stmt->execute();
@@ -188,32 +168,30 @@ class FavoritesDatabase extends Database
             ];
         }
         
-        // Fill in missing files as not favorited
         foreach ($absolutePaths as $path) {
             if (!isset($results[$path])) {
                 $results[$path] = ['favorited' => false];
             }
         }
 
-        // Cache results
         $this->statusCache[$cacheKey] = $results;
         
         return $results;
     }
-    
-    /**
-     * Get all favorited files
-     */
-    public function getAllFavorites() {
-        $stmt = $this->db->query('
+
+    public function getAllFavorites(int $userId) {
+        $stmt = $this->db->prepare('
             SELECT f.file_path, fav.favorited_at
             FROM favorites fav
             JOIN files f ON f.id = fav.file_id
+            WHERE fav.user_id = :user_id
             ORDER BY fav.favorited_at DESC
         ');
+        $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
+        $result = $stmt->execute();
         
         $favorites = [];
-        while ($row = $stmt->fetchArray(SQLITE3_ASSOC)) {
+        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
             $favorites[] = [
                 'file_path' => $row['file_path'],
                 'favorited_at' => $row['favorited_at']
@@ -222,16 +200,15 @@ class FavoritesDatabase extends Database
         
         return $favorites;
     }
-    
-    /**
-     * Get statistics
-     */
-    public function getStats() {
+
+    public function getStats(int $userId) {
         $stmt = $this->db->query('SELECT COUNT(*) as total FROM files');
         $total = $stmt->fetchArray(SQLITE3_ASSOC)['total'];
         
-        $stmt = $this->db->query('SELECT COUNT(*) as favorited FROM favorites');
-        $favorited = $stmt->fetchArray(SQLITE3_ASSOC)['favorited'];
+        $stmt = $this->db->prepare('SELECT COUNT(*) as favorited FROM favorites WHERE user_id = :user_id');
+        $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
+        $result = $stmt->execute();
+        $favorited = $result->fetchArray(SQLITE3_ASSOC)['favorited'];
         
         return [
             'total_files' => $total,
@@ -239,21 +216,19 @@ class FavoritesDatabase extends Database
             'unfavorited_files' => $total - $favorited
         ];
     }
-    
-    /**
-     * Get count of favorites in a specific folder (recursively)
-     */
-    public function getFavoritesCountInFolder($folderPath) {
+
+    public function getFavoritesCountInFolder($folderPath, int $userId) {
         $normalizedPath = $this->normalizePath($folderPath);
         
         $stmt = $this->db->prepare('
             SELECT COUNT(*) as count
             FROM favorites fav
             JOIN files f ON f.id = fav.file_id
-            WHERE f.file_path LIKE :path
+            WHERE f.file_path LIKE :path AND fav.user_id = :user_id
         ');
         
         $stmt->bindValue(':path', $normalizedPath . '%', SQLITE3_TEXT);
+        $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
         $result = $stmt->execute();
         $row = $result->fetchArray(SQLITE3_ASSOC);
         

@@ -206,7 +206,7 @@ $allFilesCount = count($allFiles);
 
 // Batch fetch audit and favorites statuses (lightweight)
 $auditStatuses = $auditDb->getAuditStatusBatch($allFilesRaw);
-$favoritesStatuses = $favDb ? $favDb->getFavoriteStatusBatch($allFilesRaw) : [];
+$favoritesStatuses = $favDb ? $favDb->getFavoriteStatusBatch($allFilesRaw, (int)($_SESSION['user_id'] ?? 0)) : [];
 $optimizationStatuses = $metaDb->getOptimizationStatusBatch($allFilesRaw);
 
 // Get optimization stats using SQL COUNT (lightweight)
