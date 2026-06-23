@@ -11,6 +11,7 @@ RUN touch /var/log/cron.log && \
 
 WORKDIR /var/www/html
 
+COPY conf.d/ /usr/local/etc/php/conf.d/
 COPY www.conf /usr/local/etc/php-fpm.d/www.conf
 COPY crontab /etc/cron.d/crontab
 COPY entrypoint.sh /entrypoint.sh
