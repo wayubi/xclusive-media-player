@@ -127,7 +127,7 @@ if (!in_array($sort_direction, $valid_sort_directions)) {
 // FILESYSTEM HELPERS (using Utils)
 // ================================
 
-function renderSingleFolderSelect(array $selected_parts, string $current_abs_path, $auditDb, $metaDb, array $folderStats = [], array $folderAuditStats = [], array $subfolders = []): void {
+function renderSingleFolderSelect(array $selected_parts, string $current_abs_path, $auditDb, $metaDb, array $folderStats = [], array $folderAuditStats = [], array $subfolders = [], array $permissions = []): void {
     $is_root = empty($selected_parts);
     $has_children = !empty($subfolders);
     
@@ -154,7 +154,7 @@ function renderSingleFolderSelect(array $selected_parts, string $current_abs_pat
                 
                 switch ($subfolder_status) {
                     case 'all_audited':
-                        if ($stats['unoptimized'] > 0) {
+                        if (in_array('optimize', $permissions) && $stats['unoptimized'] > 0) {
                             $subfolder_icon = '🔧';
                         } else {
                             $subfolder_icon = '✅';
@@ -331,7 +331,7 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
                         ←
                     </button>
                 <?php endif; ?>
-                <?php renderSingleFolderSelect($selected_path_parts_final, $current_path, $auditDb, $metaDb, $folderStats, $folderAuditStats, $subfolders); ?>
+                <?php renderSingleFolderSelect($selected_path_parts_final, $current_path, $auditDb, $metaDb, $folderStats, $folderAuditStats, $subfolders, $permissions); ?>
             </div>
 
             <!-- Grid controls -->
@@ -415,6 +415,7 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
             </span>
             <?php endif; ?>
             
+            <?php if (in_array('optimize', $permissions)): ?>
             <!-- Optimization status -->
             <span id="optimization-text" style="
                 background: rgba(107, 114, 128, 0.1);
@@ -429,6 +430,7 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
             " data-initial-unoptimized="<?= $unoptimizedCount ?>" data-initial-optimized="<?= $optimizedCount ?>">
                 <span id="optimization-status-text" title="Checking optimization status...">⏳ Scanning...</span>
             </span>
+            <?php endif; ?>
         </form>
 
         <!-- Main grid -->
