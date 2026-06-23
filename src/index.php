@@ -1,6 +1,26 @@
 <?php
 
 // ================================
+// AUTHENTICATION
+// ================================
+$sessionLifetime = 86400;
+ini_set('session.gc_maxlifetime', $sessionLifetime);
+session_set_cookie_params([
+    'lifetime' => $sessionLifetime,
+    'path' => '/',
+    'domain' => '',
+    'secure' => isset($_SERVER['HTTPS']),
+    'httponly' => true,
+    'samesite' => 'Strict'
+]);
+session_start();
+
+if (empty($_SESSION['user_id'])) {
+    header('Location: login.php');
+    exit;
+}
+
+// ================================
 // DELETE PROTECTION
 // ================================
 // Load .env file
@@ -330,7 +350,7 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
 
         <form id="options-form" method="get" action="index.php">
             <!-- File counter -->
-            <span id="file-count" style="min-width: 100px;">1 / <?= $allFilesCount ?></span>
+            <!-- <span id="file-count" style="min-width: 100px;">1 / <?= $allFilesCount ?></span> -->
             
             <?php foreach ($selected_path_parts_final as $part): ?>
                 <input type="hidden" name="path[]" value="<?= htmlspecialchars($part) ?>">

@@ -1,0 +1,98 @@
+#!/usr/bin/env php
+<?php
+
+require_once __DIR__ . '/../lib/UserDatabase.php';
+
+$help = <<<HELP
+create_user - Create a user for the Xclusive Media Player login system
+
+Usage: create_user <username> [options]
+
+Options:
+  --role <role>     Assign a role (default: user)
+  --help            Show this help message
+
+The script will prompt for the password interactively (hidden input).
+
+Examples:
+  create_user admin
+  create_user jdoe --role editor
+
+HELP;
+
+$args = array_slice($argv, 1);
+$username = null;
+$role = 'user';
+$showHelp = false;
+
+for ($i = 0; $i < count($args); $i++) {
+    switch ($args[$i]) {
+        case '--help':
+        case '-h':
+            $showHelp = true;
+            break;
+        case '--role':
+            $role = $args[$i + 1] ?? 'user';
+            $i++;
+            break;
+        default:
+            if ($username === null) {
+                $username = $args[$i];
+            }
+            break;
+    }
+}
+
+if ($showHelp || $username === null) {
+    echo $help;
+    exit($username === null ? 1 : 0);
+}
+
+echo "Creating user: $username (role: $role)\n";
+
+function promptHidden(string $prompt): string
+{
+    echo $prompt;
+    system('stty -echo');
+    $input = fgets(STDIN);
+    system('stty echo');
+    echo "\n";
+    return $input !== false ? rtrim($input, "\n\r") : '';
+}
+
+$password = null;
+$confirm = null;
+
+while (true) {
+    $password = promptHidden('Password: ');
+
+    if (strlen($password) < 8) {
+        echo "Error: Password must be at least 8 characters.\n";
+        continue;
+    }
+
+    $confirm = promptHidden('Confirm: ');
+
+    if ($password !== $confirm) {
+        echo "Error: Passwords do not match.\n";
+        continue;
+    }
+
+    break;
+}
+
+$userDb = new UserDatabase();
+
+try {
+    $result = $userDb->createUser($username, $password, $role);
+    if ($result) {
+        echo "User '$username' created successfully.\n";
+        exit(0);
+    } else {
+        echo "Error: Failed to create user. Check if username already exists.\n";
+        exit(1);
+    }
+} catch (Exception $e) {
+    echo "Error: " . $e->getMessage() . "\n";
+    exit(1);
+}

@@ -14,6 +14,27 @@ require_once __DIR__ . '/lib/actions/ShareAction.php';
 require_once __DIR__ . '/lib/actions/TerminalAction.php';
 require_once __DIR__ . '/lib/actions/EditTextAction.php';
 
+// ================================
+// AUTHENTICATION
+// ================================
+$sessionLifetime = 86400;
+ini_set('session.gc_maxlifetime', $sessionLifetime);
+session_set_cookie_params([
+    'lifetime' => $sessionLifetime,
+    'path' => '/',
+    'domain' => '',
+    'secure' => isset($_SERVER['HTTPS']),
+    'httponly' => true,
+    'samesite' => 'Strict'
+]);
+session_start();
+
+if (empty($_SESSION['user_id'])) {
+    http_response_code(401);
+    echo json_encode(['error' => 'Unauthorized']);
+    exit;
+}
+
 header('Content-Type: application/json');
 
 // Streaming endpoint for terminal job output
