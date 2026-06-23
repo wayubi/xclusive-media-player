@@ -1,5 +1,5 @@
 // mediaQueue.js - Media loading queue management with robust completion signals
-import { state } from './state.js?v=1782192653';
+import { state } from './state.js';
 
 const audioQueue = [];
 const videoQueue = [];

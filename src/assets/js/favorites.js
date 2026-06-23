@@ -1,7 +1,7 @@
 // favorites.js - Favorites functionality
-import { state } from './state.js?v=1782192653';
-import { renderGrid, updateFileCount } from './grid.js?v=1781077182';
-import { startFullscreenPlayer } from './fullscreen.js?v=1781077182';
+import { state } from './state.js';
+import { renderGrid, updateFileCount } from './grid.js';
+import { startFullscreenPlayer } from './fullscreen.js';
 
 export async function toggleFavorite(file, heartElement) {
   const isFavorited = await state.toggleFavorite(file);
@@ -78,7 +78,7 @@ export function playFavorites() {
   document.querySelectorAll('#grid audio, #grid video').forEach(m => m.pause());
   
   // Import and use the fullscreen player
-  import('./fullscreen.js?v=1781077182').then(module => {
+  import('./fullscreen.js').then(module => {
     module.startFullscreenPlayer(favorites, 0);
   });
 }

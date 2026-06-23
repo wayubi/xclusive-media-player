@@ -1,8 +1,8 @@
 // ui.js - UI components and overlay creation
-import { state } from './state.js?v=1782192653';
-import { startFullscreenFrom } from './fullscreen.js?v=1781077182';
-import { renderGrid } from './grid.js?v=1781077182';
-import { isTerminalActive } from './terminal.js?v=1781077182';
+import { state } from './state.js';
+import { startFullscreenFrom } from './fullscreen.js';
+import { renderGrid } from './grid.js';
+import { isTerminalActive } from './terminal.js';
 
 // Track selected tiles for keyboard delete operations
 let selectedTiles = new Set();
@@ -316,7 +316,7 @@ export async function confirmDelete() {
       state.startIndex = Math.min(state.startIndex, Math.max(0, state.allVideos.length - state.totalCells));
       selectedTiles.clear();
       
-      import('./audit.js?v=1781077182').then(module => {
+      import('./audit.js').then(module => {
         module.updateAuditDisplay();
       });
       
@@ -495,7 +495,7 @@ export function addCentralOverlay(container, mediaEl, file) {
       e.stopPropagation();
       if (isTextFile) {
         // For text files, import and call showTextFullscreen
-        import('./mediaContainer.js?v=1781077182').then(module => {
+        import('./mediaContainer.js').then(module => {
           module.showTextFullscreen(file);
         });
       } else {
@@ -521,7 +521,7 @@ export function addCentralOverlay(container, mediaEl, file) {
     shareBtn.title = 'Share to Mastodon';
     shareBtn.onclick = e => {
       e.stopPropagation();
-      import('./share.js?v=1781077182').then(module => {
+      import('./share.js').then(module => {
         module.openShareModal(file, isVideo, isAudio);
       });
     };
@@ -596,7 +596,7 @@ function createAuditButton(file, container) {
     container.classList.remove('unaudited');
     
     // Update counter immediately
-    import('./audit.js?v=1781077182').then(module => {
+    import('./audit.js').then(module => {
       module.updateAuditDisplay();
     });
     
@@ -622,7 +622,7 @@ function createAuditButton(file, container) {
           state.auditStatusMap[webPath] = false;
           container.classList.add('unaudited');
           
-          import('./audit.js?v=1781077182').then(module => {
+          import('./audit.js').then(module => {
             module.updateAuditDisplay();
           });
           
@@ -661,7 +661,7 @@ function createAuditButton(file, container) {
         state.auditStatusMap[webPath] = false;
         container.classList.add('unaudited');
         
-        import('./audit.js?v=1781077182').then(module => {
+        import('./audit.js').then(module => {
           module.updateAuditDisplay();
         });
         

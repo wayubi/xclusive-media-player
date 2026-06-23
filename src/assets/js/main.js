@@ -1,9 +1,9 @@
 // main.js - Entry point and initialization
-import { state } from './state.js?v=1782192653';
-import { renderGrid, updateOptimizationDisplay } from './grid.js?v=1781077182';
-import { setupEventListeners } from './events.js?v=1782192659';
-import { setVhUnit } from './utils.js?v=1781077182';
-import { initTerminal } from './terminal.js?v=1781077182';
+import { state } from './state.js';
+import { renderGrid, updateOptimizationDisplay } from './grid.js';
+import { setupEventListeners } from './events.js';
+import { setVhUnit } from './utils.js';
+import { initTerminal } from './terminal.js';
 
 // Bootstrap from PHP
 const {
@@ -47,13 +47,13 @@ document.addEventListener('DOMContentLoaded', () => {
   initTerminal();
   
   // Initialize favorites display
-  import('./favorites.js?v=1781077182').then(module => {
+  import('./favorites.js').then(module => {
     module.updateFavoritesDisplay();
     module.setupFavoritesFilter();
   });
   
   // Initialize optimization filter
-  import('./filter.js?v=1781077182').then(module => {
+  import('./filter.js').then(module => {
     module.setupOptimizationFilter();
   });
   

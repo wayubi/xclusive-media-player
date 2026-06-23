@@ -1,10 +1,10 @@
 // grid.js - Grid rendering and navigation
-import { state } from './state.js?v=1782192653';
-import { mediaPool } from './mediaPool.js?v=1781077182';
-import { mediaQueue } from './mediaQueue.js?v=1781077182';
-import { createMediaContainer, transformToUnsupportedVideo, loadTextContent, LAZY_LOAD_OFFSET } from './mediaContainer.js?v=1781077182';
-import { syncMuteIcons, clearSelectedTiles, clearAllSelections } from './ui.js?v=1782192656';
-import { decodeBase64UTF8 } from './utils.js?v=1781077182';
+import { state } from './state.js';
+import { mediaPool } from './mediaPool.js';
+import { mediaQueue } from './mediaQueue.js';
+import { createMediaContainer, transformToUnsupportedVideo, loadTextContent, LAZY_LOAD_OFFSET } from './mediaContainer.js';
+import { syncMuteIcons, clearSelectedTiles, clearAllSelections } from './ui.js';
+import { decodeBase64UTF8 } from './utils.js';
 
 // IntersectionObserver for lazy loading media
 let gridObserver = null;

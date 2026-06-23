@@ -1,12 +1,12 @@
 // events.js - Event listeners and handlers
-import { state } from './state.js?v=1782192653';
-import { nextGrid, prevGrid, renderGrid } from './grid.js?v=1781077182';
-import { playAll, shufflePlay } from './fullscreen.js?v=1781077182';
-import { setupSearchListeners } from './search.js?v=1781077182';
-import { runAudit, auditCurrentView } from './audit.js?v=1781077182';
-import { setupUnauditedFilter } from './filter.js?v=1781077182';
-import { toggleTileSelection, confirmDelete, selectAllFiles, clearAllSelections, isSelectAllMode, getSelectedTileCount, syncMuteIcons, selectAllVisibleTiles, areAllVisibleTilesSelected } from './ui.js?v=1782192656';
-import { toggleTerminal, isTerminalActive, hideTerminal } from './terminal.js?v=1781077182';
+import { state } from './state.js';
+import { nextGrid, prevGrid, renderGrid } from './grid.js';
+import { playAll, shufflePlay } from './fullscreen.js';
+import { setupSearchListeners } from './search.js';
+import { runAudit, auditCurrentView } from './audit.js';
+import { setupUnauditedFilter } from './filter.js';
+import { toggleTileSelection, confirmDelete, selectAllFiles, clearAllSelections, isSelectAllMode, getSelectedTileCount, syncMuteIcons, selectAllVisibleTiles, areAllVisibleTilesSelected } from './ui.js';
+import { toggleTerminal, isTerminalActive, hideTerminal } from './terminal.js';
 
 let scrollDebounce = false;
 
@@ -232,7 +232,7 @@ function setupGlobalControls() {
   
   // NEW: Add playFavorites
   window.playFavorites = () => {
-    import('./favorites.js?v=1781077182').then(module => {
+    import('./favorites.js').then(module => {
       module.playFavorites();
     });
   };

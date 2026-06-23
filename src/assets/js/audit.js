@@ -1,6 +1,6 @@
 // audit.js - Audit functionality with SQLite backend
-import { state } from './state.js?v=1782192653';
-import { renderGrid } from './grid.js?v=1781077182';
+import { state } from './state.js';
+import { renderGrid } from './grid.js';
 
 let lastAuditClickTime = 0;
 let auditTimeout = null;
@@ -231,7 +231,7 @@ export function updateAuditDisplay() {
     `;
     
     // Re-setup the unaudited filter click handler
-    import('./filter.js?v=1781077182').then(module => {
+    import('./filter.js').then(module => {
       module.setupUnauditedFilter();
     });
   }

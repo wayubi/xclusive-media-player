@@ -1,5 +1,5 @@
 // utils.js - Utility functions
-import { state } from './state.js?v=1782192653';
+import { state } from './state.js';
 
 export function setVhUnit() {
   document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`);
