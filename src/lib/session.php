@@ -11,3 +11,10 @@ session_set_cookie_params([
     'samesite' => 'Strict'
 ]);
 session_start();
+
+if (!empty($_SESSION['user_id'])) {
+    require_once __DIR__ . '/UserDatabase.php';
+    $userDb = new UserDatabase();
+    $user = $userDb->getUser((int)$_SESSION['user_id']);
+    $_SESSION['user_role'] = $user['role'] ?? 'user';
+}
