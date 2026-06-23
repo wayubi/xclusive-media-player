@@ -152,25 +152,25 @@ function renderSingleFolderSelect(array $selected_parts, string $current_abs_pat
                 $subfolder_file_count = $stats['total'];
                 $subfolder_status = $auditStats['status'] ?? 'none_audited';
                 
-                switch ($subfolder_status) {
-                    case 'all_audited':
-                        if (in_array('optimize', $permissions) && $stats['unoptimized'] > 0) {
-                            $subfolder_icon = '🔧';
-                        } else {
-                            $subfolder_icon = '✅';
-                        }
-                        break;
-                    case 'some_audited':
-                        $subfolder_icon = '⚠️';
-                        break;
-                    case 'none_audited':
-                    default:
-                        if ($subfolder_file_count === 0) {
-                            $subfolder_icon = '📁';
-                        } else {
-                            $subfolder_icon = '🆕';
-                        }
-                        break;
+                if (in_array('audit', $permissions)) {
+                    switch ($subfolder_status) {
+                        case 'all_audited':
+                            if (in_array('optimize', $permissions) && $stats['unoptimized'] > 0) {
+                                $subfolder_icon = '🔧';
+                            } else {
+                                $subfolder_icon = '✅';
+                            }
+                            break;
+                        case 'some_audited':
+                            $subfolder_icon = '⚠️';
+                            break;
+                        case 'none_audited':
+                        default:
+                            $subfolder_icon = $subfolder_file_count === 0 ? '📁' : '🆕';
+                            break;
+                    }
+                } else {
+                    $subfolder_icon = $subfolder_file_count === 0 ? '📁' : '📂';
                 }
             ?>
             <option value="<?= htmlspecialchars($folder) ?>">
