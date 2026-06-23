@@ -387,20 +387,18 @@ function setupDeleteHotkeys() {
     
     // '~' key (backtick/tilde) - toggle terminal (transparent mode)
     if (key === '`' || key === '~') {
-      // Only block if fullscreen is active (delete mode is fine)
       if (isFullscreenActive) return;
+      if (!state.permissions.includes('terminal')) return;
       e.preventDefault();
-      // Pass the current web path (relative to /volumes) with transparent mode
       toggleTerminal(state.currentPath || '', 'transparent');
       return;
     }
     
     // 'b' key - toggle terminal (privacy mode / boss screen style)
     if (key.toLowerCase() === 'b') {
-      // Only block if fullscreen is active (delete mode is fine)
       if (isFullscreenActive) return;
+      if (!state.permissions.includes('terminal')) return;
       e.preventDefault();
-      // Pass the current web path (relative to /volumes) with privacy mode
       toggleTerminal(state.currentPath || '', 'privacy');
       return;
     }

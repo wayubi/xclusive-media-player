@@ -26,6 +26,12 @@ header('Content-Type: application/json');
 
 // Streaming endpoint for terminal job output
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && !empty($_GET['stream']) && !empty($_GET['jobId'])) {
+    $perms = UserDatabase::getRolePermissions($_SESSION['user_role'] ?? '');
+    if (!in_array('terminal', $perms)) {
+        http_response_code(403);
+        echo json_encode(['error' => 'Forbidden']);
+        exit;
+    }
     $metaDb = new MetadataDatabase();
     $handler = new TerminalAction(['command' => 'stream', 'jobId' => $_GET['jobId']], '/var/www/html', $metaDb);
     $handler->streamJob($_GET['jobId']);
@@ -47,9 +53,17 @@ if (!$action) {
     exit;
 }
 
+// list_scripts is a terminal subcommand
+if ($action === 'list_scripts') {
+    $data['action'] = 'terminal';
+    $data['command'] = 'list_scripts';
+    $action = 'terminal';
+}
+
 $actionPermissions = [
-    'delete' => ['delete'],
-    'audit'  => ['audit'],
+    'delete'   => ['delete'],
+    'audit'    => ['audit'],
+    'terminal' => ['terminal'],
 ];
 
 if (isset($actionPermissions[$action])) {
@@ -60,13 +74,6 @@ if (isset($actionPermissions[$action])) {
         echo json_encode(['error' => 'Forbidden']);
         exit;
     }
-}
-
-// list_scripts is a terminal subcommand
-if ($action === 'list_scripts') {
-    $data['action'] = 'terminal';
-    $data['command'] = 'list_scripts';
-    $action = 'terminal';
 }
 
 $root = realpath(__DIR__ . '/volumes');

@@ -44,7 +44,9 @@ document.addEventListener('DOMContentLoaded', () => {
   setVhUnit();
   setupEventListeners();
   renderGrid();
-  initTerminal();
+  if (state.permissions.includes('terminal')) {
+    initTerminal();
+  }
   
   // Initialize favorites display
   import('./favorites.js').then(module => {
