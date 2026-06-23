@@ -1,12 +1,12 @@
 <?php
-// lib/AuditDatabase.php - Global audit state management with SQLite
+// lib/AuditDatabase.php - Audit state management with SQLite (metadata_file_id based)
 
 require_once __DIR__ . '/Database.php';
 
 class AuditDatabase extends Database
 {
     private array $statusCache = [];
-    private int $cacheTtl = 60;
+    private ?SQLite3 $metaDb = null;
 
     public function __construct($dbPath = null) {
         $dbPath = $dbPath ?? __DIR__ . '/../../db/audit.db';
@@ -16,258 +16,209 @@ class AuditDatabase extends Database
     protected function createTables(): void
     {
         $this->db->exec('
-            CREATE TABLE IF NOT EXISTS files (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                file_path TEXT NOT NULL UNIQUE,
-                file_size INTEGER NOT NULL,
-                modified_time INTEGER NOT NULL,
-                created_at INTEGER NOT NULL
-            );
-            
-            CREATE INDEX IF NOT EXISTS idx_file_path ON files(file_path);
-        ');
-
-        $this->db->exec('
             CREATE TABLE IF NOT EXISTS audit_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                file_id INTEGER NOT NULL,
+                metadata_file_id INTEGER NOT NULL UNIQUE,
                 audited_at INTEGER NOT NULL,
-                audit_date TEXT NOT NULL,
-                FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
+                audit_date TEXT NOT NULL
             );
-            
-            CREATE INDEX IF NOT EXISTS idx_file_id ON audit_log(file_id);
-            CREATE INDEX IF NOT EXISTS idx_audited_at ON audit_log(audited_at);
+            CREATE INDEX IF NOT EXISTS idx_audit_mfid ON audit_log(metadata_file_id);
         ');
     }
-    
-    /**
-     * Register a file and return its unique ID
-     * Uses full absolute path as unique identifier
-     */
-    public function registerFile($absolutePath): ?int
+
+    private function getMetadataDb(): SQLite3
     {
-        return parent::registerFile($absolutePath);
-    }
-    
-    /**
-     * Mark a file as audited
-     */
-    public function markAsAudited($absolutePath) {
-        $fileId = $this->registerFile($absolutePath);
-        if (!$fileId) {
-            return false;
+        if ($this->metaDb === null) {
+            $this->metaDb = new SQLite3(__DIR__ . '/../../db/metadata.db');
+            $this->metaDb->busyTimeout(5000);
         }
-        
-        $auditDate = date('ymd');
-        
-        $stmt = $this->db->prepare('
-            SELECT id FROM audit_log 
-            WHERE file_id = :file_id 
-            ORDER BY audited_at DESC 
-            LIMIT 1
-        ');
-        $stmt->bindValue(':file_id', $fileId, SQLITE3_INTEGER);
-        $result = $stmt->execute();
-        $existing = $result->fetchArray(SQLITE3_ASSOC);
-        
-        if ($existing) {
-            $stmt = $this->db->prepare('
-                UPDATE audit_log 
-                SET audited_at = :audited_at,
-                    audit_date = :date
-                WHERE id = :id
-            ');
-            $stmt->bindValue(':audited_at', time(), SQLITE3_INTEGER);
-            $stmt->bindValue(':date', $auditDate, SQLITE3_TEXT);
-            $stmt->bindValue(':id', $existing['id'], SQLITE3_INTEGER);
-        } else {
-            $stmt = $this->db->prepare('
-                INSERT INTO audit_log (file_id, audit_date, audited_at)
-                VALUES (:file_id, :date, :audited_at)
-            ');
-            $stmt->bindValue(':file_id', $fileId, SQLITE3_INTEGER);
-            $stmt->bindValue(':date', $auditDate, SQLITE3_TEXT);
-            $stmt->bindValue(':audited_at', time(), SQLITE3_INTEGER);
-        }
-        
-        return $stmt->execute() !== false;
+        return $this->metaDb;
     }
-    
-    /**
-     * Check if a file is audited
-     */
-    public function isAudited($absolutePath) {
+
+    private function getMetadataId(string $absolutePath): ?int
+    {
         $normalizedPath = $this->normalizePath($absolutePath);
-        
-        $stmt = $this->db->prepare('
-            SELECT al.audit_date, al.audited_at
-            FROM audit_log al
-            JOIN files f ON f.id = al.file_id
-            WHERE f.file_path = :path
-            ORDER BY al.audited_at DESC
-            LIMIT 1
-        ');
-        
+        $metaDb = $this->getMetadataDb();
+        $stmt = $metaDb->prepare('SELECT id FROM files WHERE file_path = :path');
         $stmt->bindValue(':path', $normalizedPath, SQLITE3_TEXT);
         $result = $stmt->execute();
         $row = $result->fetchArray(SQLITE3_ASSOC);
-        
+        return $row ? (int)$row['id'] : null;
+    }
+
+    private function getMetadataIdBatch(array $absolutePaths): array
+    {
+        if (empty($absolutePaths)) return [];
+
+        $normalizedPaths = array_map([$this, 'normalizePath'], $absolutePaths);
+        $pathMap = array_combine($normalizedPaths, $absolutePaths);
+
+        $placeholders = implode(',', array_fill(0, count($normalizedPaths), '?'));
+        $metaDb = $this->getMetadataDb();
+        $stmt = $metaDb->prepare("SELECT id, file_path FROM files WHERE file_path IN ($placeholders)");
+        foreach ($normalizedPaths as $i => $path) {
+            $stmt->bindValue($i + 1, $path, SQLITE3_TEXT);
+        }
+        $result = $stmt->execute();
+
+        $pathToId = [];
+        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+            $originalPath = $pathMap[$row['file_path']];
+            $pathToId[$originalPath] = (int)$row['id'];
+        }
+        return $pathToId;
+    }
+
+    public function markAsAudited($absolutePath) {
+        $metaId = $this->getMetadataId($absolutePath);
+        if (!$metaId) {
+            return false;
+        }
+
+        $auditDate = date('ymd');
+        $now = time();
+
+        $stmt = $this->db->prepare('
+            INSERT OR REPLACE INTO audit_log (metadata_file_id, audited_at, audit_date)
+            VALUES (:id, :audited_at, :date)
+        ');
+        $stmt->bindValue(':id', $metaId, SQLITE3_INTEGER);
+        $stmt->bindValue(':audited_at', $now, SQLITE3_INTEGER);
+        $stmt->bindValue(':date', $auditDate, SQLITE3_TEXT);
+
+        return $stmt->execute() !== false;
+    }
+
+    public function isAudited($absolutePath) {
+        $metaId = $this->getMetadataId($absolutePath);
+        if (!$metaId) {
+            return null;
+        }
+
+        $stmt = $this->db->prepare('SELECT audit_date, audited_at FROM audit_log WHERE metadata_file_id = :id');
+        $stmt->bindValue(':id', $metaId, SQLITE3_INTEGER);
+        $result = $stmt->execute();
+        $row = $result->fetchArray(SQLITE3_ASSOC);
+
         return $row !== false ? $row : null;
     }
-    
-    /**
-     * Get audit info for multiple files (batch operation)
-     * Returns array with absolute paths as keys and audit info as values
-     */
+
     public function getAuditStatusBatch($absolutePaths) {
         if (empty($absolutePaths)) {
             return [];
         }
-        
+
+        $pathToId = $this->getMetadataIdBatch($absolutePaths);
         $results = [];
-        
-        // Normalize all paths
-        $normalizedPaths = array_map([$this, 'normalizePath'], $absolutePaths);
-        $pathMap = array_combine($normalizedPaths, $absolutePaths);
-        
-        // Build IN clause
-        $placeholders = implode(',', array_fill(0, count($normalizedPaths), '?'));
-        
-        $stmt = $this->db->prepare("
-            SELECT f.file_path, al.audit_date, al.audited_at
-            FROM files f
-            LEFT JOIN audit_log al ON f.id = al.file_id
-            WHERE f.file_path IN ($placeholders)
-            GROUP BY f.file_path
-            HAVING al.audited_at = MAX(al.audited_at) OR al.audited_at IS NULL
-        ");
-        
-        foreach ($normalizedPaths as $i => $path) {
-            $stmt->bindValue($i + 1, $path, SQLITE3_TEXT);
+
+        if (!empty($pathToId)) {
+            $idPlaceholders = implode(',', array_fill(0, count($pathToId), '?'));
+            $stmt = $this->db->prepare("SELECT metadata_file_id, audited_at, audit_date FROM audit_log WHERE metadata_file_id IN ($idPlaceholders)");
+            $i = 1;
+            foreach ($pathToId as $id) {
+                $stmt->bindValue($i++, $id, SQLITE3_INTEGER);
+            }
+            $result = $stmt->execute();
+
+            $idToPath = array_flip($pathToId);
+            while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+                $originalPath = $idToPath[(int)$row['metadata_file_id']];
+                $results[$originalPath] = [
+                    'audited' => true,
+                    'audit_date' => $row['audit_date'],
+                    'audited_at' => $row['audited_at']
+                ];
+            }
         }
-        
-        $result = $stmt->execute();
-        
-        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
-            $originalPath = $pathMap[$row['file_path']];
-            $results[$originalPath] = $row['audited_at'] ? [
-                'audited' => true,
-                'audit_date' => $row['audit_date'],
-                'audited_at' => $row['audited_at']
-            ] : [
-                'audited' => false
-            ];
-        }
-        
-        // Fill in missing files as not audited
+
         foreach ($absolutePaths as $path) {
             if (!isset($results[$path])) {
                 $results[$path] = ['audited' => false];
             }
         }
-        
+
         return $results;
     }
 
-    /**
-     * Get audit status for multiple folders at once (batch operation)
-     * Returns array with folder paths as keys and audited count
-     * Uses audit.db - does NOT compute status (combines with metadata totals in index.php)
-     */
     public function getFolderStatsBatch(array $folderPaths, array $totalCounts = []): array
     {
         $results = [];
-        
+
         if (empty($folderPaths)) {
             return $results;
         }
-        
-        // Normalize all folder paths
-        $normalizedFolders = [];
-        foreach ($folderPaths as $folderPath) {
-            $normalizedFolders[] = $this->normalizePath($folderPath);
-        }
-        
-        // Build SQL WHERE clause to filter only files in requested folders
+
+        $normalizedFolders = array_map([$this, 'normalizePath'], $folderPaths);
+
+        $metaDb = $this->getMetadataDb();
         $conditions = [];
         foreach ($normalizedFolders as $folder) {
-            $conditions[] = "file_path LIKE '" . $this->db->escapeString($folder) . "/%'";
+            $conditions[] = "file_path LIKE '" . $metaDb->escapeString($folder) . "/%'";
         }
         $whereClause = implode(' OR ', $conditions);
-        
-        $stmt = $this->db->prepare("
-            SELECT 
-                f.file_path,
-                MAX(al.audited_at) as last_audit_at
-            FROM files f
-            LEFT JOIN audit_log al ON f.id = al.file_id
-            WHERE $whereClause
-            GROUP BY f.file_path
-        ");
-        
+
+        if (empty($whereClause)) return $results;
+
+        $stmt = $metaDb->prepare("SELECT id, file_path FROM files WHERE $whereClause");
         $result = $stmt->execute();
-        
-        // Count audited files by folder (not total - use metadata.db for totals)
-        $auditedCounts = [];
+
+        $folderFileIds = [];
+        $allIds = [];
+
         while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
-            $filePath = $row['file_path'];
-            if (!$row['last_audit_at']) {
-                continue; // Skip non-audited files
-            }
-            
+            $fp = $row['file_path'];
+            $fid = (int)$row['id'];
+
             foreach ($normalizedFolders as $folderPath) {
                 $prefix = $folderPath . '/';
-                if (str_starts_with($filePath, $prefix)) {
-                    $relativePath = substr($filePath, strlen($prefix));
+                if (str_starts_with($fp, $prefix)) {
+                    $relativePath = substr($fp, strlen($prefix));
                     $firstSlash = strpos($relativePath, '/');
-                    
-                    if ($firstSlash === false) {
-                        // File is directly in folder
-                        if (!isset($auditedCounts[$folderPath])) {
-                            $auditedCounts[$folderPath] = 0;
-                        }
-                        $auditedCounts[$folderPath]++;
-                    } else {
-                        // File is in subfolder - use subfolder as key
-                        $subfolder = substr($relativePath, 0, $firstSlash);
-                        $subfolderPath = $folderPath . '/' . $subfolder;
-                        
-                        if (!isset($auditedCounts[$subfolderPath])) {
-                            $auditedCounts[$subfolderPath] = 0;
-                        }
-                        $auditedCounts[$subfolderPath]++;
-                    }
+                    $key = ($firstSlash === false) ? $folderPath : $folderPath . '/' . substr($relativePath, 0, $firstSlash);
+                    $folderFileIds[$key][] = $fid;
+                    $allIds[] = $fid;
                     break;
                 }
             }
         }
-        
-        // Build results - combine audited count with total from metadata.db
+
+        $auditedIds = [];
+        if (!empty($allIds)) {
+            $idPlaceholders = implode(',', array_fill(0, count($allIds), '?'));
+            $stmt = $this->db->prepare("SELECT DISTINCT metadata_file_id FROM audit_log WHERE metadata_file_id IN ($idPlaceholders)");
+            foreach ($allIds as $i => $id) {
+                $stmt->bindValue($i + 1, $id, SQLITE3_INTEGER);
+            }
+            $result = $stmt->execute();
+            while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+                $auditedIds[(int)$row['metadata_file_id']] = true;
+            }
+        }
+
         foreach ($normalizedFolders as $folderPath) {
             $total = $totalCounts[$folderPath] ?? 0;
-            $audited = $auditedCounts[$folderPath] ?? 0;
-            
+            $fileIds = $folderFileIds[$folderPath] ?? [];
+            $audited = 0;
+            foreach ($fileIds as $fid) {
+                if (isset($auditedIds[$fid])) $audited++;
+            }
+
             if ($total === 0) {
                 $results[$folderPath] = ['status' => 'none_audited', 'total' => 0, 'audited' => 0];
             } elseif ($audited === 0) {
                 $results[$folderPath] = ['status' => 'none_audited', 'total' => $total, 'audited' => 0];
-            } elseif ($audited === $total) {
+            } elseif ($audited >= $total) {
                 $results[$folderPath] = ['status' => 'all_audited', 'total' => $total, 'audited' => $audited];
             } else {
                 $results[$folderPath] = ['status' => 'some_audited', 'total' => $total, 'audited' => $audited];
             }
         }
-        
+
         return $results;
     }
-    
-    /**
-     * Batch audit multiple files
-     */
+
     public function auditBatch($absolutePaths) {
         $this->db->exec('BEGIN TRANSACTION');
-        
+
         try {
             $successCount = 0;
             foreach ($absolutePaths as $path) {
@@ -275,7 +226,7 @@ class AuditDatabase extends Database
                     $successCount++;
                 }
             }
-            
+
             $this->db->exec('COMMIT');
             return $successCount;
         } catch (Exception $e) {
@@ -283,38 +234,40 @@ class AuditDatabase extends Database
             throw $e;
         }
     }
-    
-    /**
-     * Delete a file from audit database
-     * Also deletes related audit_log entries via CASCADE
-     */
+
     public function deleteFile(string $absolutePath): bool
     {
-        $normalizedPath = $this->normalizePath($absolutePath);
-        
-        $stmt = $this->db->prepare('DELETE FROM files WHERE file_path = :path');
-        $stmt->bindValue(':path', $normalizedPath, SQLITE3_TEXT);
-        
+        $metaId = $this->getMetadataId($absolutePath);
+        if (!$metaId) {
+            return false;
+        }
+
+        $stmt = $this->db->prepare('DELETE FROM audit_log WHERE metadata_file_id = :id');
+        $stmt->bindValue(':id', $metaId, SQLITE3_INTEGER);
+
         return $stmt->execute() !== false;
     }
-    
-    /**
-     * Get statistics
-     */
+
     public function getStats() {
-        $stmt = $this->db->query('SELECT COUNT(*) as total FROM files');
+        $metaDb = $this->getMetadataDb();
+        $stmt = $metaDb->query('SELECT COUNT(*) as total FROM files');
         $total = $stmt->fetchArray(SQLITE3_ASSOC)['total'];
-        
-        $stmt = $this->db->query('
-            SELECT COUNT(DISTINCT file_id) as audited 
-            FROM audit_log
-        ');
+
+        $stmt = $this->db->query('SELECT COUNT(*) as audited FROM audit_log');
         $audited = $stmt->fetchArray(SQLITE3_ASSOC)['audited'];
-        
+
         return [
             'total_files' => $total,
             'audited_files' => $audited,
             'unaudited_files' => $total - $audited
         ];
+    }
+
+    public function __destruct()
+    {
+        if ($this->metaDb) {
+            $this->metaDb->close();
+        }
+        parent::__destruct();
     }
 }

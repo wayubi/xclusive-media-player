@@ -317,7 +317,39 @@ class MetadataDatabase extends Database
         
         return $stmt->execute() !== false;
     }
-    
+
+    public function findMoveCandidate(string $xxhash, int $fileSize, int $modifiedTime, string $currentPath): ?array
+    {
+        $normalizedPath = $this->normalizePath($currentPath);
+        $stmt = $this->db->prepare('
+            SELECT id, file_path, web_path FROM files
+            WHERE xxhash = :xxhash AND file_size = :size AND modified_time = :mtime
+            AND file_path != :current
+        ');
+        $stmt->bindValue(':xxhash', $xxhash, SQLITE3_TEXT);
+        $stmt->bindValue(':size', $fileSize, SQLITE3_INTEGER);
+        $stmt->bindValue(':mtime', $modifiedTime, SQLITE3_INTEGER);
+        $stmt->bindValue(':current', $normalizedPath, SQLITE3_TEXT);
+        $result = $stmt->execute();
+        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+            if (!file_exists($row['file_path'])) {
+                return $row;
+            }
+        }
+        return null;
+    }
+
+    public function updateFilePaths(int $id, string $newPath, string $newWebPath): bool
+    {
+        $normalizedPath = $this->normalizePath($newPath);
+        $stmt = $this->db->prepare('UPDATE files SET file_path = :path, web_path = :web, updated_at = :updated WHERE id = :id');
+        $stmt->bindValue(':path', $normalizedPath, SQLITE3_TEXT);
+        $stmt->bindValue(':web', $newWebPath, SQLITE3_TEXT);
+        $stmt->bindValue(':updated', time(), SQLITE3_INTEGER);
+        $stmt->bindValue(':id', $id, SQLITE3_INTEGER);
+        return $stmt->execute() !== false;
+    }
+
     /**
      * Execute a raw SQL query and return result
      */

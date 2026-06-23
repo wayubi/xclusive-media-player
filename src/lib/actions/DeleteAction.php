@@ -93,8 +93,8 @@ class DeleteAction extends ActionHandler
 
             $deleted = unlink($fsPath);
             if ($deleted) {
-                $this->metaDb->deleteMetadata($fsPath);
                 $this->getAuditDb()->deleteFile($fsPath);
+                $this->metaDb->deleteMetadata($fsPath);
             }
             $results[$file] = $deleted ? 'deleted' : 'failed';
         }
@@ -152,8 +152,8 @@ class DeleteAction extends ActionHandler
         if (is_file($path)) {
             $deleted = unlink($path);
             if ($deleted) {
-                $this->metaDb->deleteMetadata($path);
                 $this->getAuditDb()->deleteFile($path);
+                $this->metaDb->deleteMetadata($path);
             }
             return $deleted;
         }
@@ -168,8 +168,8 @@ class DeleteAction extends ActionHandler
                 if ($file->isFile()) {
                     $filePath = $file->getPathname();
                     unlink($filePath);
-                    $this->metaDb->deleteMetadata($filePath);
                     $this->getAuditDb()->deleteFile($filePath);
+                    $this->metaDb->deleteMetadata($filePath);
                 } elseif ($file->isDir()) {
                     rmdir($file->getPathname());
                 }

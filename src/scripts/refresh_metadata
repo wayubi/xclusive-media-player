@@ -26,7 +26,7 @@ function run_sequential(array &$files, bool $dryRun, bool $checkXxhash, bool $fo
     global $root;
     $total     = count($files);
     $metaDb    = new MetadataDatabase();
-    $refreshed = $skipped = $failed = 0;
+    $refreshed = $skipped = $failed = $moved = 0;
     $errors    = [];
 
     foreach ($files as $i => $fsPath) {
@@ -80,9 +80,33 @@ function run_sequential(array &$files, bool $dryRun, bool $checkXxhash, bool $fo
             continue;
         }
 
+        // Move detection: missing file might be a renamed/moved file
+        if ($reason === 'missing') {
+            try {
+                $fsSize = @filesize($fsPath);
+                $fsMtime = @filemtime($fsPath);
+                $output = MetadataExtractor::extract($fsPath);
+                $xxhashOut = @shell_exec('xxhsum ' . escapeshellarg($fsPath) . ' 2>/dev/null');
+                $xxhash = $xxhashOut ? explode(' ', trim($xxhashOut))[0] : null;
+
+                if ($xxhash && $fsSize !== false && $fsMtime !== false) {
+                    $candidate = $metaDb->findMoveCandidate($xxhash, $fsSize, $fsMtime, $fsPath);
+                    if ($candidate) {
+                        $metaDb->updateFilePaths((int)$candidate['id'], $fsPath, $webPath);
+                        echo "[$num/$total] $filename - Moved ({$candidate['file_path']})\n";
+                        $moved++;
+                        continue;
+                    }
+                }
+            } catch (Exception $e) {
+                // Move check failed — fall through to normal refresh
+            }
+        }
+
         try {
-            $metaDb->deleteMetadata($fsPath);
-            $output = MetadataExtractor::extract($fsPath);
+            if (!isset($output)) {
+                $output = MetadataExtractor::extract($fsPath);
+            }
             $metaDb->saveMetadata($webPath, $fsPath, $output);
             $type  = MetadataExtractor::isTextFile($fsPath) ? 'text' : 'media';
             echo "[$num/$total] $filename - Refreshed ($type)\n";
@@ -96,7 +120,7 @@ function run_sequential(array &$files, bool $dryRun, bool $checkXxhash, bool $fo
 
     if ($showProgress) echo "\n";
 
-    return ['refreshed' => $refreshed, 'skipped' => $skipped, 'failed' => $failed, 'errors' => $errors];
+    return ['refreshed' => $refreshed, 'skipped' => $skipped, 'failed' => $failed, 'moved' => $moved, 'errors' => $errors];
 }
 
 function run_parallel(array &$files, int $numJobs, bool $dryRun, bool $checkXxhash, bool $force, bool $showProgress, bool $verbose = false): void {
@@ -151,6 +175,7 @@ function run_parallel(array &$files, int $numJobs, bool $dryRun, bool $checkXxha
             $workerRefreshed = 0;
             $workerSkipped   = 0;
             $workerFailed    = 0;
+            $workerMoved     = 0;
 
             while (true) {
                 // Atomically grab the next batch of file indices.
@@ -196,9 +221,29 @@ function run_parallel(array &$files, int $numJobs, bool $dryRun, bool $checkXxha
                             if ($verbose) echo "[$i] " . basename($fsPath) . " - Would refresh\n";
                             $workerRefreshed++;
                         } else {
+                            if (!$metadata && !$force) {
+                                try {
+                                    $fsSize = @filesize($fsPath);
+                                    $fsMtime = @filemtime($fsPath);
+                                    $output = MetadataExtractor::extract($fsPath);
+                                    $xxhashOut = @shell_exec('xxhsum ' . escapeshellarg($fsPath) . ' 2>/dev/null');
+                                    $xxhash = $xxhashOut ? explode(' ', trim($xxhashOut))[0] : null;
+                                    if ($xxhash && $fsSize !== false && $fsMtime !== false) {
+                                        $candidate = $metaDb->findMoveCandidate($xxhash, $fsSize, $fsMtime, $fsPath);
+                                        if ($candidate) {
+                                            $metaDb->updateFilePaths((int)$candidate['id'], $fsPath, $webPath);
+                                            if ($verbose) echo "[$i] " . basename($fsPath) . " - Moved\n";
+                                            $workerMoved++;
+                                            continue;
+                                        }
+                                    }
+                                } catch (Exception $e) {}
+                            }
+
                             try {
-                                $metaDb->deleteMetadata($fsPath);
-                                $output = MetadataExtractor::extract($fsPath);
+                                if (!isset($output)) {
+                                    $output = MetadataExtractor::extract($fsPath);
+                                }
                                 $metaDb->saveMetadata($webPath, $fsPath, $output);
                                 if ($verbose) {
                                     $type = MetadataExtractor::isTextFile($fsPath) ? 'text' : 'media';
@@ -224,7 +269,7 @@ function run_parallel(array &$files, int $numJobs, bool $dryRun, bool $checkXxha
             echo "[$i] Done: $workerRefreshed refreshed, $workerSkipped skipped, $workerFailed failed\n";
 
             // Send results to parent over the socket (no tmp file).
-            fwrite($sockPair[1], json_encode(['r' => $workerRefreshed, 's' => $workerSkipped, 'f' => $workerFailed]) . "\n");
+            fwrite($sockPair[1], json_encode(['r' => $workerRefreshed, 's' => $workerSkipped, 'f' => $workerFailed, 'm' => $workerMoved]) . "\n");
             fclose($sockPair[1]);
             exit(0);
         }
@@ -237,6 +282,7 @@ function run_parallel(array &$files, int $numJobs, bool $dryRun, bool $checkXxha
     $totalRefreshed = 0;
     $totalSkipped   = 0;
     $totalFailed    = 0;
+    $totalMoved     = 0;
 
     foreach ($pids as $pid => $sock) {
         pcntl_waitpid($pid, $status);
@@ -247,6 +293,7 @@ function run_parallel(array &$files, int $numJobs, bool $dryRun, bool $checkXxha
             $totalRefreshed += $r['r'] ?? 0;
             $totalSkipped   += $r['s'] ?? 0;
             $totalFailed    += $r['f'] ?? 0;
+            $totalMoved     += $r['m'] ?? 0;
         }
     }
 
@@ -254,7 +301,7 @@ function run_parallel(array &$files, int $numJobs, bool $dryRun, bool $checkXxha
 
     $elapsed = time() - $startTime;
     echo "\n[Summary] $numJobs workers | {$elapsed}s elapsed\n";
-    echo "         Total: $totalFiles | Refreshed: $totalRefreshed | Skipped: $totalSkipped | Failed: $totalFailed\n";
+    echo "         Total: $totalFiles | Refreshed: $totalRefreshed | Skipped: $totalSkipped | Moved: $totalMoved | Failed: $totalFailed\n";
 }
 
 // ---------------------------------------------------------------------------
@@ -435,6 +482,9 @@ if ($prune) {
         $reason      = '';
 
         if (!is_file($dbFilePath)) {
+            if ($row['xxhash']) {
+                continue;
+            }
             $shouldPrune = true;
             $reason      = 'not-a-file';
         } else {
@@ -476,13 +526,13 @@ if ($prune) {
             $pruned++;
         } else {
             try {
+                if ($includeAuditDb) {
+                    (new AuditDatabase())->deleteFile($dbFilePath);
+                }
                 if ($includeFavoritesDb) {
                     (new FavoritesDatabase())->removeFavorite($dbFilePath);
                 }
                 $metaDb->deleteMetadata($dbFilePath);
-                if ($includeAuditDb) {
-                    (new AuditDatabase())->deleteFile($dbFilePath);
-                }
                 echo "[$checked] $filename - Pruned ($reason)\n";
                 $pruned++;
             } catch (Exception $e) {
@@ -503,29 +553,21 @@ if ($prune) {
         $metaDbCheck  = new MetadataDatabase();
         $orphanPruned = 0;
 
-        $metadataPaths = [];
-        $metaStmt = $metaDbCheck->getDb()->query('SELECT file_path FROM files');
+        $metaIds = [];
+        $metaStmt = $metaDbCheck->getDb()->query('SELECT id FROM files');
         while ($r = $metaStmt->fetchArray(SQLITE3_ASSOC)) {
-            $metadataPaths[$r['file_path']] = true;
+            $metaIds[(int)$r['id']] = true;
         }
 
-        $auditStmt = $auditDb->getDb()->query('SELECT file_path FROM files');
+        $auditStmt = $auditDb->getDb()->query('SELECT metadata_file_id FROM audit_log');
         while ($row = $auditStmt->fetchArray(SQLITE3_ASSOC)) {
-            $dbFilePath = $row['file_path'];
-            if (isset($metadataPaths[$dbFilePath])) continue;
+            $mid = (int)$row['metadata_file_id'];
+            if (isset($metaIds[$mid])) continue;
 
-            $inScope = $singleFile
-                ? ($dbFilePath === $singleFile)
-                : ($all
-                    ? str_starts_with($dbFilePath, $root . '/')
-                    : ($noSubfolders
-                        ? (dirname($dbFilePath) === $targetDir)
-                        : str_starts_with($dbFilePath, $targetDir . '/')));
-
-            if ($inScope) {
-                $auditDb->deleteFile($dbFilePath);
-                $orphanPruned++;
-            }
+            $delStmt = $auditDb->getDb()->prepare('DELETE FROM audit_log WHERE metadata_file_id = :id');
+            $delStmt->bindValue(':id', $mid, SQLITE3_INTEGER);
+            $delStmt->execute();
+            $orphanPruned++;
         }
 
         echo "Orphan audit records pruned: $orphanPruned\n";
@@ -617,12 +659,70 @@ if ($total === 0) {
 }
 
 // ---------------------------------------------------------------------------
+// Cleanup orphan metadata rows after refresh
+// ---------------------------------------------------------------------------
+
+function cleanup_orphans(bool $dryRun, bool $verbose = false): int {
+    $metaDb         = new MetadataDatabase();
+    $favDb          = new FavoritesDatabase();
+    $auditDb        = new AuditDatabase();
+    $cleaned        = 0;
+
+    // Find metadata rows where file no longer exists on disk
+    $result = $metaDb->query("SELECT id, file_path, xxhash FROM files WHERE xxhash IS NOT NULL AND xxhash != ''");
+
+    while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+        if (file_exists($row['file_path'])) continue;
+
+        $xxhash = $row['xxhash'];
+        $id     = (int)$row['id'];
+
+        // Check if xxhash is found in favorites — skip if so (orphan reachable via fav)
+        $favStmt = $favDb->getDb()->prepare('SELECT COUNT(*) as cnt FROM favorites WHERE xxhash = :xxhash');
+        $favStmt->bindValue(':xxhash', $xxhash, SQLITE3_TEXT);
+        $favResult = $favStmt->execute();
+        $favRow = $favResult->fetchArray(SQLITE3_ASSOC);
+        if ($favRow && $favRow['cnt'] > 0) continue;
+
+        if ($dryRun) {
+            echo "  Would delete orphan metadata #{$id}: {$row['file_path']}\n";
+            $cleaned++;
+            continue;
+        }
+
+        try {
+            // Delete audit entries referencing this metadata_file_id
+            $delStmt = $auditDb->getDb()->prepare('DELETE FROM audit_log WHERE metadata_file_id = :id');
+            $delStmt->bindValue(':id', $id, SQLITE3_INTEGER);
+            $delStmt->execute();
+            // Delete favorites for this xxhash
+            $favDel = $favDb->getDb()->prepare('DELETE FROM favorites WHERE xxhash = :xxhash');
+            $favDel->bindValue(':xxhash', $xxhash, SQLITE3_TEXT);
+            $favDel->execute();
+            // Delete metadata
+            $metaDb->deleteMetadata($row['file_path']);
+            $cleaned++;
+            if ($verbose) echo "  Deleted orphan metadata #{$id}: {$row['file_path']}\n";
+        } catch (Exception $e) {
+            echo "  Error cleaning #{$id}: {$e->getMessage()}\n";
+        }
+    }
+
+    return $cleaned;
+}
+
+// ---------------------------------------------------------------------------
 // Refresh (only if $refresh is true)
 // ---------------------------------------------------------------------------
 
 if ($refresh) {
     if ($numJobs > 1 && !$singleFile) {
         run_parallel($files, $numJobs, $dryRun, $checkXxhash, $force, $showProgress, $verbose);
+        if (!$dryRun) {
+            echo "\n";
+            $cleaned = cleanup_orphans(false, $verbose);
+            echo "Cleanup: $cleaned orphan metadata rows removed.\n";
+        }
         exit(0);
     }
 
@@ -632,7 +732,9 @@ if ($refresh) {
     if ($dryRun) {
         echo "Dry run complete. {$result['refreshed']} files would be refreshed, {$result['skipped']} up to date, {$result['failed']} failed.\n";
     } else {
-        echo "Refresh complete. {$result['refreshed']} files refreshed, {$result['skipped']} up to date, {$result['failed']} failed.\n";
+        echo "Refresh complete. {$result['refreshed']} files refreshed, {$result['skipped']} up to date, {$result['moved']} moved, {$result['failed']} failed.\n";
+        $cleaned = cleanup_orphans(false, $verbose);
+        echo "Cleanup: $cleaned orphan metadata rows removed.\n";
     }
 
     if (!empty($result['errors'])) {
