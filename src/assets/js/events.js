@@ -1,11 +1,11 @@
 // events.js - Event listeners and handlers
-import { state } from './state.js?v=1781077253';
+import { state } from './state.js?v=1782192653';
 import { nextGrid, prevGrid, renderGrid } from './grid.js?v=1781077182';
 import { playAll, shufflePlay } from './fullscreen.js?v=1781077182';
 import { setupSearchListeners } from './search.js?v=1781077182';
 import { runAudit, auditCurrentView } from './audit.js?v=1781077182';
 import { setupUnauditedFilter } from './filter.js?v=1781077182';
-import { toggleTileSelection, confirmDelete, selectAllFiles, clearAllSelections, isSelectAllMode, getSelectedTileCount, syncMuteIcons, selectAllVisibleTiles, areAllVisibleTilesSelected } from './ui.js?v=1781077182';
+import { toggleTileSelection, confirmDelete, selectAllFiles, clearAllSelections, isSelectAllMode, getSelectedTileCount, syncMuteIcons, selectAllVisibleTiles, areAllVisibleTilesSelected } from './ui.js?v=1782192656';
 import { toggleTerminal, isTerminalActive, hideTerminal } from './terminal.js?v=1781077182';
 
 let scrollDebounce = false;
@@ -319,7 +319,7 @@ function setupDeleteHotkeys() {
         return;
       }
       
-      if (!state.deleteEnabled) return;
+      if (!state.permissions.includes('delete')) return;
       
       const selectedCount = getSelectedTileCount();
       const inSelectAllMode = isSelectAllMode();
@@ -342,7 +342,7 @@ function setupDeleteHotkeys() {
       // DEL key - two phase delete
       // Skip if in fullscreen mode (fullscreen.js handles delete for single video)
       if (isFullscreenActive) return;
-      if (!state.deleteEnabled) return;
+      if (!state.permissions.includes('delete')) return;
       e.preventDefault();
       
       const selectedCount = getSelectedTileCount();
@@ -357,13 +357,14 @@ function setupDeleteHotkeys() {
       return;
     } else if (key.toLowerCase() === 'a') {
       // 'a' key - audit (double-press for all files in folder)
+      if (!state.permissions.includes('audit')) return;
       e.preventDefault();
       runAudit();
       return;
     } else if (key === '.') {
       // '.' key - toggle select all / deselect all visible tiles
       e.preventDefault();
-      if (!state.deleteEnabled) return;
+      if (!state.permissions.includes('delete')) return;
       
       if (areAllVisibleTilesSelected()) {
         clearAllSelections();
@@ -375,7 +376,7 @@ function setupDeleteHotkeys() {
     
     // If we have a valid tile index, toggle its selection (only when delete is enabled)
     if (tileIndex !== -1) {
-      if (!state.deleteEnabled) return;
+      if (!state.permissions.includes('delete')) return;
       const containers = document.querySelectorAll('#grid .video-container');
       // Only process if the tile exists (e.g., ignore 7-0 on a 6-tile grid)
       if (tileIndex < containers.length) {

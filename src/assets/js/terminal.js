@@ -1,5 +1,5 @@
 // terminal.js - Functional terminal interface for real filesystem commands
-import { state } from './state.js?v=1781077253';
+import { state } from './state.js?v=1782192653';
 import { decodeBase64UTF8 } from './utils.js?v=1781077182';
 
 let terminalActive = false;

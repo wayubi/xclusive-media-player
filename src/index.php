@@ -1,26 +1,14 @@
 <?php
 
-// ================================
-// AUTHENTICATION
-// ================================
-$sessionLifetime = 86400;
-ini_set('session.gc_maxlifetime', $sessionLifetime);
-session_set_cookie_params([
-    'lifetime' => $sessionLifetime,
-    'path' => '/',
-    'domain' => '',
-    'secure' => isset($_SERVER['HTTPS']),
-    'httponly' => true,
-    'samesite' => 'Strict'
-]);
-session_start();
+require_once __DIR__ . '/lib/UserDatabase.php';
+require_once __DIR__ . '/lib/session.php';
 
 if (empty($_SESSION['user_id'])) {
     header('Location: login.php');
     exit;
 }
 
-$deleteEnabled = ($_SESSION['user_role'] ?? '') === 'admin';
+$permissions = UserDatabase::getRolePermissions($_SESSION['user_role'] ?? '');
 
 // ================================
 // CONFIG & PATH HANDLING
@@ -387,7 +375,9 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
             <button type="button" onclick="playAll()" title="Play all">▶️</button>
             <button type="button" onclick="shufflePlay()" title="Shuffle play">🔀</button>
             <button type="button" onclick="playFavorites()" title="Play favorites">❤️</button>
+            <?php if (in_array('audit', $permissions)): ?>
             <button type="button" id="audit" onclick="runAudit()" title="Audit files">📋</button>
+            <?php endif; ?>
             <button type="button" id="previous" onclick="prevGrid()" title="Previous">◀</button>
             <button type="button" id="next" onclick="nextGrid()" title="Next">▶</button>
             
@@ -405,6 +395,7 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
                 <span id="favorites-count" title="Click to filter favorites">❤️ <?= $favoritesCount ?></span>
             </span>
             
+            <?php if (in_array('audit', $permissions)): ?>
             <!-- Audit status with better styling -->
             <span id="audit-text" style="
                 background: rgba(168, 85, 247, 0.1);
@@ -422,6 +413,7 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
                     <span id="unaudited-count" title="Click to filter unaudited files">⚠️ Not audited</span>
                 <?php endif; ?>
             </span>
+            <?php endif; ?>
             
             <!-- Optimization status -->
             <span id="optimization-text" style="
@@ -487,7 +479,7 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
                 webRoot: <?= json_encode($webRoot) ?>,
                 rootDirAbs: <?= json_encode($root_directory_absolute) ?>,
                 currentPath: <?= json_encode(str_replace($root_directory_absolute, '', $current_path)) ?>,
-                deleteEnabled: <?= $deleteEnabled ? 'true' : 'false' ?>
+                permissions: <?= json_encode($permissions) ?>
             };
         </script>
         <script type="module" src="/assets/js/main.js?v=<?= filemtime(__DIR__ . '/assets/js/main.js') ?>"></script>

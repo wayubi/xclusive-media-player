@@ -1,5 +1,6 @@
 <?php
 
+require_once __DIR__ . '/lib/UserDatabase.php';
 require_once __DIR__ . '/lib/Utils.php';
 require_once __DIR__ . '/lib/MetadataExtractor.php';
 require_once __DIR__ . '/lib/AuditDatabase.php';
@@ -13,21 +14,7 @@ require_once __DIR__ . '/lib/actions/FavoritesAction.php';
 require_once __DIR__ . '/lib/actions/ShareAction.php';
 require_once __DIR__ . '/lib/actions/TerminalAction.php';
 require_once __DIR__ . '/lib/actions/EditTextAction.php';
-
-// ================================
-// AUTHENTICATION
-// ================================
-$sessionLifetime = 86400;
-ini_set('session.gc_maxlifetime', $sessionLifetime);
-session_set_cookie_params([
-    'lifetime' => $sessionLifetime,
-    'path' => '/',
-    'domain' => '',
-    'secure' => isset($_SERVER['HTTPS']),
-    'httponly' => true,
-    'samesite' => 'Strict'
-]);
-session_start();
+require_once __DIR__ . '/lib/session.php';
 
 if (empty($_SESSION['user_id'])) {
     http_response_code(401);
@@ -60,10 +47,17 @@ if (!$action) {
     exit;
 }
 
-if ($action === 'delete') {
-    if (($_SESSION['user_role'] ?? '') !== 'admin') {
+$actionPermissions = [
+    'delete' => ['delete'],
+    'audit'  => ['audit'],
+];
+
+if (isset($actionPermissions[$action])) {
+    $perms = UserDatabase::getRolePermissions($_SESSION['user_role'] ?? '');
+    $required = $actionPermissions[$action];
+    if (count(array_intersect($required, $perms)) !== count($required)) {
         http_response_code(403);
-        echo json_encode(['error' => 'Admin access required']);
+        echo json_encode(['error' => 'Forbidden']);
         exit;
     }
 }

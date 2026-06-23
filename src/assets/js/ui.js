@@ -1,5 +1,5 @@
 // ui.js - UI components and overlay creation
-import { state } from './state.js?v=1781077253';
+import { state } from './state.js?v=1782192653';
 import { startFullscreenFrom } from './fullscreen.js?v=1781077182';
 import { renderGrid } from './grid.js?v=1781077182';
 import { isTerminalActive } from './terminal.js?v=1781077182';
@@ -475,14 +475,16 @@ export function addCentralOverlay(container, mediaEl, file) {
   const isTextFile = container.classList.contains('text-file-container');
 
   // Select/Delete button - only show if deletes are enabled
-  if (state.deleteEnabled) {
+  if (state.permissions.includes('delete')) {
     const selectBtn = createSelectButton(file);
     overlay.appendChild(selectBtn);
   }
 
-  // Audit button
-  const auditBtn = createAuditButton(file, container);
-  overlay.appendChild(auditBtn);
+  // Audit button - only show if audit permission granted
+  if (state.permissions.includes('audit')) {
+    const auditBtn = createAuditButton(file, container);
+    overlay.appendChild(auditBtn);
+  }
 
   // Fullscreen/View button - skip for unsupported videos
   if (!isUnsupported) {

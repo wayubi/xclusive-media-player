@@ -1,7 +1,7 @@
 // main.js - Entry point and initialization
-import { state } from './state.js?v=1781077253';
+import { state } from './state.js?v=1782192653';
 import { renderGrid, updateOptimizationDisplay } from './grid.js?v=1781077182';
-import { setupEventListeners } from './events.js?v=1781077182';
+import { setupEventListeners } from './events.js?v=1782192659';
 import { setVhUnit } from './utils.js?v=1781077182';
 import { initTerminal } from './terminal.js?v=1781077182';
 
@@ -19,7 +19,7 @@ const {
   webRoot,
   rootDirAbs,
   currentPath,
-  deleteEnabled
+  permissions
 } = window.APP;
 
 // Initialize state
@@ -36,7 +36,7 @@ state.init({
   webRoot,
   rootDirAbs,
   currentPath,
-  deleteEnabled
+  permissions
 });
 
 // Initialize

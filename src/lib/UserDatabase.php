@@ -137,4 +137,13 @@ class UserDatabase extends Database
         $stmt->execute();
         return $this->db->changes();
     }
+
+    public static function getRolePermissions(string $role): array
+    {
+        static $map = [
+            'admin' => ['delete', 'audit'],
+            'user'  => [],
+        ];
+        return $map[$role] ?? [];
+    }
 }

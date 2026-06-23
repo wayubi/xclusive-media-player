@@ -1,15 +1,6 @@
 <?php
 
-ini_set('session.gc_maxlifetime', 86400);
-session_set_cookie_params([
-    'lifetime' => 86400,
-    'path' => '/',
-    'domain' => '',
-    'secure' => isset($_SERVER['HTTPS']),
-    'httponly' => true,
-    'samesite' => 'Strict'
-]);
-session_start();
+require_once __DIR__ . '/lib/session.php';
 
 $_SESSION = [];
 

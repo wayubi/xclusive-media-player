@@ -16,7 +16,7 @@ export const state = {
   webRoot: '',
   rootDirAbs: '',
   currentPath: '',
-  deleteEnabled: false, // NEW: Track if deletes are enabled
+  permissions: [], // Permissions from role (e.g. 'delete', 'audit')
   
   // Sort configuration (set from server-side)
   sortField: 'modified',
@@ -69,7 +69,7 @@ export const state = {
     this.webRoot = config.webRoot;
     this.rootDirAbs = config.rootDirAbs;
     this.currentPath = config.currentPath;
-    this.deleteEnabled = config.deleteEnabled || false;
+    this.permissions = config.permissions || [];
     
     // Sort configuration
     if (config.sort) {

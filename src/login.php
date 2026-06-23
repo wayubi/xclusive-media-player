@@ -1,19 +1,7 @@
 <?php
 
 require_once __DIR__ . '/lib/UserDatabase.php';
-
-$sessionLifetime = 86400;
-
-ini_set('session.gc_maxlifetime', $sessionLifetime);
-session_set_cookie_params([
-    'lifetime' => $sessionLifetime,
-    'path' => '/',
-    'domain' => '',
-    'secure' => isset($_SERVER['HTTPS']),
-    'httponly' => true,
-    'samesite' => 'Strict'
-]);
-session_start();
+require_once __DIR__ . '/lib/session.php';
 
 if (!empty($_SESSION['user_id'])) {
     header('Location: index.php');
