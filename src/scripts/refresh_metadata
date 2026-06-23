@@ -580,19 +580,19 @@ if ($prune) {
         $metaDbCheck = new MetadataDatabase();
         $orphanPruned = 0;
 
-        $metaXxhashes = [];
-        $metaStmt = $metaDbCheck->getDb()->query('SELECT xxhash FROM files WHERE xxhash IS NOT NULL');
+        $metaIds = [];
+        $metaStmt = $metaDbCheck->getDb()->query('SELECT id FROM files');
         while ($r = $metaStmt->fetchArray(SQLITE3_ASSOC)) {
-            $metaXxhashes[$r['xxhash']] = true;
+            $metaIds[(int)$r['id']] = true;
         }
 
-        $favStmt = $favDb->getDb()->query('SELECT DISTINCT xxhash FROM favorites');
+        $favStmt = $favDb->getDb()->query('SELECT DISTINCT metadata_file_id FROM favorites');
         while ($row = $favStmt->fetchArray(SQLITE3_ASSOC)) {
-            $xxhash = $row['xxhash'];
-            if (isset($metaXxhashes[$xxhash])) continue;
+            $mid = (int)$row['metadata_file_id'];
+            if (isset($metaIds[$mid])) continue;
 
-            $delStmt = $favDb->getDb()->prepare('DELETE FROM favorites WHERE xxhash = :xxhash');
-            $delStmt->bindValue(':xxhash', $xxhash, SQLITE3_TEXT);
+            $delStmt = $favDb->getDb()->prepare('DELETE FROM favorites WHERE metadata_file_id = :id');
+            $delStmt->bindValue(':id', $mid, SQLITE3_INTEGER);
             $delStmt->execute();
             $orphanPruned++;
         }
@@ -677,12 +677,26 @@ function cleanup_orphans(bool $dryRun, bool $verbose = false): int {
         $xxhash = $row['xxhash'];
         $id     = (int)$row['id'];
 
-        // Check if xxhash is found in favorites — skip if so (orphan reachable via fav)
-        $favStmt = $favDb->getDb()->prepare('SELECT COUNT(*) as cnt FROM favorites WHERE xxhash = :xxhash');
-        $favStmt->bindValue(':xxhash', $xxhash, SQLITE3_TEXT);
-        $favResult = $favStmt->execute();
-        $favRow = $favResult->fetchArray(SQLITE3_ASSOC);
-        if ($favRow && $favRow['cnt'] > 0) continue;
+        // Check if any OTHER file with this xxhash is referenced in favorites
+        // (content still reachable via favorites — skip cleanup)
+        $otherIds = $metaDb->getDb()->prepare('SELECT id FROM files WHERE xxhash = :xxhash AND id != :id');
+        $otherIds->bindValue(':xxhash', $xxhash, SQLITE3_TEXT);
+        $otherIds->bindValue(':id', $id, SQLITE3_INTEGER);
+        $otherResult = $otherIds->execute();
+        $checkIds = [];
+        while ($o = $otherResult->fetchArray(SQLITE3_ASSOC)) {
+            $checkIds[] = (int)$o['id'];
+        }
+        if (!empty($checkIds)) {
+            $idPlaceholders = implode(',', array_fill(0, count($checkIds), '?'));
+            $favStmt = $favDb->getDb()->prepare("SELECT COUNT(*) as cnt FROM favorites WHERE metadata_file_id IN ($idPlaceholders)");
+            foreach ($checkIds as $i => $cid) {
+                $favStmt->bindValue($i + 1, $cid, SQLITE3_INTEGER);
+            }
+            $favResult = $favStmt->execute();
+            $favRow = $favResult->fetchArray(SQLITE3_ASSOC);
+            if ($favRow && $favRow['cnt'] > 0) continue;
+        }
 
         if ($dryRun) {
             echo "  Would delete orphan metadata #{$id}: {$row['file_path']}\n";
@@ -691,15 +705,13 @@ function cleanup_orphans(bool $dryRun, bool $verbose = false): int {
         }
 
         try {
-            // Delete audit entries referencing this metadata_file_id
             $delStmt = $auditDb->getDb()->prepare('DELETE FROM audit_log WHERE metadata_file_id = :id');
             $delStmt->bindValue(':id', $id, SQLITE3_INTEGER);
             $delStmt->execute();
-            // Delete favorites for this xxhash
-            $favDel = $favDb->getDb()->prepare('DELETE FROM favorites WHERE xxhash = :xxhash');
-            $favDel->bindValue(':xxhash', $xxhash, SQLITE3_TEXT);
+            // Delete favorites referencing this metadata_file_id
+            $favDel = $favDb->getDb()->prepare('DELETE FROM favorites WHERE metadata_file_id = :id');
+            $favDel->bindValue(':id', $id, SQLITE3_INTEGER);
             $favDel->execute();
-            // Delete metadata
             $metaDb->deleteMetadata($row['file_path']);
             $cleaned++;
             if ($verbose) echo "  Deleted orphan metadata #{$id}: {$row['file_path']}\n";
