@@ -141,7 +141,7 @@ class UserDatabase extends Database
     public static function getRolePermissions(string $role): array
     {
         static $map = [
-            'admin' => ['delete', 'audit', 'optimize', 'terminal'],
+            'admin' => ['delete', 'audit', 'optimize', 'terminal', 'favorites'],
             'user'  => [],
         ];
         return $map[$role] ?? [];

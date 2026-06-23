@@ -48,11 +48,12 @@ document.addEventListener('DOMContentLoaded', () => {
     initTerminal();
   }
   
-  // Initialize favorites display
-  import('./favorites.js').then(module => {
-    module.updateFavoritesDisplay();
-    module.setupFavoritesFilter();
-  });
+  if (state.permissions.includes('favorites')) {
+    import('./favorites.js').then(module => {
+      module.updateFavoritesDisplay();
+      module.setupFavoritesFilter();
+    });
+  }
   
   // Initialize optimization filter
   import('./filter.js').then(module => {

@@ -61,9 +61,10 @@ if ($action === 'list_scripts') {
 }
 
 $actionPermissions = [
-    'delete'   => ['delete'],
-    'audit'    => ['audit'],
-    'terminal' => ['terminal'],
+    'delete'              => ['delete'],
+    'audit'               => ['audit'],
+    'terminal'            => ['terminal'],
+    'favorite'            => ['favorites'],
 ];
 
 if (isset($actionPermissions[$action])) {
@@ -83,8 +84,7 @@ $actionMap = [
     'delete'              => DeleteAction::class,
     'metadata_batch'      => MetadataAction::class,
     'audit'               => AuditAction::class,
-    'toggle_favorite'     => FavoritesAction::class,
-    'get_favorites_count' => FavoritesAction::class,
+    'favorite'            => FavoritesAction::class,
     'share'               => ShareAction::class,
     'terminal'            => TerminalAction::class,
     'edit_text'           => EditTextAction::class,

@@ -110,7 +110,8 @@ export const state = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'toggle_favorite',
+          action: 'favorite',
+          mode: 'toggle',
           file: fsPath
         })
       });

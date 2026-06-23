@@ -192,7 +192,10 @@ require_once __DIR__ . '/lib/MetadataDatabase.php';
 $current_path = Utils::getCurrentPath($root_directory_absolute, $selected_path);
 
 $auditDb = new AuditDatabase();
-$favDb = new FavoritesDatabase();
+$favDb = null;
+if (in_array('favorites', $permissions)) {
+    $favDb = new FavoritesDatabase();
+}
 $metaDb = new MetadataDatabase();
 
 // Get files from database (DB is source of truth) with sorting
@@ -202,9 +205,8 @@ $allFiles = array_map(fn($f) => Utils::filesystemToWebPath($f, $root_directory_a
 $allFilesCount = count($allFiles);
 
 // Batch fetch audit and favorites statuses (lightweight)
-// Get batch statuses for all filters (same pattern as favorites/audit)
 $auditStatuses = $auditDb->getAuditStatusBatch($allFilesRaw);
-$favoritesStatuses = $favDb->getFavoriteStatusBatch($allFilesRaw);
+$favoritesStatuses = $favDb ? $favDb->getFavoriteStatusBatch($allFilesRaw) : [];
 $optimizationStatuses = $metaDb->getOptimizationStatusBatch($allFilesRaw);
 
 // Get optimization stats using SQL COUNT (lightweight)
@@ -245,11 +247,13 @@ foreach ($allFilesRaw as $i => $fsPath) {
 // Favorites map
 $favoritesMap = [];
 $favoritesCount = 0;
-foreach ($allFilesRaw as $i => $fsPath) {
-    $webPath = $allFiles[$i];
-    $isFav = $favoritesStatuses[$fsPath]['favorited'] ?? false;
-    $favoritesMap[$webPath] = $isFav;
-    if ($isFav) $favoritesCount++;
+if ($favDb) {
+    foreach ($allFilesRaw as $i => $fsPath) {
+        $webPath = $allFiles[$i];
+        $isFav = $favoritesStatuses[$fsPath]['favorited'] ?? false;
+        $favoritesMap[$webPath] = $isFav;
+        if ($isFav) $favoritesCount++;
+    }
 }
 
 // Get subfolders from database
@@ -374,13 +378,16 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
             </button>
             <button type="button" onclick="playAll()" title="Play all">▶️</button>
             <button type="button" onclick="shufflePlay()" title="Shuffle play">🔀</button>
+            <?php if (in_array('favorites', $permissions)): ?>
             <button type="button" onclick="playFavorites()" title="Play favorites">❤️</button>
+            <?php endif; ?>
             <?php if (in_array('audit', $permissions)): ?>
             <button type="button" id="audit" onclick="runAudit()" title="Audit files">📋</button>
             <?php endif; ?>
             <button type="button" id="previous" onclick="prevGrid()" title="Previous">◀</button>
             <button type="button" id="next" onclick="nextGrid()" title="Next">▶</button>
             
+            <?php if (in_array('favorites', $permissions)): ?>
             <!-- Favorites status -->
             <span id="favorites-text" style="
                 background: rgba(236, 72, 153, 0.1);
@@ -394,6 +401,7 @@ foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
             ">
                 <span id="favorites-count" title="Click to filter favorites">❤️ <?= $favoritesCount ?></span>
             </span>
+            <?php endif; ?>
             
             <?php if (in_array('audit', $permissions)): ?>
             <!-- Audit status with better styling -->

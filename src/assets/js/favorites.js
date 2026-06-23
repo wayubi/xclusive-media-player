@@ -33,7 +33,8 @@ export async function updateFavoritesDisplay() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        action: 'get_favorites_count',
+        action: 'favorite',
+        mode: 'get_count',
         folder_path: state.currentPath
       })
     });

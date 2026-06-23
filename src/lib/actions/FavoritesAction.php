@@ -6,20 +6,20 @@ class FavoritesAction extends ActionHandler
 {
     public function handle(): void
     {
-        $action = $this->data['action'] ?? 'toggle_favorite';
+        $mode = $this->data['mode'] ?? 'toggle';
         
-        switch ($action) {
-            case 'toggle_favorite':
+        switch ($mode) {
+            case 'toggle':
                 $this->handleToggle();
                 break;
-            case 'favorites_status_batch':
+            case 'status_batch':
                 $this->handleStatusBatch();
                 break;
-            case 'get_favorites_count':
+            case 'get_count':
                 $this->handleCount();
                 break;
             default:
-                $this->error('Unknown favorites action');
+                $this->error('Unknown favorites mode');
         }
     }
 

@@ -24,20 +24,22 @@ export function createMediaContainer(file, index = 0) {
   }
 
   // Add favorite heart icon
-  const heart = document.createElement('div');
-  heart.className = 'favorite-heart';
-  const isFavorited = state.isFavorited(file);
-  heart.textContent = isFavorited ? '❤️' : '🤍';
-  if (isFavorited) {
-    heart.classList.add('favorited');
+  if (state.permissions.includes('favorites')) {
+    const heart = document.createElement('div');
+    heart.className = 'favorite-heart';
+    const isFavorited = state.isFavorited(file);
+    heart.textContent = isFavorited ? '❤️' : '🤍';
+    if (isFavorited) {
+      heart.classList.add('favorited');
+    }
+    heart.onclick = (e) => {
+      e.stopPropagation();
+      import('./favorites.js').then(module => {
+        module.toggleFavorite(file, heart);
+      });
+    };
+    container.appendChild(heart);
   }
-  heart.onclick = (e) => {
-    e.stopPropagation();
-    import('./favorites.js').then(module => {
-      module.toggleFavorite(file, heart);
-    });
-  };
-  container.appendChild(heart);
 
   // Determine file type by extension
   const ext = file.split('.').pop().toLowerCase();

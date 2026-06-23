@@ -230,8 +230,8 @@ function setupGlobalControls() {
   window.toggleMute = toggleMute;
   window.runAudit = runAudit;
   
-  // NEW: Add playFavorites
   window.playFavorites = () => {
+    if (!state.permissions.includes('favorites')) return;
     import('./favorites.js').then(module => {
       module.playFavorites();
     });
