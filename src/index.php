@@ -20,45 +20,7 @@ if (empty($_SESSION['user_id'])) {
     exit;
 }
 
-// ================================
-// DELETE PROTECTION
-// ================================
-// Load .env file
-$envFile = __DIR__ . '/../.env';
-$deleteSecretCode = null;
-
-if (file_exists($envFile)) {
-    $envContent = file_get_contents($envFile);
-    if (preg_match('/DELETE_SECRET_CODE\s*=\s*(.+)/', $envContent, $matches)) {
-        $deleteSecretCode = trim($matches[1]);
-    }
-}
-
-// Check for delete parameter in URL
-if (isset($_GET['delete'])) {
-    if ($_GET['delete'] === 'off') {
-        // Disable deletes - clear cookie
-        setcookie('delete_enabled', '', time() - 3600, '/');
-        $_COOKIE['delete_enabled'] = '';
-        
-        // Redirect to clean URL
-        $cleanUrl = strtok($_SERVER['REQUEST_URI'], '?');
-        header("Location: $cleanUrl");
-        exit;
-    } elseif ($deleteSecretCode && $_GET['delete'] === $deleteSecretCode) {
-        // Enable deletes - set cookie (valid for 30 days)
-        setcookie('delete_enabled', '1', time() + (30 * 24 * 60 * 60), '/');
-        $_COOKIE['delete_enabled'] = '1';
-        
-        // Redirect to clean URL
-        $cleanUrl = strtok($_SERVER['REQUEST_URI'], '?');
-        header("Location: $cleanUrl");
-        exit;
-    }
-}
-
-// Check if deletes are enabled
-$deleteEnabled = isset($_COOKIE['delete_enabled']) && $_COOKIE['delete_enabled'] === '1';
+$deleteEnabled = ($_SESSION['user_role'] ?? '') === 'admin';
 
 // ================================
 // CONFIG & PATH HANDLING

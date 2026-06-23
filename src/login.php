@@ -41,9 +41,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $userDb->logAttempt($ip, true);
                 $userDb->updateLastLogin($userId);
 
+                $user = $userDb->getUser($userId);
                 session_regenerate_id(true);
                 $_SESSION['user_id'] = $userId;
                 $_SESSION['username'] = $username;
+                $_SESSION['user_role'] = $user['role'] ?? 'user';
 
                 header('Location: index.php');
                 exit;

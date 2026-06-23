@@ -61,9 +61,9 @@ if (!$action) {
 }
 
 if ($action === 'delete') {
-    if (!(isset($_COOKIE['delete_enabled']) && $_COOKIE['delete_enabled'] === '1')) {
+    if (($_SESSION['user_role'] ?? '') !== 'admin') {
         http_response_code(403);
-        echo json_encode(['error' => 'Delete functionality is disabled. Authorization required.']);
+        echo json_encode(['error' => 'Admin access required']);
         exit;
     }
 }
