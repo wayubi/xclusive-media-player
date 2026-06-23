@@ -12,7 +12,7 @@ let scrollDebounce = false;
 
 let overlayIdleTimer = null;
 const OVERLAY_IDLE_DELAY = 1000;
-const MOVEMENT_THRESHOLD = 10;
+const MOVEMENT_THRESHOLD_SQ = 100;
 
 let lastMouseX = 0;
 let lastMouseY = 0;
@@ -28,11 +28,7 @@ function handleMouseMove(e) {
   
   const dx = e.clientX - lastMouseX;
   const dy = e.clientY - lastMouseY;
-  const distance = Math.sqrt(dx * dx + dy * dy);
-  
-  if (distance < MOVEMENT_THRESHOLD) {
-    return;
-  }
+  if (dx * dx + dy * dy < MOVEMENT_THRESHOLD_SQ) return;
   
   lastMouseX = e.clientX;
   lastMouseY = e.clientY;
@@ -66,8 +62,8 @@ export function setupEventListeners() {
   setupDeleteHotkeys();
   
   // Overlay idle timeout - hide overlays after 3 seconds of no mouse movement
-  document.addEventListener('mousemove', handleMouseMove);
-  document.addEventListener('mouseenter', handleMouseMove);
+  document.addEventListener('mousemove', handleMouseMove, { passive: true });
+  document.addEventListener('mouseenter', handleMouseMove, { passive: true });
 }
 
 function setupGridNavigation() {
@@ -129,29 +125,25 @@ function setupGridNavigation() {
   setupHoverUnmuting(grid);
 }
 
+let _lastUnmutedEl = null;
 function setupHoverUnmuting(grid) {
-  // Use mousemove to continuously unmute whatever container the mouse is over
   grid.addEventListener('mousemove', (e) => {
-    // Only work if not globally muted
     if (state.muted) return;
     
     const container = e.target.closest('.video-container');
     if (!container) return;
     
     const mediaEl = container.querySelector('video, audio');
-    if (!mediaEl) return;
+    if (!mediaEl || !mediaEl.muted) return;
     
-    // If this media is already unmuted, no need to do anything
-    if (!mediaEl.muted) return;
+    // Mute the previously-unmuted element instead of scanning all
+    if (_lastUnmutedEl && _lastUnmutedEl !== mediaEl) {
+      _lastUnmutedEl.muted = true;
+    }
     
-    // Mute all media
-    document.querySelectorAll('#grid video, #grid audio').forEach(m => m.muted = true);
-    
-    // Unmute the hovered one
     mediaEl.muted = false;
+    _lastUnmutedEl = mediaEl;
     mediaEl.play().catch(() => {});
-    
-    // Update mute icons on central overlay
     syncMuteIcons();
   });
 }
@@ -280,8 +272,8 @@ function toggleObjectFit() {
 }
 
 function setupDeleteHotkeys() {
+  const bodyClassList = document.body.classList;
   document.addEventListener('keydown', (e) => {
-    // If terminal is active, only handle ESC to close it
     if (isTerminalActive()) {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -290,82 +282,57 @@ function setupDeleteHotkeys() {
       }
       return;
     }
-    
-    // Don't process if search overlay is open (allow typing in search)
-    const searchOverlay = document.getElementById('search-overlay');
-    if (searchOverlay && searchOverlay.style.display === 'flex') return;
-    
-    // Don't process if user is typing in an input field
-    const activeElement = document.activeElement;
-    if (activeElement.tagName === 'INPUT' || 
-        activeElement.tagName === 'TEXTAREA' || 
-        activeElement.tagName === 'SELECT') {
-      return;
-    }
-    
-    // Don't process if share modal is open
-    const shareModal = document.getElementById('share-modal');
-    if (shareModal) return;
-    
+
     const key = e.key;
-    
-    // Check if we're in fullscreen mode by looking for the fullscreen container
-    const isFullscreenActive = document.body.classList.contains('fullscreen-active');
-    
+    const isFullscreenActive = bodyClassList.contains('fullscreen-active');
+    const tag = document.activeElement?.tagName;
+
+    // Quick bail for non-handled keys
+    const isNumKey = (key >= '1' && key <= '9') || key === '0';
+    const isActionKey = key === 'Escape' || key === 'Delete' || key.toLowerCase() === 'd' ||
+      key.toLowerCase() === 'a' || key === '.' || key === '`' || key === '~' ||
+      key.toLowerCase() === 'b';
+    if (!isNumKey && !isActionKey) return;
+
+    // Don't process if user is typing in an input field
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
     // ESC key - clear delete selections (only when not in fullscreen)
     if (key === 'Escape') {
-      if (isFullscreenActive) {
-        // Let fullscreen.js handle ESC for exiting fullscreen
-        return;
-      }
-      
+      if (isFullscreenActive) return;
       if (!state.permissions.includes('delete')) return;
-      
       const selectedCount = getSelectedTileCount();
-      const inSelectAllMode = isSelectAllMode();
-      
-      // Only process if there are selections
-      if (selectedCount > 0 || inSelectAllMode) {
+      if (selectedCount > 0 || isSelectAllMode()) {
         e.preventDefault();
         clearAllSelections();
       }
       return;
     }
-    
-    // Map keys to tile indices: 1->0, 2->1, ..., 9->8, 0->9
+
     let tileIndex = -1;
     if (key >= '1' && key <= '9') {
-      tileIndex = parseInt(key) - 1; // 1 becomes 0, 9 becomes 8
+      tileIndex = parseInt(key) - 1;
     } else if (key === '0') {
-      tileIndex = 9; // 0 becomes 9 (10th tile)
+      tileIndex = 9;
     } else if (key === 'Delete' || key.toLowerCase() === 'd') {
-      // DEL key - two phase delete
-      // Skip if in fullscreen mode (fullscreen.js handles delete for single video)
       if (isFullscreenActive) return;
       if (!state.permissions.includes('delete')) return;
       e.preventDefault();
-      
       const selectedCount = getSelectedTileCount();
-      
       if (selectedCount === 0 && !isSelectAllMode()) {
-        // First Delete press with nothing selected - select all
         selectAllFiles();
       } else {
-        // Second Delete press or items already selected - confirm and delete
         confirmDelete();
       }
       return;
     } else if (key.toLowerCase() === 'a') {
-      // 'a' key - audit (double-press for all files in folder)
       if (!state.permissions.includes('audit')) return;
       e.preventDefault();
       runAudit();
       return;
     } else if (key === '.') {
-      // '.' key - toggle select all / deselect all visible tiles
       e.preventDefault();
       if (!state.permissions.includes('delete')) return;
-      
       if (areAllVisibleTilesSelected()) {
         clearAllSelections();
       } else {
@@ -373,19 +340,17 @@ function setupDeleteHotkeys() {
       }
       return;
     }
-    
-    // If we have a valid tile index, toggle its selection (only when delete is enabled)
+
     if (tileIndex !== -1) {
       if (!state.permissions.includes('delete')) return;
       const containers = document.querySelectorAll('#grid .video-container');
-      // Only process if the tile exists (e.g., ignore 7-0 on a 6-tile grid)
       if (tileIndex < containers.length) {
         e.preventDefault();
         toggleTileSelection(tileIndex);
       }
+      return;
     }
-    
-    // '~' key (backtick/tilde) - toggle terminal (transparent mode)
+
     if (key === '`' || key === '~') {
       if (isFullscreenActive) return;
       if (!state.permissions.includes('terminal')) return;
@@ -393,8 +358,7 @@ function setupDeleteHotkeys() {
       toggleTerminal(state.currentPath || '', 'transparent');
       return;
     }
-    
-    // 'b' key - toggle terminal (privacy mode / boss screen style)
+
     if (key.toLowerCase() === 'b') {
       if (isFullscreenActive) return;
       if (!state.permissions.includes('terminal')) return;

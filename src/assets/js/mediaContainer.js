@@ -386,6 +386,7 @@ export function showTextFullscreen(file) {
 
         setTimeout(() => {
           saveBtn.textContent = '💾 Save';
+          document.removeEventListener('keydown', keyHandler);
           container.remove();
         }, 800);
       } else {

@@ -8,14 +8,14 @@ export const mediaPool = {
   init() {
     for (let i = 0; i < MAX_POOL_SIZE; i++) {
       const video = document.createElement('video');
-      video.preload = 'auto';
+      video.preload = 'none';
       video.playsInline = true;
       video.loop = true;
       video.controls = false;
       this.videoPool.push(video);
 
       const audio = document.createElement('audio');
-      audio.preload = 'auto';
+      audio.preload = 'none';
       audio.playsInline = true;
       audio.loop = true;
       this.audioPool.push(audio);

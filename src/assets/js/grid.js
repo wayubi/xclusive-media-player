@@ -136,41 +136,42 @@ function fetchMetadataBatch(grid, visibleFiles) {
   })
   .then(metas => {
     
-    Array.from(grid.children).forEach((container, idx) => {
-      const file = visibleFiles[idx];
-      const fsPath = fsPaths[idx];
+    const children = grid.children;
+    for (let i = 0; i < children.length; i++) {
+      const container = children[i];
+      const file = visibleFiles[i];
+      const fsPath = fsPaths[i];
       const meta = metas[fsPath] || {};
-      
 
-      // Store metadata in state
       state.setFileMetadata(file, meta);
-      
-      // Store optimization status separately
+
       if (meta.optimizationStatus) {
         state.setOptimizationStatus(file, meta.optimizationStatus);
-      } else {
       }
 
-      const filenameElem = container.querySelector('.overlay > div:first-child');
-      const metaElem = container.querySelector('.overlay > div:last-child');
+      const overlay = container.querySelector('.overlay');
+      if (overlay) {
+        const overlayChildren = overlay.children;
+        const filenameElem = overlayChildren[0];
+        const metaElem = overlayChildren[overlayChildren.length - 1];
 
-      if (filenameElem) {
-        filenameElem.textContent = meta.file ? decodeBase64UTF8(meta.file) : decodeURIComponent(file.split('/').pop());
+        if (filenameElem) {
+          filenameElem.textContent = meta.file ? decodeBase64UTF8(meta.file) : decodeURIComponent(file.split('/').pop());
+        }
+
+        if (metaElem) {
+          metaElem.dataset.filePath = file;
+          const parts = buildMetadataParts(meta, file);
+          metaElem.innerHTML = parts.join(' • ');
+        }
       }
 
-      if (metaElem) {
-        metaElem.dataset.filePath = file;
-        const parts = buildMetadataParts(meta, file);
-        metaElem.innerHTML = parts.join(' • ');
-      }
-
-      // Transform container if it has unsupported codec (but not for text files)
       const ext = file.split('.').pop().toLowerCase();
       const isTextFile = ['txt', 'md', 'log', 'json', 'xml', 'csv', 'yaml', 'yml', 'conf', 'cfg', 'ini', 'nfo', 'sfv'].includes(ext);
       if (!isTextFile && state.hasUnsupportedCodec(file)) {
         transformToUnsupportedVideo(container, file);
       }
-    });
+    }
     
     // Update optimization status display after all metadata is stored
     updateOptimizationDisplay();
@@ -256,16 +257,13 @@ function loadMediaElement(element, isPriority = false) {
     });
 
   if (element.tagName === 'VIDEO') {
-    element.addEventListener('loadedmetadata', () => {
+    const onLoaded = () => {
+      if (isPriority && state.lastFullscreen.file === element.dataset.file && state.lastFullscreen.time) {
+        element.currentTime = state.lastFullscreen.time;
+      }
       element.play().catch(() => {});
-    }, { once: true });
-  }
-
-  // Restore time if this was the recent fullscreen
-  if (isPriority && state.lastFullscreen.file === element.dataset.file) {
-    element.addEventListener('loadedmetadata', () => {
-      element.currentTime = state.lastFullscreen.time || 0;
-    }, { once: true });
+    };
+    element.addEventListener('loadedmetadata', onLoaded, { once: true });
   }
 }
 
@@ -369,12 +367,11 @@ function buildMetadataParts(meta, file) {
     // Build folder path as a single cohesive unit with > separators
     if (pathParts.length > 0) {
       let folderPathHtml = '';
+      let runningPath = '';
       pathParts.forEach((segment, idx) => {
-        const targetPath = pathParts.slice(0, idx + 1).join('/');
-        if (idx > 0) {
-          folderPathHtml += ' > ';
-        }
-        folderPathHtml += `<span class="folder-link" data-folder-path="${targetPath}" style="cursor: pointer; text-decoration: underline; pointer-events: auto;">${segment}</span>`;
+        runningPath = runningPath ? runningPath + '/' + segment : segment;
+        if (idx > 0) folderPathHtml += ' > ';
+        folderPathHtml += '<span class="folder-link" data-folder-path="' + runningPath + '" style="cursor:pointer;text-decoration:underline;pointer-events:auto">' + segment + '</span>';
       });
       parts.push(folderPathHtml);
     }

@@ -85,9 +85,11 @@ export function playFavorites() {
 }
 
 export function setupFavoritesFilter() {
-  const favoritesCount = document.getElementById('favorites-count');
-  if (favoritesCount) {
-    favoritesCount.addEventListener('click', (e) => {
+  const el = document.getElementById('favorites-count');
+  if (el) {
+    const clone = el.cloneNode(true);
+    el.parentNode.replaceChild(clone, el);
+    clone.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
       toggleFavoritesFilter();

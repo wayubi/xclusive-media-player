@@ -6,6 +6,12 @@ import { isTerminalActive } from './terminal.js';
 
 let fullscreenDeleteUsed = false;
 
+function arrayToIndexMap(arr) {
+  const map = new Map();
+  for (let i = 0; i < arr.length; i++) map.set(arr[i], i);
+  return map;
+}
+
 export function startFullscreenFrom(file, startTime = 0) {
   fullscreenDeleteUsed = false;
   // Check if this file has an unsupported codec
@@ -33,7 +39,8 @@ export function startFullscreenFrom(file, startTime = 0) {
 
   state.fullscreenMode = 'tile';
   state.lastFullscreen = { file, time: startTime };
-  startFullscreenPlayer(state.allVideos, state.allVideos.indexOf(file), startTime);
+  const allIdx = state._fileIndexMap ? state._fileIndexMap.get(file) : -1;
+  startFullscreenPlayer(state.allVideos, allIdx >= 0 ? allIdx : state.allVideos.indexOf(file), startTime);
 }
 
 function isTextFile(file) {
@@ -62,33 +69,32 @@ export async function startFullscreenPlayer(playlist, index = 0, startTime = 0) 
   
   document.body.classList.add('fullscreen-active');
   
+  // Build index maps for O(1) lookups
+  const playlistIndexMap = arrayToIndexMap(playlist);
+  state._fileIndexMap = arrayToIndexMap(state.allVideos);
+  
   let i = index;
 
-  // Filter out unsupported videos and text files from playlist
   const supportedPlaylist = playlist.filter(file => !state.hasUnsupportedCodec(file) && !isTextFile(file));
+  const supportedIndexMap = arrayToIndexMap(supportedPlaylist);
 
-  // If no supported videos, show message and return
   if (supportedPlaylist.length === 0) {
     alert('No supported video files in this folder.\n\nThis folder contains videos with unsupported codecs (WMV3, FLV1, MPEG4, etc.) or only text files. Please add compatible video files.');
     return;
   }
 
-  // Find the closest supported video to the requested index
   if (state.hasUnsupportedCodec(playlist[i]) || isTextFile(playlist[i])) {
-    // Find next supported video
     let foundIndex = -1;
     for (let j = 0; j < playlist.length; j++) {
       const checkIdx = (i + j) % playlist.length;
       if (!state.hasUnsupportedCodec(playlist[checkIdx]) && !isTextFile(playlist[checkIdx])) {
-        foundIndex = supportedPlaylist.indexOf(playlist[checkIdx]);
+        foundIndex = supportedIndexMap.get(playlist[checkIdx]) ?? -1;
         break;
       }
     }
     i = foundIndex >= 0 ? foundIndex : 0;
   } else {
-    // Convert original index to filtered playlist index
-    i = supportedPlaylist.indexOf(playlist[index]);
-    if (i === -1) i = 0;
+    i = supportedIndexMap.get(playlist[index]) ?? 0;
   }
 
   // Android ExoPlayer support
@@ -173,7 +179,10 @@ export async function startFullscreenPlayer(playlist, index = 0, startTime = 0) 
     }
     state.lastFullscreen.file = supportedPlaylist[i];
 
-    state.startIndex = Math.floor(state.allVideos.indexOf(supportedPlaylist[i]) / state.totalCells) * state.totalCells;
+    const allIdx = state._fileIndexMap ? state._fileIndexMap.get(supportedPlaylist[i]) ?? -1 : -1;
+    state.startIndex = allIdx >= 0
+      ? Math.floor(allIdx / state.totalCells) * state.totalCells
+      : Math.floor(state.allVideos.indexOf(supportedPlaylist[i]) / state.totalCells) * state.totalCells;
 
     // Clean up fullscreen elements
     if (thumb) thumb.remove();
@@ -304,13 +313,13 @@ function deleteCurrentVideo(file, playlist, currentIndex, play, close) {
       return;
     }
     
-    const idx = state.allVideos.indexOf(file);
+    const idx = state._fileIndexMap?.get(file) ?? state.allVideos.indexOf(file);
     if (idx > -1) state.allVideos.splice(idx, 1);
+    if (state._fileIndexMap) state._fileIndexMap = arrayToIndexMap(state.allVideos);
     delete state.auditStatusMap[file];
     delete state.webToFsPathMap[file];
     delete state.favoritesMap[file];
     
-    // Remove from local playlist
     const playlistIndex = playlist.indexOf(file);
     if (playlistIndex > -1) {
       playlist.splice(playlistIndex, 1);

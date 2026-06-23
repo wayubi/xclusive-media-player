@@ -167,11 +167,4 @@ export const mediaQueue = {
     activeVideoLoads = 0;
   },
 
-  /**
-   * Pause all active loads (useful for bandwidth management)
-   */
-  pauseAll() {
-    // Move active elements back to front of queue
-    // This is a soft pause - elements keep their current progress
-  }
 };

@@ -149,14 +149,13 @@ function performAudit(filesToAudit, webPaths, mode) {
         
         // Re-add unaudited classes
         const containers = document.querySelectorAll('#grid .video-container');
-        containers.forEach((container, idx) => {
-          const visibleFiles = state.getVisibleFiles();
-          const file = visibleFiles[idx];
-          
+        const visibleFiles = state.getVisibleFiles();
+        for (let i = 0; i < containers.length; i++) {
+          const file = visibleFiles[i];
           if (file && !state.auditStatusMap[file]) {
-            container.classList.add('unaudited');
+            containers[i].classList.add('unaudited');
           }
-        });
+        }
         
         const auditText = document.getElementById('audit-text');
         if (auditText) {
@@ -238,15 +237,13 @@ export function updateAuditDisplay() {
 }
 
 function refreshGridAuditStatus() {
-  // Update all containers in the grid to reflect current audit status
   const containers = document.querySelectorAll('#grid .video-container');
+  const visibleFiles = state.getVisibleFiles();
   
-  containers.forEach((container, idx) => {
-    const visibleFiles = state.getVisibleFiles();
-    const file = visibleFiles[idx];
-    
+  for (let i = 0; i < containers.length; i++) {
+    const file = visibleFiles[i];
     if (file && state.auditStatusMap[file]) {
-      container.classList.remove('unaudited');
+      containers[i].classList.remove('unaudited');
     }
-  });
+  }
 }

@@ -9,9 +9,11 @@ export function toggleUnauditedFilter() {
 }
 
 export function setupUnauditedFilter() {
-  const unauditedCount = document.getElementById('unaudited-count');
-  if (unauditedCount) {
-    unauditedCount.addEventListener('click', (e) => {
+  const el = document.getElementById('unaudited-count');
+  if (el) {
+    const clone = el.cloneNode(true);
+    el.parentNode.replaceChild(clone, el);
+    clone.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
       toggleUnauditedFilter();
@@ -29,9 +31,11 @@ export function setupOptimizationFilter() {
   const optimizationCount = document.getElementById('optimization-count');
   const optimizationText = document.getElementById('optimization-text');
   
-  const clickTarget = optimizationCount || optimizationText;
-  if (clickTarget) {
-    clickTarget.addEventListener('click', (e) => {
+  const el = optimizationCount || optimizationText;
+  if (el) {
+    const clone = el.cloneNode(true);
+    el.parentNode.replaceChild(clone, el);
+    clone.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
       toggleOptimizationFilter();

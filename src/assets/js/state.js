@@ -84,7 +84,10 @@ export const state = {
   // Helper methods
   isFileVisible(file) {
     const end = Math.min(this.startIndex + this.totalCells, this.allVideos.length);
-    return this.allVideos.slice(this.startIndex, end).includes(file);
+    for (let i = this.startIndex; i < end; i++) {
+      if (this.allVideos[i] === file) return true;
+    }
+    return false;
   },
   
   getVisibleFiles() {

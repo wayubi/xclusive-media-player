@@ -138,6 +138,7 @@ function createTerminal() {
       const command = inputElement.value.trim();
       if (command) {
         commandHistory.push(command);
+        if (commandHistory.length > 500) commandHistory.shift();
         historyIndex = commandHistory.length;
         processCommand(command);
       }
@@ -204,18 +205,31 @@ function updatePrompt() {
   }
 }
 
+const MAX_TERMINAL_LINES = 500;
+let _terminalLineCount = 0;
+
 function printToTerminal(text, type = '') {
   if (!outputElement) return;
   
-  // Handle multiline text
+  const fragment = document.createDocumentFragment();
   const lines = text.split('\n');
   lines.forEach(line => {
     const lineEl = document.createElement('div');
     lineEl.className = 'terminal-line';
     if (type) lineEl.classList.add(type);
     lineEl.textContent = line;
-    outputElement.appendChild(lineEl);
+    fragment.appendChild(lineEl);
   });
+  outputElement.appendChild(fragment);
+  
+  _terminalLineCount += lines.length;
+  if (_terminalLineCount > MAX_TERMINAL_LINES) {
+    const excess = _terminalLineCount - MAX_TERMINAL_LINES;
+    for (let i = 0; i < excess; i++) {
+      if (outputElement.firstChild) outputElement.removeChild(outputElement.firstChild);
+    }
+    _terminalLineCount = MAX_TERMINAL_LINES;
+  }
   
   outputElement.scrollTop = outputElement.scrollHeight;
 }
@@ -223,6 +237,7 @@ function printToTerminal(text, type = '') {
 function clearOutput() {
   if (!outputElement) return;
   outputElement.innerHTML = '';
+  _terminalLineCount = 0;
 }
 
 async function processCommand(commandLine) {
