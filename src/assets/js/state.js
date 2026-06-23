@@ -50,7 +50,8 @@ export const state = {
   // Initialize state from bootstrap data
   init(config) {
     this.allVideos = [...config.allVideos];
-    this.originalVideos = [...config.allVideos];
+    this.originalVideos = config.allVideos;
+    this._originalVideosCopied = false;
     this.allFilesWithPaths = config.allFilesWithPaths;
     
     // Create web-to-filesystem path mapping
@@ -63,6 +64,8 @@ export const state = {
     this.auditStatusMap = config.auditStatusMap;
     this.favoritesMap = config.favoritesMap || {};
     this.optimizationStatusMap = config.optimizationStatusMap || {};
+    this.optimizedCount = config.optimizedCount || 0;
+    this.unoptimizedCount = config.unoptimizedCount || 0;
     this.muted = config.muted;
     this.totalCells = config.totalCells;
     this.selectedColumns = config.selectedColumns;
@@ -142,9 +145,13 @@ export const state = {
   },
   
   getFavoritesCount() {
-    return Object.keys(this.favoritesMap).filter(file => 
-      this.favoritesMap[file] && this.originalVideos.includes(file)
-    ).length;
+    let count = 0;
+    const files = this.originalVideos;
+    const len = files.length;
+    for (let i = 0; i < len; i++) {
+      if (this.favoritesMap[files[i]]) count++;
+    }
+    return count;
   },
   
   // Delete a video from all state structures
@@ -156,6 +163,12 @@ export const state = {
     if (allIdx !== -1) {
       this.allVideos.splice(allIdx, 1);
       removed = true;
+    }
+    
+    // Lazy-copy originalVideos before first mutation
+    if (!this._originalVideosCopied) {
+      this.originalVideos = [...this.originalVideos];
+      this._originalVideosCopied = true;
     }
     
     const origIdx = this.originalVideos.indexOf(file);
@@ -339,26 +352,12 @@ export const state = {
     return status ? status.isOptimized : true; // Default to true if unknown
   },
 
-  // Get count of optimized vs unoptimized files
+  // Get count of optimized vs unoptimized files (uses server-cached counts)
   getOptimizationStats() {
-    let optimized = 0;
-    let unoptimized = 0;
-    let noStatus = 0;
-    
-    
-    this.originalVideos.forEach(file => {
-      const status = this.getOptimizationStatus(file);
-      if (status) {
-        if (status.isOptimized) {
-          optimized++;
-        } else {
-          unoptimized++;
-        }
-      } else {
-        noStatus++;
-      }
-    });
-    
-    return { optimized, unoptimized, total: this.originalVideos.length };
+    return {
+      optimized: this.optimizedCount,
+      unoptimized: this.unoptimizedCount,
+      total: this.originalVideos.length,
+    };
   }
 };

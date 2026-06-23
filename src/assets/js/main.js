@@ -1,67 +1,35 @@
 // main.js - Entry point and initialization
 import { state } from './state.js';
-import { renderGrid, updateOptimizationDisplay } from './grid.js';
+import { renderGrid } from './grid.js';
 import { setupEventListeners } from './events.js';
 import { setVhUnit } from './utils.js';
 import { initTerminal } from './terminal.js';
 
-// Bootstrap from PHP
-const {
-  allVideos,
-  allFilesWithPaths,
-  audioThumbs,
-  auditStatusMap,
-  favoritesMap,
-  optimizationStatusMap,
-  muted,
-  totalCells,
-  selectedColumns,
-  webRoot,
-  rootDirAbs,
-  currentPath,
-  permissions
-} = window.APP;
-
-// Initialize state
-state.init({
-  allVideos,
-  allFilesWithPaths,
-  audioThumbs,
-  auditStatusMap,
-  favoritesMap,
-  optimizationStatusMap,
-  muted,
-  totalCells,
-  selectedColumns,
-  webRoot,
-  rootDirAbs,
-  currentPath,
-  permissions
-});
-
-// Initialize
+// Bootstrap from PHP — deferred after paint
 document.addEventListener('DOMContentLoaded', () => {
-  setVhUnit();
-  setupEventListeners();
-  renderGrid();
-  if (state.permissions.includes('terminal')) {
-    initTerminal();
-  }
-  
-  if (state.permissions.includes('favorites')) {
-    import('./favorites.js').then(module => {
-      module.updateFavoritesDisplay();
-      module.setupFavoritesFilter();
+  requestAnimationFrame(() => {
+    const cfg = window.APP;
+    state.init(cfg);
+
+    setVhUnit();
+    setupEventListeners();
+    renderGrid();
+
+    if (state.permissions.includes('terminal')) {
+      initTerminal();
+    }
+
+    if (state.permissions.includes('favorites')) {
+      import('./favorites.js').then(module => {
+        module.updateFavoritesDisplay();
+        module.setupFavoritesFilter();
+      });
+    }
+
+    import('./filter.js').then(module => {
+      module.setupOptimizationFilter();
     });
-  }
-  
-  // Initialize optimization filter
-  import('./filter.js').then(module => {
-    module.setupOptimizationFilter();
   });
-  
-  // Update optimization display with initial cached data
-  updateOptimizationDisplay();
 });
 
 window.addEventListener('resize', setVhUnit);
