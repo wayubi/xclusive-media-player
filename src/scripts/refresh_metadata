@@ -476,12 +476,12 @@ if ($prune) {
             $pruned++;
         } else {
             try {
+                if ($includeFavoritesDb) {
+                    (new FavoritesDatabase())->removeFavorite($dbFilePath);
+                }
                 $metaDb->deleteMetadata($dbFilePath);
                 if ($includeAuditDb) {
                     (new AuditDatabase())->deleteFile($dbFilePath);
-                }
-                if ($includeFavoritesDb) {
-                    (new FavoritesDatabase())->removeFavorite($dbFilePath);
                 }
                 echo "[$checked] $filename - Pruned ($reason)\n";
                 $pruned++;
@@ -538,29 +538,21 @@ if ($prune) {
         $metaDbCheck = new MetadataDatabase();
         $orphanPruned = 0;
 
-        $metadataPaths = [];
-        $metaStmt = $metaDbCheck->getDb()->query('SELECT file_path FROM files');
+        $metaXxhashes = [];
+        $metaStmt = $metaDbCheck->getDb()->query('SELECT xxhash FROM files WHERE xxhash IS NOT NULL');
         while ($r = $metaStmt->fetchArray(SQLITE3_ASSOC)) {
-            $metadataPaths[$r['file_path']] = true;
+            $metaXxhashes[$r['xxhash']] = true;
         }
 
-        $favStmt = $favDb->getDb()->query('SELECT file_path FROM files');
+        $favStmt = $favDb->getDb()->query('SELECT DISTINCT xxhash FROM favorites');
         while ($row = $favStmt->fetchArray(SQLITE3_ASSOC)) {
-            $dbFilePath = $row['file_path'];
-            if (isset($metadataPaths[$dbFilePath])) continue;
+            $xxhash = $row['xxhash'];
+            if (isset($metaXxhashes[$xxhash])) continue;
 
-            $inScope = $singleFile
-                ? ($dbFilePath === $singleFile)
-                : ($all
-                    ? str_starts_with($dbFilePath, $root . '/')
-                    : ($noSubfolders
-                        ? (dirname($dbFilePath) === $targetDir)
-                        : str_starts_with($dbFilePath, $targetDir . '/')));
-
-            if ($inScope) {
-                $favDb->removeFavorite($dbFilePath);
-                $orphanPruned++;
-            }
+            $delStmt = $favDb->getDb()->prepare('DELETE FROM favorites WHERE xxhash = :xxhash');
+            $delStmt->bindValue(':xxhash', $xxhash, SQLITE3_TEXT);
+            $delStmt->execute();
+            $orphanPruned++;
         }
 
         echo "Orphan favorite records pruned: $orphanPruned\n";
