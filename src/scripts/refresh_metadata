@@ -5,6 +5,7 @@ require_once __DIR__ . '/../lib/MetadataExtractor.php';
 require_once __DIR__ . '/../lib/MetadataDatabase.php';
 require_once __DIR__ . '/../lib/AuditDatabase.php';
 require_once __DIR__ . '/../lib/FavoritesDatabase.php';
+require_once __DIR__ . '/../lib/audioCovers.php';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -20,6 +21,30 @@ function detect_cores(): int {
         if ($r && is_numeric(trim($r))) return (int)trim($r);
     }
     return 4;
+}
+
+function refresh_audio_covers(): void {
+    global $root;
+    $cacheFile = __DIR__ . '/../cache/audio-covers-map.json';
+    $metaDb = new MetadataDatabase();
+    $result = $metaDb->getDb()->query("SELECT file_path FROM files WHERE extension IN ('mp3','wav','ogg')");
+    $files = [];
+    while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+        $files[] = $row['file_path'];
+    }
+    if (empty($files)) {
+        file_put_contents($cacheFile, '{}');
+        echo "Audio covers: no audio files found.\n";
+        return;
+    }
+    $rawMap = generateAudioCovers($files);
+    $webMap = [];
+    foreach ($rawMap as $audioFs => $thumbRel) {
+        $audioWeb = '/volumes' . str_replace($root, '', $audioFs);
+        $webMap[$audioWeb] = '/' . $thumbRel;
+    }
+    file_put_contents($cacheFile, json_encode($webMap));
+    echo "Audio covers: " . count($webMap) . " covers cached.\n";
 }
 
 function run_sequential(array &$files, bool $dryRun, bool $checkXxhash, bool $force, bool $showProgress, bool $verbose = false): array {
@@ -600,6 +625,13 @@ if ($prune) {
         echo "Orphan favorite records pruned: $orphanPruned\n";
     }
 
+    if (!$refresh && !$dryRun) {
+        echo "Rebuilding folder cache...\n";
+        $metaDb->rebuildFolderCache();
+        echo "Folder cache rebuilt.\n";
+        refresh_audio_covers();
+        exit(0);
+    }
     if (!$refresh) exit(0);
     echo "\n";
 }
@@ -734,6 +766,12 @@ if ($refresh) {
             echo "\n";
             $cleaned = cleanup_orphans(false, $verbose);
             echo "Cleanup: $cleaned orphan metadata rows removed.\n";
+
+            echo "Rebuilding folder cache...\n";
+            $metaDb->rebuildFolderCache();
+            echo "Folder cache rebuilt.\n";
+
+            refresh_audio_covers();
         }
         exit(0);
     }
@@ -747,6 +785,12 @@ if ($refresh) {
         echo "Refresh complete. {$result['refreshed']} files refreshed, {$result['skipped']} up to date, {$result['moved']} moved, {$result['failed']} failed.\n";
         $cleaned = cleanup_orphans(false, $verbose);
         echo "Cleanup: $cleaned orphan metadata rows removed.\n";
+
+        echo "Rebuilding folder cache...\n";
+        $metaDb->rebuildFolderCache();
+        echo "Folder cache rebuilt.\n";
+
+        refresh_audio_covers();
     }
 
     if (!empty($result['errors'])) {

@@ -56,6 +56,27 @@ class MetadataDatabase extends Database
             CREATE INDEX IF NOT EXISTS idx_web_path ON files(web_path);
             CREATE INDEX IF NOT EXISTS idx_updated_at ON files(updated_at);
             CREATE INDEX IF NOT EXISTS idx_filename ON files(filename);
+
+            CREATE TABLE IF NOT EXISTS folder_cache (
+                folder_path TEXT NOT NULL,
+                file_path TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                sort_modified INTEGER,
+                sort_name TEXT,
+                sort_duration REAL,
+                sort_filesize INTEGER,
+                sort_resolution INTEGER,
+                sort_bitrate INTEGER,
+                sort_fps REAL,
+                PRIMARY KEY (folder_path, file_path)
+            );
+            CREATE INDEX IF NOT EXISTS idx_cache_mod ON folder_cache(folder_path, sort_modified);
+            CREATE INDEX IF NOT EXISTS idx_cache_name ON folder_cache(folder_path, sort_name);
+            CREATE INDEX IF NOT EXISTS idx_cache_dur ON folder_cache(folder_path, sort_duration);
+            CREATE INDEX IF NOT EXISTS idx_cache_size ON folder_cache(folder_path, sort_filesize);
+            CREATE INDEX IF NOT EXISTS idx_cache_res ON folder_cache(folder_path, sort_resolution);
+            CREATE INDEX IF NOT EXISTS idx_cache_bit ON folder_cache(folder_path, sort_bitrate);
+            CREATE INDEX IF NOT EXISTS idx_cache_fps ON folder_cache(folder_path, sort_fps);
         ');
     }
 
@@ -348,6 +369,105 @@ class MetadataDatabase extends Database
         $stmt->bindValue(':updated', time(), SQLITE3_INTEGER);
         $stmt->bindValue(':id', $id, SQLITE3_INTEGER);
         return $stmt->execute() !== false;
+    }
+
+    public function rebuildFolderCache(): void
+    {
+        $this->db->exec('DELETE FROM folder_cache');
+
+        $result = $this->db->query('
+            SELECT file_path, filename, modified_time, duration, file_size,
+                   video_width, video_height, bitrate, video_fps
+            FROM files
+        ');
+
+        $this->db->exec('BEGIN TRANSACTION');
+        $stmt = $this->db->prepare('
+            INSERT OR REPLACE INTO folder_cache
+                (folder_path, file_path, filename, sort_modified, sort_name,
+                 sort_duration, sort_filesize, sort_resolution, sort_bitrate, sort_fps)
+            VALUES
+                (:folder, :path, :name, :mod, :name,
+                 :dur, :size, :res, :bit, :fps)
+        ');
+
+        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+            $folder = dirname($row['file_path']);
+            $stmt->bindValue(':folder', $folder, SQLITE3_TEXT);
+            $stmt->bindValue(':path', $row['file_path'], SQLITE3_TEXT);
+            $stmt->bindValue(':name', $row['filename'] ?? '', SQLITE3_TEXT);
+            $stmt->bindValue(':mod', $row['modified_time'], SQLITE3_INTEGER);
+            $stmt->bindValue(':dur', $row['duration'] ?? 0, SQLITE3_FLOAT);
+            $stmt->bindValue(':size', $row['file_size'], SQLITE3_INTEGER);
+            $stmt->bindValue(':res', ($row['video_width'] ?? 0) * ($row['video_height'] ?? 0), SQLITE3_INTEGER);
+            $stmt->bindValue(':bit', $row['bitrate'] ?? 0, SQLITE3_INTEGER);
+            $stmt->bindValue(':fps', $row['video_fps'] ?? 0, SQLITE3_FLOAT);
+            $stmt->execute();
+        }
+        $this->db->exec('COMMIT');
+    }
+
+    public function getFilesFromFolder(string $folderPath, string $sortField = 'modified', string $sortDirection = 'desc'): array
+    {
+        $normalizedFolder = $this->normalizePath($folderPath);
+
+        $sortColumn = match ($sortField) {
+            'name'       => 'sort_name',
+            'duration'   => 'sort_duration',
+            'filesize'   => 'sort_filesize',
+            'resolution' => 'sort_resolution',
+            'bitrate'    => 'sort_bitrate',
+            'fps'        => 'sort_fps',
+            default      => 'sort_modified',
+        };
+        $direction = strtolower($sortDirection) === 'asc' ? 'ASC' : 'DESC';
+
+        $stmt = $this->db->prepare("
+            SELECT file_path, filename FROM folder_cache
+            WHERE folder_path = :folder OR folder_path LIKE :prefix
+            ORDER BY $sortColumn $direction
+        ");
+        $stmt->bindValue(':folder', $normalizedFolder, SQLITE3_TEXT);
+        $stmt->bindValue(':prefix', $normalizedFolder . '/%', SQLITE3_TEXT);
+        $result = $stmt->execute();
+
+        $files = [];
+        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+            $files[] = [
+                'file_path' => $row['file_path'],
+                'filename'  => $row['filename'] ?? basename($row['file_path']),
+            ];
+        }
+
+        if ($sortField === 'name') {
+            usort($files, function ($a, $b) use ($sortDirection) {
+                $cmp = strnatcmp($a['filename'], $b['filename']);
+                return $sortDirection === 'asc' ? $cmp : -$cmp;
+            });
+        }
+
+        return array_map(fn($f) => $f['file_path'], $files);
+    }
+
+    public function getOptimizationStatusBatchByFolder(string $folderPath): array
+    {
+        $normalized = $this->normalizePath($folderPath);
+        $stmt = $this->db->prepare("
+            SELECT file_path, is_optimized, optimization_issues
+            FROM files
+            WHERE file_path LIKE :prefix
+        ");
+        $stmt->bindValue(':prefix', $normalized . '/%', SQLITE3_TEXT);
+        $result = $stmt->execute();
+
+        $statuses = [];
+        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+            $statuses[$row['file_path']] = [
+                'isOptimized' => (bool)$row['is_optimized'],
+                'issues'      => json_decode($row['optimization_issues'] ?? '[]', true) ?: [],
+            ];
+        }
+        return $statuses;
     }
 
     /**

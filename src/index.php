@@ -198,16 +198,16 @@ if (in_array('favorites', $permissions)) {
 }
 $metaDb = new MetadataDatabase();
 
-// Get files from database (DB is source of truth) with sorting
-$allFilesRaw = $metaDb->getFilesByFolder($current_path, $sort_field, $sort_direction);
+// Get files from folder cache (pre-computed by refresh_metadata)
+$allFilesRaw = $metaDb->getFilesFromFolder($current_path, $sort_field, $sort_direction);
 $webRoot = '/' . trim($root_directory, './');
 $allFiles = array_map(fn($f) => Utils::filesystemToWebPath($f, $root_directory_absolute, $webRoot), $allFilesRaw);
 $allFilesCount = count($allFiles);
 
-// Batch fetch audit and favorites statuses (lightweight)
-$auditStatuses = $auditDb->getAuditStatusBatch($allFilesRaw);
-$favoritesStatuses = $favDb ? $favDb->getFavoriteStatusBatch($allFilesRaw, (int)($_SESSION['user_id'] ?? 0)) : [];
-$optimizationStatuses = $metaDb->getOptimizationStatusBatch($allFilesRaw);
+// Batch fetch audit, favorites, and optimization statuses by folder (single JOIN query each)
+$auditStatuses = $auditDb->getAuditStatusBatchByFolder($current_path);
+$favoritesStatuses = $favDb ? $favDb->getFavoritesStatusBatchByFolder($current_path, (int)($_SESSION['user_id'] ?? 0)) : [];
+$optimizationStatuses = $metaDb->getOptimizationStatusBatchByFolder($current_path);
 
 // Get optimization stats using SQL COUNT (lightweight)
 $optimizationStats = $metaDb->getOptimizationStats($current_path);
@@ -270,16 +270,9 @@ foreach ($allFolderPaths as $path) {
 }
 $folderAuditStats = $auditDb->getFolderStatsBatch($allFolderPaths, $totalCounts);
 
-require_once __DIR__ . '/lib/audioCovers.php';
-$audioThumbsRaw = generateAudioCovers($allFilesRaw);
-
-$audioThumbs = [];
-$docRoot = realpath($_SERVER['DOCUMENT_ROOT'] ?? '');
-foreach ($audioThumbsRaw as $audioFs => $thumbFs) {
-    $audioWeb = Utils::filesystemToWebPath($audioFs, $root_directory_absolute, $webRoot);
-    $thumbWeb = $docRoot ? '/' . ltrim(str_replace('\\', '/', str_replace($docRoot, '', realpath($thumbFs))), '/') : '';
-    $audioThumbs[$audioWeb] = $thumbWeb ?: 'cache/no-cover.jpg';
-}
+// Read pre-computed audio covers from refresh_metadata cache
+$audioCoversFile = __DIR__ . '/cache/audio-covers-map.json';
+$audioThumbs = (file_exists($audioCoversFile)) ? (json_decode(file_get_contents($audioCoversFile), true) ?? []) : [];
 ?>
 <!DOCTYPE html>
 <html lang="en">

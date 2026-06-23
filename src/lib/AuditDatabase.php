@@ -139,6 +139,30 @@ class AuditDatabase extends Database
         return $results;
     }
 
+    public function getAuditStatusBatchByFolder(string $folderPath): array
+    {
+        $normalized = $this->normalizePath($folderPath);
+        @$this->db->exec("ATTACH DATABASE '" . __DIR__ . "/../../db/metadata.db' AS meta");
+        $stmt = $this->db->prepare("
+            SELECT f.file_path, al.audited_at, al.audit_date
+            FROM meta.files f
+            LEFT JOIN audit_log al ON al.metadata_file_id = f.id
+            WHERE f.file_path LIKE :prefix
+        ");
+        $stmt->bindValue(':prefix', $normalized . '/%', SQLITE3_TEXT);
+        $result = $stmt->execute();
+
+        $statuses = [];
+        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+            $statuses[$row['file_path']] = [
+                'audited'    => $row['audited_at'] !== null,
+                'audit_date' => $row['audit_date'] ?? '',
+                'audited_at' => $row['audited_at'] ?? 0,
+            ];
+        }
+        return $statuses;
+    }
+
     public function getFolderStatsBatch(array $folderPaths, array $totalCounts = []): array
     {
         $results = [];

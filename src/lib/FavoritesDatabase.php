@@ -232,6 +232,30 @@ class FavoritesDatabase extends Database
         return $results;
     }
 
+    public function getFavoritesStatusBatchByFolder(string $folderPath, int $userId): array
+    {
+        $normalized = $this->normalizePath($folderPath);
+        @$this->db->exec("ATTACH DATABASE '" . __DIR__ . "/../../db/metadata.db' AS meta");
+
+        $stmt = $this->db->prepare("
+            SELECT f.file_path, fav.favorited_at
+            FROM meta.files f
+            LEFT JOIN favorites fav ON fav.metadata_file_id = f.id AND fav.user_id = :uid
+            WHERE f.file_path LIKE :prefix
+        ");
+        $stmt->bindValue(':uid', $userId, SQLITE3_INTEGER);
+        $stmt->bindValue(':prefix', $normalized . '/%', SQLITE3_TEXT);
+        $result = $stmt->execute();
+
+        $statuses = [];
+        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+            $statuses[$row['file_path']] = [
+                'favorited' => $row['favorited_at'] !== null,
+            ];
+        }
+        return $statuses;
+    }
+
     public function getFavoritesCountInFolder($folderPath, int $userId) {
         $normalizedPath = $this->normalizePath($folderPath);
         $metaDb = $this->getMetadataDb();
