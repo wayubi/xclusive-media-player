@@ -171,6 +171,9 @@ body.overlays-idle .central-overlay {
   flex-direction: column;
   justify-content: center;
   align-items: center;
+  position: relative;
+  overflow: hidden;
+  contain: layout style paint;
 }
 .audio-grid-thumb {
   width: 100%;

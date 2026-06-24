@@ -491,7 +491,7 @@ function createLazyMediaElement(file, isVideo, isAudio, container) {
   mediaEl.muted = true;
 
   if (isAudio) {
-    container.className = 'audio-grid-container';
+    container.classList.add('audio-grid-container');
     const img = document.createElement('img');
     img.className = 'audio-grid-thumb';
     img.src = state.audioThumbs[file] || 'cache/no-cover.jpg';
