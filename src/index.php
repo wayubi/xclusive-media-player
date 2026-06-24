@@ -369,11 +369,13 @@ $audioThumbs = (file_exists($audioCoversFile)) ? (json_decode(file_get_contents(
             <button type="button" id="mute-button" onclick="toggleMute()" title="Toggle mute">
                 <?= $muted?'🔇':'🔊' ?>
             </button>
-            <button type="button" onclick="playAll()" title="Play all">▶️</button>
-            <button type="button" onclick="shufflePlay()" title="Shuffle play">🔀</button>
-            <?php if (in_array('favorites', $permissions)): ?>
-            <button type="button" onclick="playFavorites()" title="Play favorites">❤️</button>
-            <?php endif; ?>
+            <span style="background:rgba(148,163,184,0.1);border:1px solid rgba(148,163,184,0.2);padding:6px 12px;border-radius:12px;font-size:0.8rem;font-weight:600;color:var(--text-secondary);white-space:nowrap;cursor:default">
+                <span onclick="playAll()" title="Play all" style="cursor:pointer">▶️</span>
+                <span onclick="shufflePlay()" title="Shuffle" style="cursor:pointer;margin-left:8px">🔀</span>
+                <?php if (in_array('favorites', $permissions)): ?>
+                <span onclick="playFavorites()" title="Play favorites" style="cursor:pointer;margin-left:8px">❤️</span>
+                <?php endif; ?>
+            </span>
             <?php if (in_array('audit', $permissions)): ?>
             <!-- <button type="button" id="audit" onclick="runAudit()" title="Audit files">📋</button> -->
             <?php endif; ?>
