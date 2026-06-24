@@ -11,12 +11,13 @@
   }
   
   #file-count,
+  .home-btn,
   #options-form select[name="columns"],
   #options-form select[name="rows"],
+  #options-form select[name="sort"],
   #options-form button[onclick="playFavorites()"],
   #previous,
   #next,
-  #favorites-text,
   #audit-text,
   #optimization-text {
     display: none !important;
@@ -27,6 +28,16 @@
     font-size: 0.75rem;
   }
   
+  #folder-select-container {
+    flex: 1;
+    min-width: 0;
+  }
+
+  #folder-select-container select {
+    width: 100%;
+    min-width: 160px;
+  }
+
   #folder-select-container select option {
     font-size: 0.75rem;
   }

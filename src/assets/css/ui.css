@@ -2,8 +2,8 @@
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 10px;
-  padding: 12px 20px;
+  gap: 8px;
+  padding: 12px 16px;
   background: rgba(15, 15, 25, 0.75);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
@@ -18,10 +18,11 @@
   display: flex;
   align-items: center;
   flex-shrink: 0;
+  gap: 6px;
 }
 
 #folder-select-container button {
-  padding: 10px 18px;
+  padding: 8px 14px;
   background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(139, 92, 246, 0.15));
   border: 1px solid var(--border-glow);
   border-radius: var(--radius);
@@ -39,10 +40,6 @@
   border-color: var(--accent-glow);
   transform: translateY(-2px);
   box-shadow: 0 8px 24px rgba(168, 85, 247, 0.25);
-}
-
-#options-form {
-  flex-shrink: 0;
 }
 
 #options-form select,

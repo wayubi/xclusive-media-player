@@ -47,8 +47,8 @@ $nav_value = null;
 if (isset($_GET['goto']) && $_GET['goto'] === '..') {
     $nav_action = 'up';
 } elseif (!empty($_GET['goto_folder'])) {
-    $nav_action = 'down';
     $nav_value = $_GET['goto_folder'];
+    $nav_action = str_contains($nav_value, '/') ? 'jump' : 'down';
 }
 
 // Only process if there's a navigation request
@@ -70,6 +70,11 @@ if ($nav_action !== null) {
     } elseif ($nav_action === 'down') {
         $next = $current_abs_path . '/' . $nav_value;
         $current_abs_path = $next;
+    } elseif ($nav_action === 'jump') {
+        $jump = $root_directory_absolute . '/' . ltrim($nav_value, '/');
+        $resolved = realpath($jump);
+        $current_abs_path = $resolved !== false && str_starts_with($resolved, $root_directory_absolute)
+            ? $resolved : $root_directory_absolute;
     }
 
     // Rebuild clean path segments from the final physical path
@@ -131,48 +136,65 @@ function renderSingleFolderSelect(array $selected_parts, string $current_abs_pat
     $is_root = empty($selected_parts);
     $has_children = !empty($subfolders);
     
-    // Get file count from pre-calculated stats
     $current_file_count = $folderStats[$current_abs_path]['total'] ?? 0;
+    $current_folder_name = ($is_root ? '🏠 Home' : '📂 ' . basename($current_abs_path)) . ' (' . $current_file_count . ')';
     
-    $current_icon = $is_root ? '🏠' : '📂';
-    $current_folder_name = $current_icon . ' ' . ($is_root ? 'Root' : basename($current_abs_path)) . ' (' . $current_file_count . ')';
+    // Build parent hierarchy
+    $parents = [];
+    $accumulated = '';
+    $parts_count = count($selected_parts);
+    foreach ($selected_parts as $i => $part) {
+        if ($i === $parts_count - 1) break;
+        $accumulated = ($accumulated ? $accumulated . '/' : '') . $part;
+        $parents[] = [
+            'path' => $i === 0 ? '/' : $accumulated,
+            'label' => $i === 0 ? '🏠 Home' : '📂 ' . $part,
+        ];
+    }
     ?>
     <select name="goto_folder" id="folder-select" class="folder-select-mobile"
             onchange="this.form.submit()">
         <option value="" disabled selected>
-            <?= $current_folder_name ?><?= $has_children ? ' ▾' : '' ?>
+            <?= $current_folder_name ?><?= $has_children || !$is_root ? ' ▾' : '' ?>
         </option>
 
-            <?php foreach ($subfolders as $folder): ?>
-                <?php
-                $subfolderPath = $current_abs_path . DIRECTORY_SEPARATOR . $folder;
-                
-                $stats = $folderStats[$subfolderPath] ?? ['total' => 0, 'optimized' => 0, 'unoptimized' => 0];
-                $auditStats = $folderAuditStats[$subfolderPath] ?? ['status' => 'none_audited', 'total' => 0, 'audited' => 0];
-                $subfolder_file_count = $stats['total'];
-                $subfolder_status = $auditStats['status'] ?? 'none_audited';
-                
-                if (in_array('audit', $permissions)) {
-                    switch ($subfolder_status) {
-                        case 'all_audited':
-                            if (in_array('optimize', $permissions) && $stats['unoptimized'] > 0) {
-                                $subfolder_icon = '🔧';
-                            } else {
-                                $subfolder_icon = '✅';
-                            }
-                            break;
-                        case 'some_audited':
-                            $subfolder_icon = '⚠️';
-                            break;
-                        case 'none_audited':
-                        default:
-                            $subfolder_icon = $subfolder_file_count === 0 ? '📁' : '🆕';
-                            break;
-                    }
-                } else {
-                    $subfolder_icon = $subfolder_file_count === 0 ? '📁' : '📂';
+        <?php if (!$is_root): ?>
+            <?php foreach ($parents as $p): ?>
+                <option value="<?= htmlspecialchars($p['path']) ?>">
+                    <?= $p['label'] ?>
+                </option>
+            <?php endforeach; ?>
+            <?php if ($has_children): ?>
+            <option disabled>──────────</option>
+            <?php endif; ?>
+        <?php endif; ?>
+
+        <?php foreach ($subfolders as $folder): ?>
+            <?php
+            $subfolderPath = $current_abs_path . DIRECTORY_SEPARATOR . $folder;
+            
+            $stats = $folderStats[$subfolderPath] ?? ['total' => 0, 'optimized' => 0, 'unoptimized' => 0];
+            $auditStats = $folderAuditStats[$subfolderPath] ?? ['status' => 'none_audited', 'total' => 0, 'audited' => 0];
+            $subfolder_file_count = $stats['total'];
+            $subfolder_status = $auditStats['status'] ?? 'none_audited';
+            
+            if (in_array('audit', $permissions)) {
+                switch ($subfolder_status) {
+                    case 'all_audited':
+                        $subfolder_icon = in_array('optimize', $permissions) && $stats['unoptimized'] > 0 ? '🔧' : '✅';
+                        break;
+                    case 'some_audited':
+                        $subfolder_icon = '⚠️';
+                        break;
+                    case 'none_audited':
+                    default:
+                        $subfolder_icon = $subfolder_file_count === 0 ? '📁' : '🆕';
+                        break;
                 }
-            ?>
+            } else {
+                $subfolder_icon = $subfolder_file_count === 0 ? '📁' : '📂';
+            }
+        ?>
             <option value="<?= htmlspecialchars($folder) ?>">
                 <?= $subfolder_icon ?> <?= htmlspecialchars($folder) ?> (<?= $subfolder_file_count ?>)
             </option>
@@ -304,7 +326,7 @@ $audioThumbs = (file_exists($audioCoversFile)) ? (json_decode(file_get_contents(
             <?php endforeach; ?>
             
             <!-- Navigation controls -->
-            <div id="folder-select-container" style="display: flex; align-items: center; gap: 10px;">
+            <div id="folder-select-container">
                 <?php
                 // Build home URL - NO sort parameter (reset to default on home)
                 $homeParams = [];
@@ -315,18 +337,18 @@ $audioThumbs = (file_exists($audioCoversFile)) ? (json_decode(file_get_contents(
                 $homeUrl = 'index.php' . (empty($homeParams) ? '' : '?' . implode('&', $homeParams));
                 ?>
                 <a href="<?= htmlspecialchars($homeUrl) ?>" 
-                   style="text-decoration: none;">
+                   style="text-decoration: none;" class="home-btn">
                     <button type="button" title="Go to root folder">
                         🏠
                     </button>
                 </a>
                 
                 <?php if (!empty($selected_path_parts_final)): ?>
-                    <button type="submit" name="goto" value=".." 
+                    <!-- <button type="submit" name="goto" value=".." 
                             onclick="this.form.action = 'index.php?t=' + Date.now();"
                             title="Go back to parent folder">
                         ←
-                    </button>
+                    </button> -->
                 <?php endif; ?>
                 <?php renderSingleFolderSelect($selected_path_parts_final, $current_path, $auditDb, $metaDb, $folderStats, $folderAuditStats, $subfolders, $permissions); ?>
             </div>
@@ -369,7 +391,7 @@ $audioThumbs = (file_exists($audioCoversFile)) ? (json_decode(file_get_contents(
             <button type="button" id="mute-button" onclick="toggleMute()" title="Toggle mute">
                 <?= $muted?'🔇':'🔊' ?>
             </button>
-            <span style="background:rgba(148,163,184,0.1);border:1px solid rgba(148,163,184,0.2);padding:6px 12px;border-radius:12px;font-size:0.8rem;font-weight:600;color:var(--text-secondary);white-space:nowrap;cursor:default">
+            <span style="background:rgba(148,163,184,0.1);border:1px solid rgba(148,163,184,0.2);padding:6px 10px;border-radius:14px;font-size:0.85rem;font-weight:600;color:var(--text-secondary);white-space:nowrap;cursor:default;height:28px;display:inline-flex;align-items:center">
                 <span onclick="playAll()" title="Play all" style="cursor:pointer">▶️</span>
                 <span onclick="shufflePlay()" title="Shuffle" style="cursor:pointer;margin-left:8px">🔀</span>
                 <?php if (in_array('favorites', $permissions)): ?>
@@ -387,12 +409,15 @@ $audioThumbs = (file_exists($audioCoversFile)) ? (json_decode(file_get_contents(
             <span id="favorites-text" style="
                 background: rgba(236, 72, 153, 0.1);
                 border: 1px solid rgba(236, 72, 153, 0.2);
-                padding: 6px 12px;
-                border-radius: 12px;
-                font-size: 0.8rem;
+                padding: 6px 10px;
+                border-radius: 14px;
+                font-size: 0.85rem;
                 font-weight: 600;
                 color: var(--text-secondary);
                 white-space: nowrap;
+                height: 28px;
+                display: inline-flex;
+                align-items: center;
             ">
                 <span id="favorites-count" title="Click to filter favorites">❤️ <?= $favoritesCount ?></span>
             </span>
@@ -403,12 +428,15 @@ $audioThumbs = (file_exists($audioCoversFile)) ? (json_decode(file_get_contents(
             <span id="audit-text" style="
                 background: rgba(168, 85, 247, 0.1);
                 border: 1px solid rgba(168, 85, 247, 0.2);
-                padding: 6px 12px;
-                border-radius: 12px;
-                font-size: 0.8rem;
+                padding: 6px 10px;
+                border-radius: 14px;
+                font-size: 0.85rem;
                 font-weight: 600;
                 color: var(--text-secondary);
                 white-space: nowrap;
+                height: 28px;
+                display: inline-flex;
+                align-items: center;
             ">
                 <?php if ($latestAuditDate): ?>
                     📅 <?= htmlspecialchars($latestAuditDate) ?> • ✅ <?= $auditCount ?> • <span id="unaudited-count" title="Click to filter unaudited files">⚠️ <?= $unAuditedCount ?></span>
@@ -423,12 +451,15 @@ $audioThumbs = (file_exists($audioCoversFile)) ? (json_decode(file_get_contents(
             <span id="optimization-text" style="
                 background: rgba(107, 114, 128, 0.1);
                 border: 1px solid rgba(107, 114, 128, 0.2);
-                padding: 6px 12px;
-                border-radius: 12px;
-                font-size: 0.8rem;
+                padding: 6px 10px;
+                border-radius: 14px;
+                font-size: 0.85rem;
                 font-weight: 600;
                 color: var(--text-secondary);
                 white-space: nowrap;
+                height: 28px;
+                display: inline-flex;
+                align-items: center;
                 cursor: pointer;
             " data-initial-unoptimized="<?= $unoptimizedCount ?>" data-initial-optimized="<?= $optimizedCount ?>">
                 <span id="optimization-status-text" title="Checking optimization status...">⏳ Scanning...</span>
