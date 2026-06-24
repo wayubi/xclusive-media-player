@@ -392,7 +392,9 @@ $audioThumbs = (file_exists($audioCoversFile)) ? (json_decode(file_get_contents(
             <button type="button" id="mute-button" onclick="toggleMute()" title="Toggle mute">
                 <?= $muted?'🔇':'🔊' ?>
             </button>
-            <div class="mobile-badges">
+            <?php if ($is_mobile): ?>
+            <span class="mobile-group" style="display:flex;flex:0 0 100%;align-items:center;gap:6px;padding-top:6px;margin-left:-3px">
+            <?php endif; ?>
             <span style="background:rgba(148,163,184,0.1);border:1px solid rgba(148,163,184,0.2);padding:6px 10px;border-radius:14px;font-size:0.85rem;font-weight:600;color:var(--text-secondary);white-space:nowrap;cursor:default;height:28px;display:inline-flex;align-items:center">
                 <span onclick="playAll()" title="Play all" style="cursor:pointer">▶️</span>
                 <span onclick="shufflePlay()" title="Shuffle" style="cursor:pointer;margin-left:8px">🔀</span>
@@ -440,7 +442,9 @@ $audioThumbs = (file_exists($audioCoversFile)) ? (json_decode(file_get_contents(
                 <?php endif; ?>
             </span>
             <?php endif; ?>
-            </div>
+            <?php if ($is_mobile): ?>
+            </span>
+            <?php endif; ?>
             
             <?php if (in_array('optimize', $permissions)): ?>
             <!-- Optimization status -->
