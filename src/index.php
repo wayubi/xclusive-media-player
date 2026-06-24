@@ -317,7 +317,8 @@ $audioThumbs = (file_exists($audioCoversFile)) ? (json_decode(file_get_contents(
 
     <body>
 
-        <form id="options-form" method="get" action="index.php">
+        <form id="options-form" method="get" action="index.php"
+              class="<?= !in_array('audit', $permissions) ? 'no-audit' : '' ?>">
             <!-- File counter -->
             <!-- <span id="file-count" style="min-width: 100px;">1 / <?= $allFilesCount ?></span> -->
             
@@ -391,6 +392,7 @@ $audioThumbs = (file_exists($audioCoversFile)) ? (json_decode(file_get_contents(
             <button type="button" id="mute-button" onclick="toggleMute()" title="Toggle mute">
                 <?= $muted?'🔇':'🔊' ?>
             </button>
+            <div class="mobile-badges">
             <span style="background:rgba(148,163,184,0.1);border:1px solid rgba(148,163,184,0.2);padding:6px 10px;border-radius:14px;font-size:0.85rem;font-weight:600;color:var(--text-secondary);white-space:nowrap;cursor:default;height:28px;display:inline-flex;align-items:center">
                 <span onclick="playAll()" title="Play all" style="cursor:pointer">▶️</span>
                 <span onclick="shufflePlay()" title="Shuffle" style="cursor:pointer;margin-left:8px">🔀</span>
@@ -398,14 +400,8 @@ $audioThumbs = (file_exists($audioCoversFile)) ? (json_decode(file_get_contents(
                 <span onclick="playFavorites()" title="Play favorites" style="cursor:pointer;margin-left:8px">❤️</span>
                 <?php endif; ?>
             </span>
-            <?php if (in_array('audit', $permissions)): ?>
-            <!-- <button type="button" id="audit" onclick="runAudit()" title="Audit files">📋</button> -->
-            <?php endif; ?>
-            <!-- <button type="button" id="previous" onclick="prevGrid()" title="Previous">◀</button> -->
-            <!-- <button type="button" id="next" onclick="nextGrid()" title="Next">▶</button> -->
             
             <?php if (in_array('favorites', $permissions)): ?>
-            <!-- Favorites status -->
             <span id="favorites-text" style="
                 background: rgba(236, 72, 153, 0.1);
                 border: 1px solid rgba(236, 72, 153, 0.2);
@@ -424,7 +420,6 @@ $audioThumbs = (file_exists($audioCoversFile)) ? (json_decode(file_get_contents(
             <?php endif; ?>
             
             <?php if (in_array('audit', $permissions)): ?>
-            <!-- Audit status with better styling -->
             <span id="audit-text" style="
                 background: rgba(168, 85, 247, 0.1);
                 border: 1px solid rgba(168, 85, 247, 0.2);
@@ -445,6 +440,7 @@ $audioThumbs = (file_exists($audioCoversFile)) ? (json_decode(file_get_contents(
                 <?php endif; ?>
             </span>
             <?php endif; ?>
+            </div>
             
             <?php if (in_array('optimize', $permissions)): ?>
             <!-- Optimization status -->

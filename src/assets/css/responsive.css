@@ -11,14 +11,12 @@
   }
   
   #file-count,
-  .home-btn,
   #options-form select[name="columns"],
   #options-form select[name="rows"],
   #options-form select[name="sort"],
   #options-form button[onclick="playFavorites()"],
   #previous,
   #next,
-  #audit-text,
   #optimization-text {
     display: none !important;
   }
@@ -28,6 +26,23 @@
     font-size: 0.75rem;
   }
   
+  .no-audit .home-btn {
+    display: none !important;
+  }
+
+  .no-audit .mobile-badges {
+    flex: 0 0 auto;
+  }
+
+  .mobile-badges {
+    flex: 0 0 100%;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    order: 1;
+    padding-top: 6px;
+  }
+
   #folder-select-container {
     flex: 1;
     min-width: 0;

@@ -533,7 +533,7 @@ export function addCentralOverlay(container, mediaEl, file) {
 
 function createSelectButton(file) {
   const selectBtn = document.createElement('button');
-  selectBtn.innerHTML = '🗙';
+  selectBtn.innerHTML = '✕';
   selectBtn.title = 'Select/Delete';
   selectBtn.dataset.file = file;
   selectBtn.dataset.selected = 'false';
