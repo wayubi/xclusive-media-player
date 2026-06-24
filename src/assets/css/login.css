@@ -133,8 +133,7 @@
 @media (max-width: 500px) {
     .login-body {
         padding: 12px;
-        align-items: flex-start;
-        padding-top: 10vh;
+        align-items: center;
     }
 
     .login-card {
