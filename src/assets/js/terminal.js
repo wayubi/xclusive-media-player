@@ -266,10 +266,6 @@ async function processCommand(commandLine) {
       setTimeout(() => hideTerminal(), 300);
       return;
       
-    case 'matrix':
-      printToTerminal('Initiating matrix visualization...', 'success');
-      startMatrixRain();
-      return;
       
     case 'cd':
       handleCdCommand(commandLine);
@@ -607,70 +603,6 @@ async function runStreamingCommand(commandLine) {
     printToTerminal(`Error starting streaming: ${error.message}`, 'error');
   }
 }
-
-function startMatrixRain() {
-  const rain = document.createElement('div');
-  rain.className = 'matrix-rain';
-  rain.style.cssText = `
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: 999999;
-    background: rgba(0, 0, 0, 0.9);
-    overflow: hidden;
-  `;
-  
-  document.body.appendChild(rain);
-  
-  const chars = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモャヤユヨラリルレロヲンメートリックス0123456789';
-  const columns = Math.floor(window.innerWidth / 14);
-  
-  for (let i = 0; i < columns; i++) {
-    const column = document.createElement('div');
-    column.style.cssText = `
-      position: absolute;
-      top: -100%;
-      left: ${i * 14}px;
-      font-family: 'Courier New', monospace;
-      font-size: 14px;
-      color: #0f0;
-      text-shadow: 0 0 5px #0f0;
-      animation: matrix-fall ${Math.random() * 3 + 2}s linear infinite;
-      animation-delay: ${Math.random() * 2}s;
-      white-space: pre;
-      line-height: 14px;
-    `;
-    
-    let text = '';
-    for (let j = 0; j < 50; j++) {
-      text += chars[Math.floor(Math.random() * chars.length)] + '\n';
-    }
-    column.textContent = text;
-    rain.appendChild(column);
-  }
-  
-  // Add animation keyframes if not already present
-  if (!document.getElementById('matrix-animation')) {
-    const style = document.createElement('style');
-    style.id = 'matrix-animation';
-    style.textContent = `
-      @keyframes matrix-fall {
-        0% { transform: translateY(-100%); }
-        100% { transform: translateY(100vh); }
-      }
-    `;
-    document.head.appendChild(style);
-  }
-  
-  // Remove after 5 seconds
-  setTimeout(() => {
-    rain.remove();
-  }, 5000);
-}
-
 // Export for use in events.js
 export { hideTerminal };
 

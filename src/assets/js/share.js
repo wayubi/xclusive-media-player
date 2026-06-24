@@ -141,7 +141,7 @@ export function openShareModal(file, isVideo, isAudio) {
                 <textarea id="share-status" placeholder="Check this out! @user@example.com"></textarea>
                 <div class="emoji-picker">
                     <input type="text" id="emoji-search" class="emoji-search" placeholder="Search emojis (e.g., hot, love, cat)">
-                    <div class="emoji-section frequently-used" style="display: none;">
+                    <div class="emoji-section frequently-used hidden">
                         <div class="emoji-section-title">Frequently Used</div>
                         <div class="emoji-grid" id="frequently-used-grid"></div>
                     </div>

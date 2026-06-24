@@ -208,7 +208,7 @@ function showSeekFeedback(container, direction, seconds) {
   
   // Fade out and remove after 1 second
   setTimeout(() => {
-    feedback.style.opacity = '0';
+    feedback.classList.add('seek-feedback-fade');
     setTimeout(() => feedback.remove(), 400);
   }, 1000);
 }

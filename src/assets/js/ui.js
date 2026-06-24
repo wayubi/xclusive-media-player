@@ -353,8 +353,6 @@ export function clearSelectedTiles() {
 }
 
 export function addFileInfoOverlay(container, file, isAudited) {
-  container.style.position ||= 'relative';
-
   const overlay = document.createElement('div');
   overlay.className = 'overlay';
 
