@@ -314,12 +314,12 @@ $audioThumbs = (file_exists($audioCoversFile)) ? (json_decode(file_get_contents(
                 $homeParams[] = 't=' . time();
                 $homeUrl = 'index.php' . (empty($homeParams) ? '' : '?' . implode('&', $homeParams));
                 ?>
-                <a href="<?= htmlspecialchars($homeUrl) ?>" 
+                <!-- <a href="<?= htmlspecialchars($homeUrl) ?>" 
                    style="text-decoration: none;">
                     <button type="button" title="Go to root folder">
                         🏠
                     </button>
-                </a>
+                </a> -->
                 
                 <?php if (!empty($selected_path_parts_final)): ?>
                     <button type="submit" name="goto" value=".." 
