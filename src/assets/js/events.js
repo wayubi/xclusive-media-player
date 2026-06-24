@@ -96,7 +96,7 @@ function setupGridNavigation() {
     
     // Don't process if search overlay is open
     const searchOverlay = document.getElementById('search-overlay');
-    if (searchOverlay && searchOverlay.style.display === 'flex') return;
+    if (searchOverlay && !searchOverlay.classList.contains('hidden')) return;
     
     // Don't process if delete modal is open
     if (document.getElementById('scary-delete-modal')) return;

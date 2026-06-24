@@ -523,23 +523,19 @@ export function updateOptimizationDisplay() {
   if (!optimizationText || !optimizationContainer) return;
   
   
+  optimizationContainer.classList.remove('opt-scanning', 'opt-ok', 'opt-warn');
+
   if (stats.unoptimized === 0 && stats.optimized === 0) {
-    // No data yet
     optimizationText.textContent = '⏳ Scanning...';
     optimizationText.title = 'Checking optimization status...';
-    optimizationContainer.style.background = 'rgba(107, 114, 128, 0.1)';
-    optimizationContainer.style.borderColor = 'rgba(107, 114, 128, 0.2)';
+    optimizationContainer.classList.add('opt-scanning');
   } else if (stats.unoptimized === 0) {
-    // All optimized
     optimizationText.textContent = '⚡ All optimized';
     optimizationText.title = 'All videos are streaming optimized';
-    optimizationContainer.style.background = 'rgba(34, 197, 94, 0.1)';
-    optimizationContainer.style.borderColor = 'rgba(34, 197, 94, 0.2)';
+    optimizationContainer.classList.add('opt-ok');
   } else {
-    // Some unoptimized
     optimizationText.textContent = `🔧 ${stats.unoptimized} need optimization`;
     optimizationText.title = 'Click to filter unoptimized files';
-    optimizationContainer.style.background = 'rgba(249, 115, 22, 0.1)';
-    optimizationContainer.style.borderColor = 'rgba(249, 115, 22, 0.2)';
+    optimizationContainer.classList.add('opt-warn');
   }
 }

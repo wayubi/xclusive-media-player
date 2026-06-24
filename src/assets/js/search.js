@@ -33,7 +33,7 @@ export function showSearch() {
   const input = document.getElementById('search-input');
   if (!overlay || !input) return;
   
-  overlay.style.display = 'flex';
+  overlay.classList.remove('hidden');
   input.value = state.currentSearch;
   input.focus();
   input.select();
@@ -49,7 +49,7 @@ export function showPathBrowser() {
   pathDisplay.textContent = currentPath;
   input.value = currentPath;
   
-  overlay.style.display = 'flex';
+  overlay.classList.remove('hidden');
   input.focus();
   input.select();
 }
@@ -58,7 +58,7 @@ export function closePathBrowser() {
   const overlay = document.getElementById('path-overlay');
   const input = document.getElementById('path-input');
   
-  if (overlay) overlay.style.display = 'none';
+  if (overlay) overlay.classList.add('hidden');
   if (input) input.blur();
 }
 
@@ -104,7 +104,7 @@ export function closeSearch() {
   const overlay = document.getElementById('search-overlay');
   const input = document.getElementById('search-input');
   
-  if (overlay) overlay.style.display = 'none';
+  if (overlay) overlay.classList.add('hidden');
   if (input) input.blur();
 }
 
@@ -168,7 +168,7 @@ export function setupSearchListeners() {
     else if (e.key === '/') {
       e.preventDefault();
       showPathBrowser();
-    } else if (e.key === 'Escape' && (overlay.style.display === 'flex' || pathOverlay?.style.display === 'flex')) {
+    } else if (e.key === 'Escape' && (!overlay.classList.contains('hidden') || !pathOverlay?.classList.contains('hidden'))) {
       closeSearch();
       closePathBrowser();
     }

@@ -227,7 +227,7 @@ export function openShareModal(file, isVideo, isAudio) {
         
         const topEmojis = getTopEmojis(MAX_FREQUENT);
         if (topEmojis.length > 0) {
-            frequentlyUsedSection.style.display = 'block';
+            frequentlyUsedSection.classList.remove('hidden');
             renderEmojiButtons(topEmojis, frequentlyUsedGrid);
         }
 
@@ -247,11 +247,11 @@ export function openShareModal(file, isVideo, isAudio) {
             } else {
                 allEmojiGrid.innerHTML = '<div class="no-results">No emojis found</div>';
             }
-            frequentlyUsedSection.style.display = 'none';
+            frequentlyUsedSection.classList.add('hidden');
         } else {
             const topEmojis = getTopEmojis(MAX_FREQUENT);
             if (topEmojis.length > 0) {
-                frequentlyUsedSection.style.display = 'block';
+                frequentlyUsedSection.classList.remove('hidden');
             }
             const allEmojis = Object.keys(lib);
             renderEmojiButtons(allEmojis, allEmojiGrid);
@@ -322,7 +322,7 @@ export function openShareModal(file, isVideo, isAudio) {
             }
 
             showSuccess(`Shared successfully! <a href="${data.postUrl}" target="_blank">View post</a>`);
-            submitBtn.style.display = 'none';
+            submitBtn.classList.add('hidden');
             cancelBtn.textContent = 'Close';
 
         } catch (err) {
@@ -334,22 +334,22 @@ export function openShareModal(file, isVideo, isAudio) {
 
     function showError(msg) {
         errorEl.textContent = msg;
-        errorEl.style.display = 'block';
-        successEl.style.display = 'none';
+        errorEl.classList.remove('hidden');
+        successEl.classList.add('hidden');
     }
 
     function hideError() {
-        errorEl.style.display = 'none';
+        errorEl.classList.add('hidden');
     }
 
     function showSuccess(msg) {
         successEl.innerHTML = msg;
-        successEl.style.display = 'block';
-        errorEl.style.display = 'none';
+        successEl.classList.remove('hidden');
+        errorEl.classList.add('hidden');
     }
 
     function hideSuccess() {
-        successEl.style.display = 'none';
+        successEl.classList.add('hidden');
     }
 }
 

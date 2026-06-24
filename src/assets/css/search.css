@@ -104,6 +104,11 @@
   animation: fadeIn 0.3s ease;
 }
 
+#search-overlay.hidden,
+#path-overlay.hidden {
+  display: none !important;
+}
+
 .path-display {
   position: absolute;
   top: -48px;
