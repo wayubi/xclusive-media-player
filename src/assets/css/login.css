@@ -78,7 +78,7 @@
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     font-weight: 500;
     color: var(--text);
-    background: rgba(20, 20, 30, 0.8);
+    background: rgba(var(--surface-dark-rgb), 0.8);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     outline: none;
@@ -89,7 +89,7 @@
 
 .login-input:focus {
     border-color: var(--accent-glow);
-    box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.15);
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.15);
 }
 
 .login-input::placeholder {
@@ -115,7 +115,7 @@
 
 .login-submit:hover {
     transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(168, 85, 247, 0.3);
+    box-shadow: 0 8px 24px rgba(var(--accent-rgb), 0.3);
 }
 
 .login-submit:active {

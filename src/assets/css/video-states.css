@@ -1,8 +1,8 @@
 .video-container.unaudited {
   border: 2px solid transparent;
   background: 
-    linear-gradient(135deg, rgba(20, 20, 30, 0.8), rgba(15, 15, 25, 0.9)) padding-box,
-    linear-gradient(135deg, #fbbf24, #f59e0b, #fbbf24) border-box;
+    linear-gradient(135deg, rgba(var(--surface-dark-rgb), 0.8), rgba(15, 15, 25, 0.9)) padding-box,
+    linear-gradient(135deg, var(--color-new), #f59e0b, var(--color-new)) border-box;
   box-shadow: 
     0 8px 32px rgba(251, 191, 36, 0.2),
     0 0 40px rgba(251, 191, 36, 0.15),
@@ -31,14 +31,14 @@
   position: absolute;
   top: 12px;
   right: 12px;
-  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  background: linear-gradient(135deg, var(--color-new), #f59e0b);
   color: #000;
   font-weight: 700;
   font-size: 10px;
   letter-spacing: 0.5px;
   padding: 6px 12px;
-  border-radius: 8px;
-  z-index: 5;
+  border-radius: var(--radius-xs);
+  z-index: var(--z-badge);
   pointer-events: none;
   box-shadow: 0 4px 12px rgba(251, 191, 36, 0.4);
 }
@@ -46,8 +46,8 @@
 .video-container.selected-for-delete {
   border: 2px solid transparent;
   background: 
-    linear-gradient(135deg, rgba(20, 20, 30, 0.8), rgba(15, 15, 25, 0.9)) padding-box,
-    linear-gradient(135deg, #ef4444, #dc2626, #ef4444) border-box;
+    linear-gradient(135deg, rgba(var(--surface-dark-rgb), 0.8), rgba(15, 15, 25, 0.9)) padding-box,
+    linear-gradient(135deg, var(--color-error), #dc2626, var(--color-error)) border-box;
   box-shadow: 
     0 8px 32px rgba(239, 68, 68, 0.3),
     0 0 40px rgba(239, 68, 68, 0.2),
@@ -76,13 +76,13 @@
   position: absolute;
   top: 12px;
   right: 12px;
-  background: linear-gradient(135deg, #ef4444, #dc2626);
+  background: linear-gradient(135deg, var(--color-error), #dc2626);
   color: #fff;
   font-weight: 700;
   font-size: 10px;
   letter-spacing: 0.5px;
   padding: 6px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-xs);
   z-index: 6;
   pointer-events: none;
   box-shadow: 0 4px 12px rgba(239, 68, 68, 0.5);
@@ -91,7 +91,7 @@
 .video-container.unsupported-video {
   border: 2px solid transparent;
   background:
-    linear-gradient(135deg, rgba(30, 30, 40, 0.9), rgba(25, 25, 35, 0.95)) padding-box,
+    linear-gradient(135deg, rgba(30, 30, 40, 0.9), rgba(var(--surface-rgb), 0.95)) padding-box,
     linear-gradient(135deg, #6b7280, #4b5563, #6b7280) border-box;
   box-shadow:
     0 8px 32px rgba(107, 114, 128, 0.2),
@@ -134,12 +134,12 @@
   left: 50%;
   transform: translate(-50%, -50%);
   background: rgba(0, 0, 0, 0.85);
-  color: #fbbf24;
+  color: var(--color-new);
   font-weight: 600;
   font-size: 14px;
   padding: 10px 16px;
-  border-radius: 8px;
-  z-index: 10;
+  border-radius: var(--radius-xs);
+  z-index: var(--z-overlay);
   pointer-events: none;
   white-space: nowrap;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
@@ -156,21 +156,21 @@
   bottom: 60px;
   left: 50%;
   transform: translateX(-50%);
-  background: linear-gradient(135deg, rgba(168, 85, 247, 0.9), rgba(139, 92, 246, 0.85));
+  background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.9), rgba(var(--border-rgb), 0.85));
   backdrop-filter: blur(16px) saturate(180%);
   color: white;
   padding: 10px 20px;
   border-radius: var(--radius-sm);
   font-size: 14px;
   font-weight: 600;
-  z-index: 12;
+  z-index: calc(var(--z-overlay) + 2);
   pointer-events: none;
   border: 1px solid rgba(255, 255, 255, 0.2);
   box-shadow:
-    0 8px 32px rgba(168, 85, 247, 0.4),
-    0 0 20px rgba(168, 85, 247, 0.3),
+    0 8px 32px rgba(var(--accent-rgb), 0.4),
+    0 0 20px rgba(var(--accent-rgb), 0.3),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: var(--transition-overlay);
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
@@ -185,7 +185,7 @@
   letter-spacing: 0.5px;
   padding: 6px 10px;
   border-radius: 6px;
-  z-index: 5;
+  z-index: var(--z-badge);
   pointer-events: none;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
   transition: opacity 0.2s ease;

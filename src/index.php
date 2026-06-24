@@ -438,11 +438,11 @@ $audioThumbs = (file_exists($audioCoversFile)) ? (json_decode(file_get_contents(
         <div id="search-overlay" class="hidden">
             <div class="search-container">
                 <input type="text" 
-                       id="search-input" 
+                       id="search-input" class="search-field"
                        placeholder="🔍 Search files and folders... (Press Enter)" 
                        autocomplete="off" 
                        spellcheck="false" />
-                <button id="search-clear" title="Clear search">✕</button>
+                <button id="search-clear" class="search-btn" title="Clear search">✕</button>
             </div>
         </div>
 
@@ -451,11 +451,11 @@ $audioThumbs = (file_exists($audioCoversFile)) ? (json_decode(file_get_contents(
             <div class="search-container">
                 <span id="path-display" class="path-display">/volumes</span>
                 <input type="text" 
-                       id="path-input" 
+                       id="path-input" class="search-field"
                        placeholder="Type path (e.g., /volumes/folder1) and press Enter" 
                        autocomplete="off" 
                        spellcheck="false" />
-                <button id="path-go" title="Go to path">⇨</button>
+                <button id="path-go" class="search-btn" title="Go to path">⇨</button>
             </div>
         </div>
 

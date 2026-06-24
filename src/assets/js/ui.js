@@ -357,9 +357,11 @@ export function addFileInfoOverlay(container, file, isAudited) {
   overlay.className = 'overlay';
 
   const filenameElem = document.createElement('div');
+  filenameElem.className = 'overlay-title';
   filenameElem.textContent = file;
 
   const metaElem = document.createElement('div');
+  metaElem.className = 'overlay-meta';
 
   // Add audit status indicator
   if (!isAudited) {

@@ -48,21 +48,21 @@
   );
   color: white;
   opacity: 0;
-  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: var(--transition-overlay);
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
   padding: 20px;
   pointer-events: none;
   border-radius: var(--radius);
-  z-index: 10;
+  z-index: var(--z-overlay);
 }
 
 .video-container:hover .overlay {
   opacity: 1;
 }
 
-.overlay > div:first-child {
+.overlay-title {
   font-weight: 700;
   font-size: 1.05rem;
   margin-bottom: 6px;
@@ -71,7 +71,7 @@
   pointer-events: auto;
 }
 
-.overlay > div:last-child {
+.overlay-meta {
   font-size: 0.8rem;
   opacity: 0.9;
   letter-spacing: 0.2px;
@@ -96,9 +96,9 @@ body.overlays-idle .central-overlay {
   align-content: center;
   gap: 6px;
   opacity: 0;
-  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: var(--transition-overlay);
   pointer-events: none;
-  z-index: 10;
+  z-index: var(--z-overlay);
 }
 
 .video-container:hover .central-overlay {
@@ -110,13 +110,13 @@ body.overlays-idle .central-overlay {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  border: 1px solid rgba(168, 85, 247, 0.3);
-  background: rgba(20, 20, 30, 0.85);
+  border: 1px solid rgba(var(--accent-rgb), 0.3);
+  background: rgba(var(--surface-dark-rgb), 0.85);
   backdrop-filter: blur(16px) saturate(180%);
   color: white;
   font-size: 1.1rem;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: var(--transition-spring);
   box-shadow: 
     0 8px 24px rgba(0, 0, 0, 0.5),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
@@ -126,12 +126,12 @@ body.overlays-idle .central-overlay {
 }
 
 .central-overlay button:hover {
-  background: linear-gradient(135deg, rgba(168, 85, 247, 0.8), rgba(139, 92, 246, 0.7));
+  background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.8), rgba(var(--border-rgb), 0.7));
   border-color: var(--accent-glow);
   transform: scale(1.15);
   box-shadow: 
-    0 12px 40px rgba(168, 85, 247, 0.5),
-    0 0 30px rgba(168, 85, 247, 0.3),
+    0 12px 40px rgba(var(--accent-rgb), 0.5),
+    0 0 30px rgba(var(--accent-rgb), 0.3),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
@@ -147,13 +147,13 @@ body.overlays-idle .central-overlay {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
+  z-index: var(--z-fullscreen);
 }
 .fullscreen-media {
   max-width: 95vw;
   max-height: 92vh;
   object-fit: contain;
-  border-radius: 8px;
+  border-radius: var(--radius-xs);
   box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
   cursor: pointer;
 }
@@ -180,7 +180,7 @@ body.overlays-idle .central-overlay {
   height: 100%;
   object-fit: cover;
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: var(--radius-xs);
 }
 .audit-new-badge {
   color: #ffcc00;
@@ -193,6 +193,6 @@ body.overlays-idle .central-overlay {
   max-height: 80vh;
   object-fit: contain;
   margin-bottom: 6px;
-  border-radius: 8px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
 }

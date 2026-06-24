@@ -19,7 +19,7 @@
   overflow: hidden;
   contain: layout style paint;
   border-radius: var(--radius);
-  background: linear-gradient(135deg, rgba(20, 20, 30, 0.8), rgba(15, 15, 25, 0.9));
+  background: linear-gradient(135deg, rgba(var(--surface-dark-rgb), 0.8), rgba(15, 15, 25, 0.9));
   backdrop-filter: blur(8px);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-sm);
@@ -31,9 +31,9 @@
   border-color: var(--border-glow);
   box-shadow: 
     0 20px 60px rgba(0, 0, 0, 0.6),
-    0 0 0 1px rgba(168, 85, 247, 0.3),
+    0 0 0 1px rgba(var(--accent-rgb), 0.3),
     var(--shadow-lg);
-  z-index: 5;
+  z-index: var(--z-badge);
 }
 
 .video-container video,

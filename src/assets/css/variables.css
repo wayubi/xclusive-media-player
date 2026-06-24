@@ -1,18 +1,90 @@
 :root {
-  --bg: linear-gradient(135deg, #0a0a0f 0%, #1a0a1f 50%, #0f0a1a 100%);
+  /* Surface / background */
   --surface: rgba(25, 25, 35, 0.95);
   --surface-hover: rgba(40, 35, 50, 0.95);
+  --surface-dark: rgba(20, 20, 30, 0.85);
+  --surface-rgb: 25, 25, 35;
+  --surface-dark-rgb: 20, 20, 30;
+
+  /* Accent colors */
   --accent: #a855f7;
   --accent-secondary: #ec4899;
   --accent-glow: #c084fc;
+  --accent-rgb: 168, 85, 247;
+  --accent-secondary-rgb: 236, 72, 153;
+
+  /* Text */
   --text: #ffffff;
   --text-secondary: #b4b4c8;
+
+  /* Borders */
   --border: rgba(139, 92, 246, 0.15);
   --border-glow: rgba(139, 92, 246, 0.3);
+  --border-rgb: 139, 92, 246;
+
+  /* Semantic colors */
+  --color-error: #ef4444;
+  --color-success: #22c55e;
+  --color-warning: #f97316;
+  --color-new: #fbbf24;
+
+  /* Typography */
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+
+  /* Border radius */
+  --radius-xs: 8px;
   --radius-sm: 12px;
   --radius: 20px;
+
+  /* Shadows */
   --shadow-sm: 0 8px 32px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 20px 60px rgba(168, 85, 247, 0.15);
+
+  /* Transitions */
   --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast: all 0.2s ease;
+  --transition-spring: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  --transition-overlay: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Z-index */
+  --z-decorative: 1;
+  --z-badge: 5;
+  --z-overlay: 10;
+  --z-heart: 20;
+  --z-toolbar: 100;
+  --z-fullscreen: 9999;
+  --z-search: 10000;
+  --z-terminal: 99999;
+  --z-modal: 999999;
+
+  /* Blur */
+  --blur-sm: 8px;
+  --blur-md: 16px;
+  --blur-lg: 24px;
+
+  /* Gap / spacing */
+  --gap-xs: 4px;
+  --gap-sm: 8px;
+  --gap-md: 12px;
+  --gap-lg: 20px;
+
+  /* Grid */
   --grid-gap: 16px;
+}
+
+/* ── Shared keyframes ── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-8px); }
+  75% { transform: translateX(8px); }
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
 }

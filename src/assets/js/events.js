@@ -125,24 +125,18 @@ function setupGridNavigation() {
   setupHoverUnmuting(grid);
 }
 
-let _lastUnmutedEl = null;
 function setupHoverUnmuting(grid) {
   grid.addEventListener('mousemove', (e) => {
     if (state.muted) return;
-    
+
     const container = e.target.closest('.video-container');
     if (!container) return;
-    
+
     const mediaEl = container.querySelector('video, audio');
     if (!mediaEl || !mediaEl.muted) return;
-    
-    // Mute the previously-unmuted element instead of scanning all
-    if (_lastUnmutedEl && _lastUnmutedEl !== mediaEl) {
-      _lastUnmutedEl.muted = true;
-    }
-    
+
+    document.querySelectorAll('#grid video, #grid audio').forEach(m => m.muted = true);
     mediaEl.muted = false;
-    _lastUnmutedEl = mediaEl;
     mediaEl.play().catch(() => {});
     syncMuteIcons();
   });

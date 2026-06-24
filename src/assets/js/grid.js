@@ -151,9 +151,8 @@ function fetchMetadataBatch(grid, visibleFiles) {
 
       const overlay = container.querySelector('.overlay');
       if (overlay) {
-        const overlayChildren = overlay.children;
-        const filenameElem = overlayChildren[0];
-        const metaElem = overlayChildren[overlayChildren.length - 1];
+        const filenameElem = overlay.querySelector('.overlay-title');
+        const metaElem = overlay.querySelector('.overlay-meta');
 
         if (filenameElem) {
           filenameElem.textContent = meta.file ? decodeBase64UTF8(meta.file) : decodeURIComponent(file.split('/').pop());
