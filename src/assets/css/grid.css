@@ -8,6 +8,12 @@
   overflow: hidden;
 }
 
+.folder-link {
+  cursor: pointer;
+  text-decoration: underline;
+  pointer-events: auto;
+}
+
 .video-container {
   position: relative;
   overflow: hidden;

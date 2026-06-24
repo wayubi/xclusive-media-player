@@ -159,7 +159,7 @@ function performAudit(filesToAudit, webPaths, mode) {
         
         const auditText = document.getElementById('audit-text');
         if (auditText) {
-          auditText.innerHTML = `<span style="color: #ff4444;">❌ Error: ${data.error}</span>`;
+          auditText.innerHTML = `<span class="text-error">❌ Error: ${data.error}</span>`;
         }
       } else {
         console.log('Audit failed but user navigated away - not reverting stale changes');

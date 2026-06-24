@@ -17,141 +17,55 @@ function showScaryDeleteConfirmation() {
     // Create modal overlay
     const overlay = document.createElement('div');
     overlay.id = 'scary-delete-modal';
-    overlay.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.9);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 999999;
-      animation: fadeIn 0.3s ease;
-    `;
+    overlay.className = 'delete-modal-overlay';
 
     // Create modal content
     const modal = document.createElement('div');
-    modal.style.cssText = `
-      background: linear-gradient(135deg, #8B0000 0%, #4a0000 100%);
-      border: 4px solid #ff0000;
-      border-radius: 20px;
-      padding: 40px;
-      max-width: 600px;
-      text-align: center;
-      box-shadow: 0 0 50px rgba(255, 0, 0, 0.8), inset 0 0 30px rgba(0, 0, 0, 0.5);
-      animation: shake 0.5s ease-in-out;
-    `;
+    modal.className = 'delete-modal-card';
 
     // Warning icon
     const icon = document.createElement('div');
     icon.textContent = '⚠️';
-    icon.style.cssText = `
-      font-size: 80px;
-      margin-bottom: 20px;
-      animation: pulse 1s ease-in-out infinite;
-    `;
+    icon.className = 'delete-modal-icon';
 
     // Title
     const title = document.createElement('h2');
     title.textContent = '⚠️ DANGER ZONE ⚠️';
-    title.style.cssText = `
-      color: #ffff00;
-      font-size: 32px;
-      font-weight: bold;
-      margin: 0 0 20px 0;
-      text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.8);
-      letter-spacing: 3px;
-    `;
+    title.className = 'delete-modal-title';
 
     // Warning text
     const warning = document.createElement('p');
+    warning.className = 'delete-modal-warning';
     warning.innerHTML = `
-      <strong style="color: #ff0000; font-size: 24px;">YOU ARE ABOUT TO DELETE:</strong><br><br>
-      <span style="color: #ffffff; font-size: 20px;">
+      <strong class="delete-danger-text">YOU ARE ABOUT TO DELETE:</strong><br><br>
+      <span class="delete-white-text">
         • ALL files in this folder<br>
         • ALL subfolders recursively<br>
         • THE FOLDER ITSELF<br><br>
       </span>
-      <span style="color: #ff6666; font-size: 18px;">
-        This action is <strong style="color: #ffff00;">PERMANENT</strong> and <strong style="color: #ffff00;">CANNOT BE UNDONE!</strong>
+      <span class="delete-muted-text">
+        This action is <strong class="delete-em-text">PERMANENT</strong> and <strong class="delete-em-text">CANNOT BE UNDONE!</strong>
       </span>
-    `;
-    warning.style.cssText = `
-      color: #ffffff;
-      font-size: 18px;
-      line-height: 1.6;
-      margin: 20px 0;
     `;
 
     // Final warning
     const finalWarning = document.createElement('p');
     finalWarning.textContent = 'Are you absolutely sure you want to proceed?';
-    finalWarning.style.cssText = `
-      color: #ffff00;
-      font-size: 22px;
-      font-weight: bold;
-      margin: 30px 0;
-      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
-    `;
+    finalWarning.className = 'delete-modal-final';
 
     // Button container
     const buttonContainer = document.createElement('div');
-    buttonContainer.style.cssText = `
-      display: flex;
-      gap: 20px;
-      justify-content: center;
-      margin-top: 30px;
-    `;
+    buttonContainer.className = 'delete-modal-actions';
 
     // NO button
     const noBtn = document.createElement('button');
     noBtn.textContent = 'NO, CANCEL';
-    noBtn.style.cssText = `
-      background: linear-gradient(135deg, #228B22, #006400);
-      color: white;
-      border: 3px solid #00ff00;
-      padding: 15px 40px;
-      font-size: 20px;
-      font-weight: bold;
-      border-radius: 10px;
-      cursor: pointer;
-      box-shadow: 0 5px 15px rgba(0, 255, 0, 0.4);
-      transition: all 0.2s;
-    `;
-    noBtn.onmouseover = () => {
-      noBtn.style.transform = 'scale(1.05)';
-      noBtn.style.boxShadow = '0 8px 20px rgba(0, 255, 0, 0.6)';
-    };
-    noBtn.onmouseout = () => {
-      noBtn.style.transform = 'scale(1)';
-      noBtn.style.boxShadow = '0 5px 15px rgba(0, 255, 0, 0.4)';
-    };
+    noBtn.className = 'delete-btn-cancel';
 
     // YES button
     const yesBtn = document.createElement('button');
     yesBtn.textContent = 'YES, DELETE EVERYTHING';
-    yesBtn.style.cssText = `
-      background: linear-gradient(135deg, #8B0000, #4a0000);
-      color: white;
-      border: 3px solid #ff0000;
-      padding: 15px 40px;
-      font-size: 20px;
-      font-weight: bold;
-      border-radius: 10px;
-      cursor: pointer;
-      box-shadow: 0 5px 15px rgba(255, 0, 0, 0.4);
-      transition: all 0.2s;
-    `;
-    yesBtn.onmouseover = () => {
-      yesBtn.style.transform = 'scale(1.05)';
-      yesBtn.style.boxShadow = '0 8px 20px rgba(255, 0, 0, 0.8)';
-    };
-    yesBtn.onmouseout = () => {
-      yesBtn.style.transform = 'scale(1)';
-      yesBtn.style.boxShadow = '0 5px 15px rgba(255, 0, 0, 0.4)';
-    };
+    yesBtn.className = 'delete-btn-confirm';
 
     // Add click handlers
     noBtn.onclick = () => {
@@ -453,7 +367,7 @@ export function addFileInfoOverlay(container, file, isAudited) {
   if (!isAudited) {
     const auditStatus = document.createElement('div');
     auditStatus.textContent = '⚠️ NEW';
-    auditStatus.style.cssText = 'color: #ffcc00; font-weight: bold; font-size: 11px; margin-top: 2px;';
+    auditStatus.className = 'audit-new-badge';
     overlay.appendChild(filenameElem);
     overlay.appendChild(auditStatus);
   } else {

@@ -371,7 +371,7 @@ function buildMetadataParts(meta, file) {
       pathParts.forEach((segment, idx) => {
         runningPath = runningPath ? runningPath + '/' + segment : segment;
         if (idx > 0) folderPathHtml += ' > ';
-        folderPathHtml += '<span class="folder-link" data-folder-path="' + runningPath + '" style="cursor:pointer;text-decoration:underline;pointer-events:auto">' + segment + '</span>';
+        folderPathHtml += '<span class="folder-link" data-folder-path="' + runningPath + '">' + segment + '</span>';
       });
       parts.push(folderPathHtml);
     }

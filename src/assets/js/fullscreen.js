@@ -205,7 +205,7 @@ export async function startFullscreenPlayer(playlist, index = 0, startTime = 0) 
 
 function createFullscreenContainer() {
   const container = document.createElement('div');
-  container.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;';
+  container.className = 'fullscreen-overlay';
   document.body.appendChild(container);
   return container;
 }
@@ -213,7 +213,7 @@ function createFullscreenContainer() {
 function createImagePlayer(file, container, close) {
   const img = document.createElement('img');
   img.src = file;
-  img.style.cssText = 'max-width:95vw;max-height:92vh;object-fit:contain;border-radius:8px;box-shadow:0 0 40px rgba(0,0,0,0.6);cursor:pointer;';
+  img.className = 'fullscreen-media';
   img.ondblclick = close;
   container.appendChild(img);
   return img;
@@ -227,11 +227,11 @@ function createAudioPlayer(file, startTime, container, close) {
   audio.controls = false;
   audio.playsInline = false;
   audio.muted = state.muted;
-  audio.style.cssText = 'width:100%;height:40px;margin-bottom:6px;border-radius:6px;';
+  audio.className = 'fullscreen-audio';
 
   const thumb = document.createElement('img');
   thumb.src = state.audioThumbs[file] || 'cache/no-cover.jpg';
-  thumb.style.cssText = 'max-width:95vw;max-height:80vh;object-fit:contain;margin-bottom:6px;border-radius:8px;cursor:pointer;';
+  thumb.className = 'fullscreen-thumb';
   thumb.ondblclick = close;
 
   container.appendChild(thumb);
@@ -248,7 +248,7 @@ function createVideoPlayer(file, startTime, container, close) {
   video.controls = true;
   video.playsInline = true;
   video.muted = state.muted;
-  video.style.cssText = 'max-width:95vw;max-height:92vh;object-fit:contain;border-radius:8px;box-shadow:0 0 40px rgba(0,0,0,0.6);cursor:pointer;';
+  video.className = 'fullscreen-media';
   video.ondblclick = close;
 
   video.addEventListener('loadedmetadata', () => {

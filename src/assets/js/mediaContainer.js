@@ -63,7 +63,7 @@ export function createMediaContainer(file, index = 0) {
   } else if (isText) {
     mediaEl = createTextContainer(file, container);
   } else {
-    container.innerHTML = `<div style="color:red;padding:4px;">Unsupported: ${file}</div>`;
+    container.innerHTML = `<div class="text-error" style="padding:4px">Unsupported: ${file}</div>`;
   }
 
   addCentralOverlay(container, mediaEl, file);
@@ -272,7 +272,7 @@ export function loadTextContent(wrapper) {
       wrapper.appendChild(pre);
     })
     .catch(() => {
-      wrapper.innerHTML = '<div class="text-file-placeholder" style="color: #ff6666;">❌ Error loading file</div>';
+      wrapper.innerHTML = '<div class="text-file-placeholder text-error">❌ Error loading file</div>';
     });
 }
 
@@ -421,7 +421,7 @@ export function showTextFullscreen(file) {
     })
     .then(text => setEditable(text))
     .catch(() => {
-      contentArea.innerHTML = '<div class="text-loading" style="color: #ff6666;">Error loading file</div>';
+      contentArea.innerHTML = '<div class="text-loading text-error">Error loading file</div>';
     });
 
   const keyHandler = (e) => {
@@ -491,9 +491,9 @@ function createLazyMediaElement(file, isVideo, isAudio, container) {
   mediaEl.muted = true;
 
   if (isAudio) {
-    container.style.cssText = 'display:flex;flex-direction:column;justify-content:center;align-items:center;';
+    container.className = 'audio-grid-container';
     const img = document.createElement('img');
-    img.style.cssText = 'width:100%;height:100%;object-fit:cover;cursor:pointer;border-radius:8px;';
+    img.className = 'audio-grid-thumb';
     img.src = state.audioThumbs[file] || 'cache/no-cover.jpg';
     img.onclick = () => startFullscreenFrom(file, mediaEl.currentTime);
     container.appendChild(img);

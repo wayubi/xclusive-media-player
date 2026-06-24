@@ -26,6 +26,15 @@
     font-size: 0.75rem;
   }
   
+  .mobile-group {
+    display: flex;
+    flex: 0 0 100%;
+    align-items: center;
+    gap: 6px;
+    padding-top: 6px;
+    margin-left: -3px;
+  }
+
   .no-audit .home-btn {
     display: none !important;
   }

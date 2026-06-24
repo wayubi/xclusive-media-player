@@ -338,7 +338,7 @@ $audioThumbs = (file_exists($audioCoversFile)) ? (json_decode(file_get_contents(
                 $homeUrl = 'index.php' . (empty($homeParams) ? '' : '?' . implode('&', $homeParams));
                 ?>
                 <a href="<?= htmlspecialchars($homeUrl) ?>" 
-                   style="text-decoration: none;" class="home-btn">
+                   class="home-btn">
                     <button type="button" title="Go to root folder">
                         🏠
                     </button>
@@ -393,48 +393,24 @@ $audioThumbs = (file_exists($audioCoversFile)) ? (json_decode(file_get_contents(
                 <?= $muted?'🔇':'🔊' ?>
             </button>
             <?php if ($is_mobile && in_array('audit', $permissions)): ?>
-            <span class="mobile-group" style="display:flex;flex:0 0 100%;align-items:center;gap:6px;padding-top:6px;margin-left:-3px">
+            <span class="mobile-group">
             <?php endif; ?>
-            <span style="background:rgba(148,163,184,0.1);border:1px solid rgba(148,163,184,0.2);padding:6px 10px;border-radius:14px;font-size:0.85rem;font-weight:600;color:var(--text-secondary);white-space:nowrap;cursor:default;height:28px;display:inline-flex;align-items:center">
-                <span onclick="playAll()" title="Play all" style="cursor:pointer">▶️</span>
-                <span onclick="shufflePlay()" title="Shuffle" style="cursor:pointer;margin-left:8px">🔀</span>
+            <span class="status-pill status-pill-default">
+                <span onclick="playAll()" title="Play all" class="clickable">▶️</span>
+                <span onclick="shufflePlay()" title="Shuffle" class="clickable spacer-left">🔀</span>
                 <?php if (in_array('favorites', $permissions)): ?>
-                <span onclick="playFavorites()" title="Play favorites" style="cursor:pointer;margin-left:8px">❤️</span>
+                <span onclick="playFavorites()" title="Play favorites" class="clickable spacer-left">❤️</span>
                 <?php endif; ?>
             </span>
             
             <?php if (in_array('favorites', $permissions)): ?>
-            <span id="favorites-text" style="
-                background: rgba(236, 72, 153, 0.1);
-                border: 1px solid rgba(236, 72, 153, 0.2);
-                padding: 6px 10px;
-                border-radius: 14px;
-                font-size: 0.85rem;
-                font-weight: 600;
-                color: var(--text-secondary);
-                white-space: nowrap;
-                height: 28px;
-                display: inline-flex;
-                align-items: center;
-            ">
+            <span id="favorites-text" class="status-pill status-pill-fav">
                 <span id="favorites-count" title="Click to filter favorites">❤️ <?= $favoritesCount ?></span>
             </span>
             <?php endif; ?>
             
             <?php if (in_array('audit', $permissions)): ?>
-            <span id="audit-text" style="
-                background: rgba(168, 85, 247, 0.1);
-                border: 1px solid rgba(168, 85, 247, 0.2);
-                padding: 6px 10px;
-                border-radius: 14px;
-                font-size: 0.85rem;
-                font-weight: 600;
-                color: var(--text-secondary);
-                white-space: nowrap;
-                height: 28px;
-                display: inline-flex;
-                align-items: center;
-            ">
+            <span id="audit-text" class="status-pill status-pill-audit">
                 <?php if ($latestAuditDate): ?>
                     📅 <?= htmlspecialchars($latestAuditDate) ?> • ✅ <?= $auditCount ?> • <span id="unaudited-count" title="Click to filter unaudited files">⚠️ <?= $unAuditedCount ?></span>
                 <?php else: ?>
@@ -448,19 +424,7 @@ $audioThumbs = (file_exists($audioCoversFile)) ? (json_decode(file_get_contents(
             
             <?php if (in_array('optimize', $permissions)): ?>
             <!-- Optimization status -->
-            <span id="optimization-text" style="
-                background: rgba(107, 114, 128, 0.1);
-                border: 1px solid rgba(107, 114, 128, 0.2);
-                padding: 6px 10px;
-                border-radius: 14px;
-                font-size: 0.85rem;
-                font-weight: 600;
-                color: var(--text-secondary);
-                white-space: nowrap;
-                height: 28px;
-                display: inline-flex;
-                align-items: center;
-                cursor: pointer;
+            <span id="optimization-text" class="status-pill status-pill-opt"
             " data-initial-unoptimized="<?= $unoptimizedCount ?>" data-initial-optimized="<?= $optimizedCount ?>">
                 <span id="optimization-status-text" title="Checking optimization status...">⏳ Scanning...</span>
             </span>
@@ -471,7 +435,7 @@ $audioThumbs = (file_exists($audioCoversFile)) ? (json_decode(file_get_contents(
         <div id="grid"></div>
 
         <!-- Search overlay -->
-        <div id="search-overlay" style="display:none;">
+        <div id="search-overlay" class="hidden">
             <div class="search-container">
                 <input type="text" 
                        id="search-input" 
@@ -483,7 +447,7 @@ $audioThumbs = (file_exists($audioCoversFile)) ? (json_decode(file_get_contents(
         </div>
 
         <!-- Path browser overlay -->
-        <div id="path-overlay" style="display:none;">
+        <div id="path-overlay" class="hidden">
             <div class="search-container">
                 <span id="path-display" class="path-display">/volumes</span>
                 <input type="text" 
