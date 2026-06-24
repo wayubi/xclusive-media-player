@@ -375,10 +375,10 @@ $audioThumbs = (file_exists($audioCoversFile)) ? (json_decode(file_get_contents(
             <button type="button" onclick="playFavorites()" title="Play favorites">❤️</button>
             <?php endif; ?>
             <?php if (in_array('audit', $permissions)): ?>
-            <button type="button" id="audit" onclick="runAudit()" title="Audit files">📋</button>
+            <!-- <button type="button" id="audit" onclick="runAudit()" title="Audit files">📋</button> -->
             <?php endif; ?>
-            <button type="button" id="previous" onclick="prevGrid()" title="Previous">◀</button>
-            <button type="button" id="next" onclick="nextGrid()" title="Next">▶</button>
+            <!-- <button type="button" id="previous" onclick="prevGrid()" title="Previous">◀</button> -->
+            <!-- <button type="button" id="next" onclick="nextGrid()" title="Next">▶</button> -->
             
             <?php if (in_array('favorites', $permissions)): ?>
             <!-- Favorites status -->
