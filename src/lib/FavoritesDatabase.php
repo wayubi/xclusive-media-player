@@ -235,22 +235,73 @@ class FavoritesDatabase extends Database
     public function getFavoritesStatusBatchByFolder(string $folderPath, int $userId): array
     {
         $normalized = $this->normalizePath($folderPath);
-        @$this->db->exec("ATTACH DATABASE '" . __DIR__ . "/../../db/metadata.db' AS meta");
+        $prefix = str_replace(['%', '_'], ['\\%', '\\_'], $normalized) . '/%';
+        $metaDb = $this->getMetadataDb();
 
-        $stmt = $this->db->prepare("
-            SELECT f.file_path, fav.favorited_at
-            FROM meta.files f
-            LEFT JOIN favorites fav ON fav.metadata_file_id = f.id AND fav.user_id = :uid
-            WHERE f.file_path LIKE :prefix
-        ");
-        $stmt->bindValue(':uid', $userId, SQLITE3_INTEGER);
-        $stmt->bindValue(':prefix', $normalized . '/%', SQLITE3_TEXT);
+        // Step 1: Get all files in the folder with their xxhashes
+        $stmt = $metaDb->prepare("SELECT id, file_path, xxhash FROM files WHERE file_path LIKE :prefix ESCAPE '\\'");
+        $stmt->bindValue(':prefix', $prefix, SQLITE3_TEXT);
         $result = $stmt->execute();
 
-        $statuses = [];
+        $folderFiles = [];
+        $xxhashes = [];
         while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
-            $statuses[$row['file_path']] = [
-                'favorited' => $row['favorited_at'] !== null,
+            $id = (int)$row['id'];
+            $folderFiles[] = ['id' => $id, 'file_path' => $row['file_path'], 'xxhash' => $row['xxhash']];
+            if ($row['xxhash']) {
+                $xxhashes[] = $row['xxhash'];
+            }
+        }
+
+        if (empty($folderFiles)) return [];
+
+        // Step 2: Find ALL file IDs sharing those xxhashes (content-addressed dedup)
+        $deduped = array_unique($xxhashes);
+        $allIdsByXxhash = [];
+        foreach (array_chunk($deduped, 900) as $chunk) {
+            $hPlaceholders = implode(',', array_fill(0, count($chunk), '?'));
+            $stmt = $metaDb->prepare("SELECT id, xxhash FROM files WHERE xxhash IN ($hPlaceholders)");
+            foreach ($chunk as $i => $xxhash) {
+                $stmt->bindValue($i + 1, $xxhash, SQLITE3_TEXT);
+            }
+            $idResult = $stmt->execute();
+            while ($row = $idResult->fetchArray(SQLITE3_ASSOC)) {
+                $allIdsByXxhash[$row['xxhash']][] = (int)$row['id'];
+            }
+        }
+
+        // Step 3: Check which xxhashes are favorited by this user
+        $allIds = [];
+        $idToXxhash = [];
+        foreach ($allIdsByXxhash as $xxhash => $ids) {
+            foreach ($ids as $id) {
+                $allIds[] = $id;
+                $idToXxhash[$id] = $xxhash;
+            }
+        }
+
+        $favoritedXxhashes = [];
+        foreach (array_chunk($allIds, 900) as $chunk) {
+            $idPlaceholders = implode(',', array_fill(0, count($chunk), '?'));
+            $stmt = $this->db->prepare("SELECT DISTINCT metadata_file_id FROM favorites WHERE metadata_file_id IN ($idPlaceholders) AND user_id = ?");
+            $stmt->bindValue(count($chunk) + 1, $userId, SQLITE3_INTEGER);
+            foreach ($chunk as $i => $id) {
+                $stmt->bindValue($i + 1, $id, SQLITE3_INTEGER);
+            }
+            $favResult = $stmt->execute();
+            while ($row = $favResult->fetchArray(SQLITE3_ASSOC)) {
+                $favId = (int)$row['metadata_file_id'];
+                if (isset($idToXxhash[$favId])) {
+                    $favoritedXxhashes[$idToXxhash[$favId]] = true;
+                }
+            }
+        }
+
+        // Step 4: Build result keyed by file_path
+        $statuses = [];
+        foreach ($folderFiles as $entry) {
+            $statuses[$entry['file_path']] = [
+                'favorited' => isset($favoritedXxhashes[$entry['xxhash']]),
             ];
         }
         return $statuses;
