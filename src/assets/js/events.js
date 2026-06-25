@@ -265,6 +265,9 @@ function toggleObjectFit() {
   }
 }
 
+let lastEscTime = 0;
+const ESC_DOUBLE_PRESS_THRESHOLD = 400;
+
 function setupDeleteHotkeys() {
   const bodyClassList = document.body.classList;
   document.addEventListener('keydown', (e) => {
@@ -291,14 +294,25 @@ function setupDeleteHotkeys() {
     // Don't process if user is typing in an input field
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
-    // ESC key - clear delete selections (only when not in fullscreen)
+    // ESC key - double-press to logout, single press to clear selections
     if (key === 'Escape') {
       if (isFullscreenActive) return;
       if (!state.permissions.includes('delete')) return;
-      const selectedCount = getSelectedTileCount();
-      if (selectedCount > 0 || isSelectAllMode()) {
-        e.preventDefault();
-        clearAllSelections();
+
+      const now = Date.now();
+      const timeSinceLastEsc = now - lastEscTime;
+      const isDoublePress = timeSinceLastEsc < ESC_DOUBLE_PRESS_THRESHOLD && timeSinceLastEsc > 0;
+
+      if (isDoublePress) {
+        lastEscTime = 0;
+        fetch('logout.php').then(() => { window.location.href = 'login.php'; });
+      } else {
+        lastEscTime = now;
+        const selectedCount = getSelectedTileCount();
+        if (selectedCount > 0 || isSelectAllMode()) {
+          e.preventDefault();
+          clearAllSelections();
+        }
       }
       return;
     }
