@@ -2,11 +2,13 @@
 
 require_once __DIR__ . '/ActionHandler.php';
 require_once __DIR__ . '/../AuditDatabase.php';
+require_once __DIR__ . '/../FavoritesDatabase.php';
 
 class DeleteAction extends ActionHandler
 {
     private ?AuditDatabase $auditDb = null;
-    
+    private ?FavoritesDatabase $favDb = null;
+
     private function getAuditDb(): AuditDatabase
     {
         if ($this->auditDb === null) {
@@ -14,6 +16,15 @@ class DeleteAction extends ActionHandler
         }
         return $this->auditDb;
     }
+
+    private function getFavDb(): FavoritesDatabase
+    {
+        if ($this->favDb === null) {
+            $this->favDb = new FavoritesDatabase();
+        }
+        return $this->favDb;
+    }
+
     public function handle(): void
     {
         $recursive = $this->data['recursive'] ?? false;
@@ -45,6 +56,24 @@ class DeleteAction extends ActionHandler
             $parentWebPath = '/volumes';
         }
 
+        // Check for favorited files that block deletion
+        $favPaths = $this->getFavDb()->getFavoritedFilesInFolder($fsPath);
+
+        if (!empty($favPaths)) {
+            // Partial deletion — delete non-favorited files only
+            $stats = ['files' => 0, 'hidden_files' => 0, 'subfolders' => 0, 'skipped_favorited' => count($favPaths)];
+            $this->deleteRecursiveNonFavorited($fsPath, $favPaths, $stats);
+
+            $this->json([
+                'status' => 'partial',
+                'deleted' => $stats,
+                'skipped_favorited' => array_values($favPaths),
+                'parent_path' => $parentWebPath,
+                'message' => "Deleted {$stats['files']} files, skipped {$stats['skipped_favorited']} favorited files"
+            ]);
+            return;
+        }
+
         $stats = $this->countFolderContents($fsPath);
         $deleted = $this->deleteRecursive($fsPath);
 
@@ -67,6 +96,7 @@ class DeleteAction extends ActionHandler
             $this->error('No files provided');
         }
 
+        $favDb = $this->getFavDb();
         $results = [];
         foreach ($files as $file) {
             $decodedFile = urldecode($file);
@@ -88,6 +118,12 @@ class DeleteAction extends ActionHandler
 
             if (!$fsPath || !str_starts_with($fsPath, $this->root) || !file_exists($fsPath)) {
                 $results[$file] = 'not_found';
+                continue;
+            }
+
+            // Check if file is favorited by any user
+            if ($favDb->isFavoritedByAnyUser($fsPath)) {
+                $results[$file] = 'skipped_favorited';
                 continue;
             }
 
@@ -179,5 +215,51 @@ class DeleteAction extends ActionHandler
         }
 
         return false;
+    }
+
+    private function deleteRecursiveNonFavorited(string $path, array $favPaths, array &$stats): int
+    {
+        $count = 0;
+        $favSet = array_flip($favPaths);
+
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($path, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::CHILD_FIRST
+        );
+
+        $dirsToRemove = [];
+        foreach ($iterator as $file) {
+            $filePath = realpath($file->getPathname());
+            if ($filePath === false) continue;
+            $filename = $file->getFilename();
+
+            if ($file->isFile()) {
+                if (isset($favSet[$filePath])) {
+                    continue;
+                }
+
+                if (unlink($filePath)) {
+                    $this->getAuditDb()->deleteFile($filePath);
+                    $this->metaDb->deleteMetadata($filePath);
+                    $stats['files']++;
+                    if ($filename[0] === '.') {
+                        $stats['hidden_files']++;
+                    }
+                    $count++;
+                }
+            } elseif ($file->isDir() && $filename[0] !== '.') {
+                $dirsToRemove[] = $filePath;
+            }
+        }
+
+        // Remove empty directories (bottom-up, already ordered by CHILD_FIRST)
+        foreach ($dirsToRemove as $dir) {
+            if (count(scandir($dir)) === 2) {
+                rmdir($dir);
+                $stats['subfolders']++;
+            }
+        }
+
+        return $count;
     }
 }

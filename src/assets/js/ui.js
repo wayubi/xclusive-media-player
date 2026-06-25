@@ -188,7 +188,20 @@ export async function confirmDelete() {
     .then(r => r.json())
     .then(data => {
       if (data.error) return alert('Delete error: ' + data.error);
-      
+
+      if (data.status === 'partial') {
+        const msg = data.message + '\n\nFavorited files skipped:\n' +
+          data.skipped_favorited.map(f => '  • ' + f.split('/').pop()).join('\n');
+        alert(msg);
+
+        if (data.parent_path) {
+          navigateToFolder(data.parent_path);
+        } else {
+          renderGrid();
+        }
+        return;
+      }
+
       // Clear selection state
       selectedTiles.clear();
       selectAllMode = false;
@@ -214,18 +227,29 @@ export async function confirmDelete() {
     .then(r => r.json())
     .then(data => {
       if (data.error) return alert('Delete error: ' + data.error);
-      
+
+      const skipped = [];
       filesToDelete.forEach(f => {
-        const idx = state.allVideos.indexOf(f);
-        if (idx !== -1) state.allVideos.splice(idx, 1);
-        
-        const origIdx = state.originalVideos.indexOf(f);
-        if (origIdx !== -1) state.originalVideos.splice(origIdx, 1);
-        
-        delete state.auditStatusMap[f];
-        delete state.webToFsPathMap[f];
-        delete state.favoritesMap[f];
+        const result = data.results?.[f];
+        if (result === 'deleted') {
+          const idx = state.allVideos.indexOf(f);
+          if (idx !== -1) state.allVideos.splice(idx, 1);
+
+          const origIdx = state.originalVideos.indexOf(f);
+          if (origIdx !== -1) state.originalVideos.splice(origIdx, 1);
+
+          delete state.auditStatusMap[f];
+          delete state.webToFsPathMap[f];
+          delete state.favoritesMap[f];
+        } else if (result === 'skipped_favorited') {
+          skipped.push(f);
+        }
       });
+
+      if (skipped.length > 0) {
+        alert(`Deleted ${filesToDelete.length - skipped.length} file(s).\n\nSkipped ${skipped.length} favorited file(s):\n` +
+          skipped.map(f => '  • ' + f.split('/').pop()).join('\n'));
+      }
       
       state.startIndex = Math.min(state.startIndex, Math.max(0, state.allVideos.length - state.totalCells));
       selectedTiles.clear();

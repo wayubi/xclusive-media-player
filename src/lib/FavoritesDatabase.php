@@ -299,6 +299,97 @@ class FavoritesDatabase extends Database
         return $row ? (int)$row['count'] : 0;
     }
 
+    public function isFavoritedByAnyUser(string $absolutePath): bool
+    {
+        $info = $this->getFileInfo($absolutePath);
+        if (!$info || !$info['xxhash']) return false;
+
+        $allIds = $this->getIdsByXxhash($info['xxhash']);
+        if (empty($allIds)) return false;
+
+        foreach (array_chunk($allIds, 900) as $chunk) {
+            $placeholders = implode(',', array_fill(0, count($chunk), '?'));
+            $stmt = $this->db->prepare("SELECT 1 FROM favorites WHERE metadata_file_id IN ($placeholders) LIMIT 1");
+            foreach ($chunk as $i => $id) {
+                $stmt->bindValue($i + 1, $id, SQLITE3_INTEGER);
+            }
+            $result = $stmt->execute();
+            if ($result->fetchArray(SQLITE3_ASSOC)) return true;
+        }
+        return false;
+    }
+
+    public function getFavoritedFilesInFolder(string $folderPath): array
+    {
+        $normalized = Utils::normalizePath($folderPath);
+        $prefix = str_replace(['%', '_'], ['\\%', '\\_'], $normalized) . '/%';
+        $metaDb = $this->getMetadataDb();
+
+        // Get all ids and xxhashes in this folder
+        $stmt = $metaDb->prepare("SELECT id, xxhash FROM files WHERE file_path LIKE :prefix ESCAPE '\\' AND xxhash IS NOT NULL");
+        $stmt->bindValue(':prefix', $prefix, SQLITE3_TEXT);
+        $result = $stmt->execute();
+
+        $folderFiles = [];
+        $xxhashes = [];
+        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+            $folderFiles[] = ['id' => (int)$row['id'], 'xxhash' => $row['xxhash']];
+            $xxhashes[] = $row['xxhash'];
+        }
+
+        if (empty($xxhashes)) return [];
+
+        // Get ALL metadata_file_ids sharing these xxhashes (content-addressed dedup)
+        $deduped = array_unique($xxhashes);
+        $idToPath = [];
+        $idToXxhash = [];
+        foreach (array_chunk($deduped, 900) as $chunk) {
+            $hPlaceholders = implode(',', array_fill(0, count($chunk), '?'));
+            $stmt = $metaDb->prepare("SELECT id, file_path, xxhash FROM files WHERE xxhash IN ($hPlaceholders)");
+            foreach ($chunk as $i => $xxhash) {
+                $stmt->bindValue($i + 1, $xxhash, SQLITE3_TEXT);
+            }
+            $idResult = $stmt->execute();
+            while ($row = $idResult->fetchArray(SQLITE3_ASSOC)) {
+                $id = (int)$row['id'];
+                $idToPath[$id] = $row['file_path'];
+                $idToXxhash[$id] = $row['xxhash'];
+            }
+        }
+
+        if (empty($idToXxhash)) return [];
+
+        // Find which xxhashes are favorited by any user (chunked to avoid SQLite parameter limit)
+        $allIds = array_keys($idToXxhash);
+        $protectedHashes = [];
+        foreach (array_chunk($allIds, 900) as $chunk) {
+            $idPlaceholders = implode(',', array_fill(0, count($chunk), '?'));
+            $stmt = $this->db->prepare("SELECT DISTINCT metadata_file_id FROM favorites WHERE metadata_file_id IN ($idPlaceholders)");
+            foreach ($chunk as $i => $id) {
+                $stmt->bindValue($i + 1, $id, SQLITE3_INTEGER);
+            }
+            $favResult = $stmt->execute();
+            while ($row = $favResult->fetchArray(SQLITE3_ASSOC)) {
+                $favId = (int)$row['metadata_file_id'];
+                if (isset($idToXxhash[$favId])) {
+                    $protectedHashes[$idToXxhash[$favId]] = true;
+                }
+            }
+        }
+
+        // Protect any folder file whose content hash is in the protected set
+        $paths = [];
+        foreach ($folderFiles as $entry) {
+            if (isset($protectedHashes[$entry['xxhash']]) && isset($idToPath[$entry['id']])) {
+                $resolved = realpath($idToPath[$entry['id']]);
+                if ($resolved !== false) {
+                    $paths[] = $resolved;
+                }
+            }
+        }
+        return $paths;
+    }
+
     public function __destruct()
     {
         if ($this->metaDb) {
