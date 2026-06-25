@@ -335,8 +335,11 @@ class MetadataDatabase extends Database
         
         $stmt = $this->db->prepare('DELETE FROM files WHERE file_path = :path');
         $stmt->bindValue(':path', $normalizedPath, SQLITE3_TEXT);
-        
-        return $stmt->execute() !== false;
+        $stmt->execute();
+
+        $cacheStmt = $this->db->prepare('DELETE FROM folder_cache WHERE file_path = :path');
+        $cacheStmt->bindValue(':path', $normalizedPath, SQLITE3_TEXT);
+        return $cacheStmt->execute() !== false;
     }
 
     public function findMoveCandidate(string $xxhash, int $fileSize, int $modifiedTime, string $currentPath): ?array

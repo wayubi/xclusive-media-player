@@ -194,11 +194,19 @@ export async function confirmDelete() {
           data.skipped_favorited.map(f => '  • ' + f.split('/').pop()).join('\n');
         alert(msg);
 
-        if (data.parent_path) {
-          navigateToFolder(data.parent_path);
-        } else {
-          renderGrid();
+        if (data.deleted_paths) {
+          data.deleted_paths.forEach(f => {
+            const idx = state.allVideos.indexOf(f);
+            if (idx !== -1) state.allVideos.splice(idx, 1);
+            const origIdx = state.originalVideos.indexOf(f);
+            if (origIdx !== -1) state.originalVideos.splice(origIdx, 1);
+            delete state.auditStatusMap[f];
+            delete state.webToFsPathMap[f];
+            delete state.favoritesMap[f];
+          });
         }
+
+        renderGrid();
         return;
       }
 

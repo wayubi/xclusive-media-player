@@ -62,13 +62,19 @@ class DeleteAction extends ActionHandler
         if (!empty($favPaths)) {
             // Partial deletion — delete non-favorited files only
             $stats = ['files' => 0, 'hidden_files' => 0, 'subfolders' => 0, 'skipped_favorited' => count($favPaths)];
-            $this->deleteRecursiveNonFavorited($fsPath, $favPaths, $stats);
+            $deletedFsPaths = [];
+            $this->deleteRecursiveNonFavorited($fsPath, $favPaths, $stats, $deletedFsPaths);
+
+            $deletedWebPaths = array_map(
+                fn($p) => Utils::filesystemToWebPath($p, $this->root),
+                $deletedFsPaths
+            );
 
             $this->json([
                 'status' => 'partial',
                 'deleted' => $stats,
+                'deleted_paths' => $deletedWebPaths,
                 'skipped_favorited' => array_values($favPaths),
-                'parent_path' => $parentWebPath,
                 'message' => "Deleted {$stats['files']} files, skipped {$stats['skipped_favorited']} favorited files"
             ]);
             return;
@@ -217,7 +223,7 @@ class DeleteAction extends ActionHandler
         return false;
     }
 
-    private function deleteRecursiveNonFavorited(string $path, array $favPaths, array &$stats): int
+    private function deleteRecursiveNonFavorited(string $path, array $favPaths, array &$stats, array &$deletedPaths): int
     {
         $count = 0;
         $favSet = array_flip($favPaths);
@@ -241,6 +247,7 @@ class DeleteAction extends ActionHandler
                 if (unlink($filePath)) {
                     $this->getAuditDb()->deleteFile($filePath);
                     $this->metaDb->deleteMetadata($filePath);
+                    $deletedPaths[] = $filePath;
                     $stats['files']++;
                     if ($filename[0] === '.') {
                         $stats['hidden_files']++;
