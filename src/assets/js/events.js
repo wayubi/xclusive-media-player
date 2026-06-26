@@ -288,7 +288,7 @@ function setupDeleteHotkeys() {
     const isNumKey = (key >= '1' && key <= '9') || key === '0';
     const isActionKey = key === 'Escape' || key === 'Delete' || key.toLowerCase() === 'd' ||
       key.toLowerCase() === 'a' || key === '.' || key === '`' || key === '~' ||
-      key.toLowerCase() === 'b';
+      key.toLowerCase() === 'b' || key.toLowerCase() === 'f';
     if (!isNumKey && !isActionKey) return;
 
     // Don't process if user is typing in an input field
@@ -346,6 +346,15 @@ function setupDeleteHotkeys() {
       } else {
         selectAllVisibleTiles();
       }
+      return;
+    }
+
+    if (key.toLowerCase() === 'f') {
+      if (!state.permissions.includes('favorites')) return;
+      e.preventDefault();
+      import('./favorites.js').then(module => {
+        module.batchToggleFavorites();
+      });
       return;
     }
 

@@ -84,6 +84,27 @@ export function playFavorites() {
   });
 }
 
+export async function batchToggleFavorites() {
+  const containers = document.querySelectorAll('#grid .video-container');
+  const tasks = [];
+
+  for (const container of containers) {
+    const selectBtn = container.querySelector('button[data-file]');
+    if (selectBtn && selectBtn.dataset.selected === 'true') {
+      const file = container.dataset.file;
+      const heart = container.querySelector('.favorite-heart');
+      if (file && heart) {
+        tasks.push(toggleFavorite(file, heart));
+      }
+    }
+  }
+
+  if (tasks.length === 0) return;
+
+  await Promise.allSettled(tasks);
+  await updateFavoritesDisplay();
+}
+
 export function setupFavoritesFilter() {
   const el = document.getElementById('favorites-count');
   if (el) {
