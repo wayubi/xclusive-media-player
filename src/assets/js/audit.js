@@ -89,7 +89,7 @@ function auditAllFiles() {
   performAudit(filesToAudit, allWebPaths, 'all files');
 }
 
-function performAudit(filesToAudit, webPaths, mode) {
+export function performAudit(filesToAudit, webPaths, mode) {
   // Capture audit context before starting to prevent race conditions
   // when user navigates while audit is in progress
   const auditContext = state.startAuditContext();
@@ -200,6 +200,29 @@ function performAudit(filesToAudit, webPaths, mode) {
       console.log('Audit failed but user navigated away - not reverting stale changes');
     }
   });
+}
+
+export function auditSelectedTiles() {
+  const containers = document.querySelectorAll('#grid .video-container');
+  const webPaths = [];
+  const filesToAudit = [];
+
+  for (const container of containers) {
+    const selectBtn = container.querySelector('button[data-file]');
+    if (selectBtn && selectBtn.dataset.selected === 'true') {
+      const file = container.dataset.file;
+      if (file) {
+        webPaths.push(file);
+        const fsPath = state.webToFsPathMap[file];
+        if (fsPath) {
+          filesToAudit.push(fsPath);
+        }
+      }
+    }
+  }
+
+  if (filesToAudit.length === 0) return;
+  performAudit(filesToAudit, webPaths, 'selected');
 }
 
 export function updateAuditDisplay() {

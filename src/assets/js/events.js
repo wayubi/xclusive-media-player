@@ -3,7 +3,7 @@ import { state } from './state.js';
 import { nextGrid, prevGrid, renderGrid } from './grid.js';
 import { playAll, shufflePlay } from './fullscreen.js';
 import { setupSearchListeners } from './search.js';
-import { runAudit, auditCurrentView } from './audit.js';
+import { runAudit, auditCurrentView, auditSelectedTiles } from './audit.js';
 import { setupUnauditedFilter } from './filter.js';
 import { toggleTileSelection, confirmDelete, selectAllFiles, clearAllSelections, isSelectAllMode, getSelectedTileCount, syncMuteIcons, selectAllVisibleTiles, areAllVisibleTilesSelected } from './ui.js';
 import { toggleTerminal, isTerminalActive, hideTerminal } from './terminal.js';
@@ -336,7 +336,11 @@ function setupDeleteHotkeys() {
     } else if (key.toLowerCase() === 'a') {
       if (!state.permissions.includes('audit')) return;
       e.preventDefault();
-      runAudit();
+      if (getSelectedTileCount() > 0) {
+        auditSelectedTiles();
+      } else {
+        runAudit();
+      }
       return;
     } else if (key === '.') {
       e.preventDefault();
