@@ -72,7 +72,7 @@
 }
 
 .video-container.selected-for-delete::before {
-  content: 'DELETE';
+  content: 'WARNING';
   position: absolute;
   top: 12px;
   right: 12px;
