@@ -41,6 +41,12 @@ export function createMediaContainer(file, index = 0) {
     container.appendChild(heart);
   }
 
+  // Tile number in bottom-right corner
+  const tileNum = document.createElement('div');
+  tileNum.className = 'tile-number';
+  tileNum.textContent = index + 1;
+  container.appendChild(tileNum);
+
   // Determine file type by extension
   const ext = file.split('.').pop().toLowerCase();
   const isAudio = ['mp3','wav','ogg'].includes(ext);
