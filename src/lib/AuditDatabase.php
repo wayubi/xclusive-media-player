@@ -176,7 +176,7 @@ class AuditDatabase extends Database
         // multi-OR chain that would force a full table scan.
         $metaDb = $this->getMetadataDb();
         $umbrella = $normalizedFolders[0];
-        $prefix = $umbrella . '/';
+        $prefix = $umbrella . '/%';
 
         $stmt = $metaDb->prepare("SELECT id, file_path FROM files WHERE file_path LIKE :prefix");
         $stmt->bindValue(':prefix', $prefix, SQLITE3_TEXT);
