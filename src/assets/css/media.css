@@ -98,7 +98,7 @@ body.overlays-idle .central-overlay {
   opacity: 0;
   transition: var(--transition-overlay);
   pointer-events: none;
-  z-index: var(--z-overlay);
+  z-index: calc(var(--z-overlay) + 1);
 }
 
 .video-container:hover .central-overlay {
