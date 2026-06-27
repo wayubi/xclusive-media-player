@@ -10,6 +10,25 @@ let emojiData = null;
 const FREQUENTLY_USED_KEY = 'mastodon_emoji_frequently_used';
 const MAX_FREQUENT = 12;
 
+const MENTIONS_KEY = 'mastodon_mentions';
+
+function getSavedMentions() {
+    try { return JSON.parse(localStorage.getItem(MENTIONS_KEY)) || []; }
+    catch { return []; }
+}
+
+function saveMentions(arr) {
+    localStorage.setItem(MENTIONS_KEY, JSON.stringify(arr));
+}
+
+function extractMentions(text) {
+    const regex = /@[\w.]+(?:@[\w.-]+)?/g;
+    const mentions = new Set();
+    let match;
+    while ((match = regex.exec(text)) !== null) mentions.add(match[0]);
+    return mentions;
+}
+
 async function loadEmojiLib() {
     if (!emojiData) {
         const response = await fetch('./assets/js/lib/emojilib-v4.0.2/emoji-en-US.json');
@@ -56,6 +75,57 @@ function searchEmojis(query, lib) {
         }
     }
     return results;
+}
+
+function renderMentionTags() {
+    const list = getSavedMentions();
+    const container = document.getElementById('mention-list');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    for (const name of list) {
+        if (!name) continue;
+        const tag = document.createElement('span');
+        tag.className = 'mention-tag';
+
+        const text = document.createTextNode('@' + name);
+
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'mention-remove';
+        removeBtn.textContent = '✕';
+        removeBtn.title = 'Remove ' + name;
+        removeBtn.addEventListener('click', () => {
+            const arr = getSavedMentions().filter(n => n !== name);
+            saveMentions(arr);
+            renderMentionTags();
+        });
+
+        tag.append(text, removeBtn);
+        container.appendChild(tag);
+    }
+
+    const addInput = document.createElement('input');
+    addInput.type = 'text';
+    addInput.className = 'mention-add-input';
+    addInput.placeholder = '+ Add';
+    addInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const raw = addInput.value.trim();
+            if (!raw) return;
+            const clean = raw.replace(/^@/, '').toLowerCase();
+            const arr = getSavedMentions();
+            if (clean && !arr.includes(clean)) {
+                arr.push(clean);
+                saveMentions(arr);
+            }
+            addInput.value = '';
+            renderMentionTags();
+        }
+    });
+    container.appendChild(addInput);
 }
 
 function escapeHtml(str) {
@@ -136,6 +206,11 @@ export function openShareModal(file, isVideo, isAudio) {
                 <div class="help-text">Get it from your Mastodon account settings → Development → New application</div>
             </div>
             
+            <div class="tagged-contacts" id="tagged-contacts">
+                <label>Tagged Contacts</label>
+                <div id="mention-list"></div>
+            </div>
+
             <div class="form-group">
                 <label for="share-status">Status Text</label>
                 <textarea id="share-status" placeholder="Check this out! @user@example.com"></textarea>
@@ -259,6 +334,7 @@ export function openShareModal(file, isVideo, isAudio) {
     });
 
     initEmojiPicker();
+    renderMentionTags();
 
     submitBtn.onclick = async () => {
         const instanceInput = document.getElementById('mastodon-instance');
@@ -292,6 +368,19 @@ export function openShareModal(file, isVideo, isAudio) {
             deleteCookie('mastodon_token');
         }
 
+        const savedNames = getSavedMentions();
+        const prefix = savedNames.map(n => '@' + n).join(' ') + (savedNames.length ? ' ' : '');
+        const fullStatus = prefix + statusVal;
+
+        const typedMentions = extractMentions(statusVal);
+        for (const m of typedMentions) {
+            const clean = m.replace(/^@/, '');
+            if (clean && !savedNames.includes(clean)) {
+                savedNames.push(clean);
+            }
+        }
+        saveMentions(savedNames);
+
         submitBtn.disabled = true;
         submitBtn.innerHTML = '<span class="spinner"></span>Sharing...';
         hideError();
@@ -304,7 +393,7 @@ export function openShareModal(file, isVideo, isAudio) {
                 body: JSON.stringify({
                     action: 'share',
                     file: currentShareFile,
-                    status: statusVal,
+                    status: fullStatus,
                     visibility: visibilityVal,
                     sensitive: sensitiveVal,
                     instance: instanceVal,

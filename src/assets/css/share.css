@@ -99,6 +99,63 @@
     word-break: break-all;
 }
 
+#share-modal .tagged-contacts {
+    margin-bottom: 16px;
+}
+#share-modal .tagged-contacts label {
+    display: block;
+    color: #e2e8f0;
+    margin-bottom: 6px;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+#share-modal .mention-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(167, 139, 250, 0.15);
+    border: 1px solid rgba(167, 139, 250, 0.3);
+    border-radius: var(--radius-xs);
+    padding: 2px 8px;
+    font-size: 0.85rem;
+    color: #a78bfa;
+    margin-right: 6px;
+    margin-bottom: 4px;
+}
+#share-modal .mention-tag .mention-remove {
+    background: none;
+    border: none;
+    color: #fc8181;
+    cursor: pointer;
+    font-size: 11px;
+    padding: 0 2px;
+    line-height: 1;
+    transition: var(--transition-fast);
+}
+#share-modal .mention-tag .mention-remove:hover {
+    color: #ef4444;
+}
+#share-modal .mention-add-input {
+    display: inline-flex;
+    align-items: center;
+    width: 90px;
+    padding: 3px 8px;
+    font-size: 0.85rem;
+    border: 1px dashed rgba(167, 139, 250, 0.3);
+    border-radius: var(--radius-xs);
+    background: transparent;
+    color: #e2e8f0;
+    outline: none;
+    margin-bottom: 4px;
+}
+#share-modal .mention-add-input:focus {
+    border-color: #a78bfa;
+    border-style: solid;
+}
+#share-modal .mention-add-input::placeholder {
+    color: #6b7280;
+}
+
 #share-modal .form-group {
     margin-bottom: 16px;
 }
