@@ -56,6 +56,7 @@ class MetadataDatabase extends Database
             CREATE INDEX IF NOT EXISTS idx_web_path ON files(web_path);
             CREATE INDEX IF NOT EXISTS idx_updated_at ON files(updated_at);
             CREATE INDEX IF NOT EXISTS idx_filename ON files(filename);
+            CREATE INDEX IF NOT EXISTS idx_files_xxhash ON files(xxhash);
 
             CREATE TABLE IF NOT EXISTS folder_cache (
                 folder_path TEXT NOT NULL,
@@ -628,12 +629,32 @@ class MetadataDatabase extends Database
      */
     public function getFolderStatsBatch(array $folderPaths): array
     {
-        $results = [];
-        
-        foreach ($folderPaths as $folderPath) {
-            $results[$folderPath] = $this->getFolderStats($folderPath);
+        if (empty($folderPaths)) {
+            return [];
         }
-        
+
+        $results = [];
+        $stmt = $this->db->prepare('
+            SELECT 
+                COUNT(*) as total,
+                SUM(CASE WHEN is_optimized = 1 THEN 1 ELSE 0 END) as optimized,
+                SUM(CASE WHEN is_optimized = 0 THEN 1 ELSE 0 END) as unoptimized
+            FROM files 
+            WHERE file_path LIKE :path_prefix
+        ');
+
+        foreach ($folderPaths as $folderPath) {
+            $normalizedFolder = $this->normalizePath($folderPath);
+            $stmt->bindValue(':path_prefix', $normalizedFolder . '/%', SQLITE3_TEXT);
+            $result = $stmt->execute();
+            $row = $result->fetchArray(SQLITE3_ASSOC);
+            $results[$folderPath] = [
+                'total' => (int)($row['total'] ?? 0),
+                'optimized' => (int)($row['optimized'] ?? 0),
+                'unoptimized' => (int)($row['unoptimized'] ?? 0)
+            ];
+        }
+
         return $results;
     }
 

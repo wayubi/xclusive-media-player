@@ -165,24 +165,21 @@ class AuditDatabase extends Database
 
     public function getFolderStatsBatch(array $folderPaths, array $totalCounts = []): array
     {
-        $results = [];
-
         if (empty($folderPaths)) {
-            return $results;
+            return [];
         }
 
         $normalizedFolders = array_map([$this, 'normalizePath'], $folderPaths);
 
+        // Use the first folder as the umbrella prefix — files under it cover
+        // all subfolder paths in a single indexed range scan, avoiding a slow
+        // multi-OR chain that would force a full table scan.
         $metaDb = $this->getMetadataDb();
-        $conditions = [];
-        foreach ($normalizedFolders as $folder) {
-            $conditions[] = "file_path LIKE '" . $metaDb->escapeString($folder) . "/%'";
-        }
-        $whereClause = implode(' OR ', $conditions);
+        $umbrella = $normalizedFolders[0];
+        $prefix = $umbrella . '/';
 
-        if (empty($whereClause)) return $results;
-
-        $stmt = $metaDb->prepare("SELECT id, file_path FROM files WHERE $whereClause");
+        $stmt = $metaDb->prepare("SELECT id, file_path FROM files WHERE file_path LIKE :prefix");
+        $stmt->bindValue(':prefix', $prefix, SQLITE3_TEXT);
         $result = $stmt->execute();
 
         $folderFileIds = [];
@@ -193,9 +190,9 @@ class AuditDatabase extends Database
             $fid = (int)$row['id'];
 
             foreach ($normalizedFolders as $folderPath) {
-                $prefix = $folderPath . '/';
-                if (str_starts_with($fp, $prefix)) {
-                    $relativePath = substr($fp, strlen($prefix));
+                $p = $folderPath . '/';
+                if (str_starts_with($fp, $p)) {
+                    $relativePath = substr($fp, strlen($p));
                     $firstSlash = strpos($relativePath, '/');
                     $key = ($firstSlash === false) ? $folderPath : $folderPath . '/' . substr($relativePath, 0, $firstSlash);
                     $folderFileIds[$key][] = $fid;
@@ -207,9 +204,10 @@ class AuditDatabase extends Database
 
         $auditedIds = [];
         if (!empty($allIds)) {
-            $idPlaceholders = implode(',', array_fill(0, count($allIds), '?'));
+            $uniqueIds = array_values(array_unique($allIds));
+            $idPlaceholders = implode(',', array_fill(0, count($uniqueIds), '?'));
             $stmt = $this->db->prepare("SELECT DISTINCT metadata_file_id FROM audit_log WHERE metadata_file_id IN ($idPlaceholders)");
-            foreach ($allIds as $i => $id) {
+            foreach ($uniqueIds as $i => $id) {
                 $stmt->bindValue($i + 1, $id, SQLITE3_INTEGER);
             }
             $result = $stmt->execute();
@@ -220,7 +218,7 @@ class AuditDatabase extends Database
 
         foreach ($normalizedFolders as $folderPath) {
             $total = $totalCounts[$folderPath] ?? 0;
-            $fileIds = $folderFileIds[$folderPath] ?? [];
+            $fileIds = array_unique($folderFileIds[$folderPath] ?? []);
             $audited = 0;
             foreach ($fileIds as $fid) {
                 if (isset($auditedIds[$fid])) $audited++;
