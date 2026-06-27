@@ -305,7 +305,7 @@ function setupDeleteHotkeys() {
 
       if (isDoublePress) {
         lastEscTime = 0;
-        fetch('logout.php').then(() => { window.location.href = 'login.php'; });
+        fetch('/logout').then(() => { window.location.href = '/login'; });
       } else {
         lastEscTime = now;
         const selectedCount = getSelectedTileCount();

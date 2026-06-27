@@ -4,7 +4,7 @@ require_once __DIR__ . '/lib/UserDatabase.php';
 require_once __DIR__ . '/lib/session.php';
 
 if (empty($_SESSION['user_id'])) {
-    header('Location: login.php');
+    header('Location: /login');
     exit;
 }
 
@@ -95,7 +95,7 @@ if ($nav_action !== null) {
     if (isset($_GET['muted']))   $query[] = 'muted=' . $_GET['muted'];
     if (isset($_GET['sort']))    $query[] = 'sort=' . urlencode($_GET['sort']);
 
-    $redirect = 'index.php' . (empty($query) ? '' : '?' . implode('&', $query));
+    $redirect = '/' . (empty($query) ? '' : '?' . implode('&', $query));
 
     // Perform the redirect to clean URL
     header("Location: $redirect");
@@ -314,7 +314,7 @@ $audioThumbs = (file_exists($audioCoversFile)) ? (json_decode(file_get_contents(
 
     <body>
 
-        <form id="options-form" method="get" action="index.php"
+        <form id="options-form" method="get" action="/"
               class="<?= !in_array('audit', $permissions) ? 'no-audit' : '' ?>">
             <!-- File counter -->
             <!-- <span id="file-count" style="min-width: 100px;">1 / <?= $allFilesCount ?></span> -->
@@ -331,7 +331,7 @@ $audioThumbs = (file_exists($audioCoversFile)) ? (json_decode(file_get_contents(
                 if (isset($_GET['columns'])) $homeParams[] = 'columns=' . (int)$_GET['columns'];
                 if (isset($_GET['rows'])) $homeParams[] = 'rows=' . (int)$_GET['rows'];
                 if (isset($_GET['muted'])) $homeParams[] = 'muted=' . urlencode($_GET['muted']);
-                $homeUrl = 'index.php' . (empty($homeParams) ? '' : '?' . implode('&', $homeParams));
+                $homeUrl = '/' . (empty($homeParams) ? '' : '?' . implode('&', $homeParams));
                 ?>
                 <a href="<?= htmlspecialchars($homeUrl) ?>" 
                    class="home-btn">

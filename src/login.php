@@ -4,7 +4,7 @@ require_once __DIR__ . '/lib/UserDatabase.php';
 require_once __DIR__ . '/lib/session.php';
 
 if (!empty($_SESSION['user_id'])) {
-    header('Location: index.php');
+    header('Location: /');
     exit;
 }
 
@@ -35,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['username'] = $username;
                 $_SESSION['user_role'] = $user['role'] ?? 'user';
 
-                header('Location: index.php');
+                header('Location: /');
                 exit;
             }
 
@@ -46,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($error) {
         $_SESSION['flash_error'] = $error;
-        header('Location: login.php');
+        header('Location: /login');
         exit;
     }
 }
@@ -79,7 +79,7 @@ unset($_SESSION['flash_error']);
             <div class="login-error"><?= htmlspecialchars($flashError) ?></div>
         <?php endif; ?>
 
-        <form method="post" action="login.php" autocomplete="off">
+        <form method="post" action="/login" autocomplete="off">
             <div class="login-field">
                 <label class="login-label" for="username">Username</label>
                 <input class="login-input" type="text" id="username" name="username"

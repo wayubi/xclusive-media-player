@@ -450,7 +450,7 @@ function navigateToFolder(folderPath) {
   if (currentParams.has('muted')) params.set('muted', currentParams.get('muted'));
 
   params.set('t', Date.now().toString());
-  window.location.href = `index.php?${params.toString()}`;
+  window.location.href = `/?${params.toString()}`;
 }
 
 export function nextGrid() {
