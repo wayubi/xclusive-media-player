@@ -270,8 +270,8 @@ export function openShareModal(file, isVideo, isAudio) {
             </div>
             
             <div class="checkbox-group">
-                <input type="checkbox" id="share-reply-thread" ${getLastThreadPostId() ? 'checked' : ''}>
-                <label for="share-reply-thread">Reply in thread <span class="thread-info">${getLastThreadPostId() ? '(continues previous post)' : '(starts new thread)'}</span></label>
+                <input type="checkbox" id="share-reply-thread">
+                <label for="share-reply-thread">Reply to previous post</label>
             </div>
             
             <div class="checkbox-group">

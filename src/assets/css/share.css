@@ -211,12 +211,6 @@
     font-weight: normal;
 }
 
-.thread-info {
-    font-size: 0.8rem;
-    color: #718096;
-    font-weight: 400;
-}
-
 #share-modal .button-row {
     display: flex;
     gap: 12px;
