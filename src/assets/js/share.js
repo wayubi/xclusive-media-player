@@ -11,6 +11,32 @@ const FREQUENTLY_USED_KEY = 'mastodon_emoji_frequently_used';
 const MAX_FREQUENT = 12;
 
 const MENTIONS_KEY = 'mastodon_mentions';
+const THREAD_POST_ID_KEY = 'mastodon_last_post_id';
+const THREAD_ACTIVE_KEY = 'mastodon_thread_active';
+
+function getLastThreadPostId() {
+    try { return sessionStorage.getItem(THREAD_POST_ID_KEY) || null; }
+    catch { return null; }
+}
+
+function setLastThreadPostId(id) {
+    try {
+        if (id) sessionStorage.setItem(THREAD_POST_ID_KEY, id);
+        else sessionStorage.removeItem(THREAD_POST_ID_KEY);
+    } catch {}
+}
+
+function getThreadActive() {
+    try { return sessionStorage.getItem(THREAD_ACTIVE_KEY) === 'true'; }
+    catch { return false; }
+}
+
+function setThreadActive(active) {
+    try {
+        if (active) sessionStorage.setItem(THREAD_ACTIVE_KEY, 'true');
+        else sessionStorage.removeItem(THREAD_ACTIVE_KEY);
+    } catch {}
+}
 
 function getSavedMentions() {
     try { return JSON.parse(localStorage.getItem(MENTIONS_KEY)) || []; }
@@ -244,6 +270,11 @@ export function openShareModal(file, isVideo, isAudio) {
             </div>
             
             <div class="checkbox-group">
+                <input type="checkbox" id="share-reply-thread" ${getLastThreadPostId() ? 'checked' : ''}>
+                <label for="share-reply-thread">Reply in thread <span class="thread-info">${getLastThreadPostId() ? '(continues previous post)' : '(starts new thread)'}</span></label>
+            </div>
+            
+            <div class="checkbox-group">
                 <input type="checkbox" id="save-credentials" ${instance && token ? 'checked' : ''}>
                 <label for="save-credentials">Save instance and token for next time</label>
             </div>
@@ -386,33 +417,46 @@ export function openShareModal(file, isVideo, isAudio) {
         hideError();
         hideSuccess();
 
-        try {
-            const response = await fetch('api.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'share',
-                    file: currentShareFile,
-                    status: fullStatus,
-                    visibility: visibilityVal,
-                    sensitive: sensitiveVal,
-                    instance: instanceVal,
-                    token: tokenVal
-                })
-            });
+            const replyChecked = document.getElementById('share-reply-thread').checked;
+            const lastId = getLastThreadPostId();
 
-            const data = await response.json();
-
-            if (data.error) {
-                showError(data.error);
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = 'Share to Mastodon';
-                return;
+            const body = {
+                action: 'share',
+                file: currentShareFile,
+                status: fullStatus,
+                visibility: visibilityVal,
+                sensitive: sensitiveVal,
+                instance: instanceVal,
+                token: tokenVal
+            };
+            if (replyChecked && lastId) {
+                body.in_reply_to_id = lastId;
             }
 
-            showSuccess(`Shared successfully! <a href="${data.postUrl}" target="_blank">View post</a>`);
-            submitBtn.classList.add('hidden');
-            cancelBtn.textContent = 'Close';
+            try {
+                const response = await fetch('api.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    showError(data.error);
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = 'Share to Mastodon';
+                    return;
+                }
+
+                if (data.postId) {
+                    setLastThreadPostId(data.postId);
+                    setThreadActive(replyChecked);
+                }
+
+                showSuccess(`Shared successfully! <a href="${data.postUrl}" target="_blank">View post</a>`);
+                submitBtn.classList.add('hidden');
+                cancelBtn.textContent = 'Close';
 
         } catch (err) {
             showError('Share failed: ' + err.message);

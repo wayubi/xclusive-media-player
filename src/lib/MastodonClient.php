@@ -127,7 +127,7 @@ class MastodonClient
         return json_decode($response, true) ?? ['error' => 'Invalid response'];
     }
              
-    public function postStatus(string $status, array $mediaIds = [], string $visibility = 'private', bool $sensitive = true): array
+    public function postStatus(string $status, array $mediaIds = [], string $visibility = 'private', bool $sensitive = true, ?string $inReplyToId = null): array
     {
         $ch = curl_init();
         
@@ -137,6 +137,9 @@ class MastodonClient
             'visibility=' . urlencode($visibility),
             'sensitive=' . ($sensitive ? 'true' : 'false'),
         ];
+        if ($inReplyToId) {
+            $parts[] = 'in_reply_to_id=' . urlencode($inReplyToId);
+        }
         foreach ($mediaIds as $id) {
             $parts[] = 'media_ids[]=' . urlencode($id);
         }

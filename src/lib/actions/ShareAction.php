@@ -13,6 +13,7 @@ class ShareAction extends ActionHandler
         $sensitive = filter_var($this->data['sensitive'] ?? true, FILTER_VALIDATE_BOOLEAN);
         $instance = $this->data['instance'] ?? '';
         $token = $this->data['token'] ?? '';
+        $inReplyToId = $this->data['in_reply_to_id'] ?? null;
 
         if (!$file) {
             $this->error('Missing file parameter');
@@ -49,11 +50,12 @@ class ShareAction extends ActionHandler
             $mediaResult = $client->uploadMedia($fsPath, $filename);
             $mediaId = $mediaResult['id'];
             
-            $postResult = $client->postStatus($status, [$mediaId], $visibility, $sensitive);
+            $postResult = $client->postStatus($status, [$mediaId], $visibility, $sensitive, $inReplyToId);
 
             $this->json([
                 'status' => 'ok',
                 'postUrl' => $postResult['url'],
+                'postId' => $postResult['id'],
                 'mediaId' => $mediaId
             ]);
         } catch (Exception $e) {
