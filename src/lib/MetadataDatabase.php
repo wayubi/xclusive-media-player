@@ -367,9 +367,11 @@ class MetadataDatabase extends Database
     public function updateFilePaths(int $id, string $newPath, string $newWebPath): bool
     {
         $normalizedPath = $this->normalizePath($newPath);
-        $stmt = $this->db->prepare('UPDATE files SET file_path = :path, web_path = :web, updated_at = :updated WHERE id = :id');
+        $stmt = $this->db->prepare('UPDATE files SET file_path = :path, web_path = :web, filename = :filename, extension = :extension, updated_at = :updated WHERE id = :id');
         $stmt->bindValue(':path', $normalizedPath, SQLITE3_TEXT);
         $stmt->bindValue(':web', $newWebPath, SQLITE3_TEXT);
+        $stmt->bindValue(':filename', basename($newPath), SQLITE3_TEXT);
+        $stmt->bindValue(':extension', pathinfo($newPath, PATHINFO_EXTENSION), SQLITE3_TEXT);
         $stmt->bindValue(':updated', time(), SQLITE3_INTEGER);
         $stmt->bindValue(':id', $id, SQLITE3_INTEGER);
         return $stmt->execute() !== false;
