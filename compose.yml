@@ -4,6 +4,7 @@ services:
 
   nginx:
     image: nginx
+    restart: unless-stopped
     ulimits:
       nofile:
         soft: 8192
@@ -24,6 +25,7 @@ services:
     build:
       context: ./docker/php-fpm
       dockerfile: Dockerfile
+    restart: unless-stopped
     volumes:
       - ./src:/var/www/html
       - ./.env:/var/www/.env:ro
@@ -39,6 +41,7 @@ services:
     build:
       context: ./video-dedup
       dockerfile: Dockerfile
+    restart: unless-stopped
     volumes:
       - ./video-dedup/src:/opt/video-dedup/src
       - video-dedup-cache:/opt/video-dedup/.dedup_cache
