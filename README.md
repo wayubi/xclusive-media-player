@@ -183,6 +183,9 @@ CREATE TABLE favorites (
    docker-compose up -d
    ```
 
+   PHP dependencies ([getID3](https://github.com/JamesHeinrich/getID3)) are installed
+   automatically via Composer on first start (requires internet access during the first boot).
+
 4. **Access in your browser**:
    ```
    http://localhost:8050

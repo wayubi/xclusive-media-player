@@ -1,0 +1,9 @@
+{
+    "name": "wayubi/xclusive-media-player",
+    "description": "Self-hosted media streaming server",
+    "type": "project",
+    "require": {
+        "php": ">=8.0",
+        "james-heinrich/getid3": "^1.9"
+    }
+}
