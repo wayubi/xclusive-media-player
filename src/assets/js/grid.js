@@ -436,6 +436,18 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
+/**
+ * Go up one folder level from the current path. Returns false at the root.
+ */
+export function navigateToParentFolder() {
+  const segments = (state.currentPath || '').split('/').filter(p => p);
+  if (segments.length === 0) return false;
+
+  segments.pop();
+  navigateToFolder(segments.join('/'));
+  return true;
+}
+
 function navigateToFolder(folderPath) {
   const pathSegments = folderPath.split('/').filter(p => p);
   const params = new URLSearchParams();

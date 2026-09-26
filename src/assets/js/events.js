@@ -1,6 +1,6 @@
 // events.js - Event listeners and handlers
 import { state } from './state.js';
-import { nextGrid, prevGrid, renderGrid } from './grid.js';
+import { nextGrid, prevGrid, renderGrid, navigateToParentFolder } from './grid.js';
 import { playAll, shufflePlay } from './fullscreen.js';
 import { setupSearchListeners } from './search.js';
 import { runAudit, auditCurrentView, auditSelectedTiles } from './audit.js';
@@ -112,9 +112,25 @@ function setupGridNavigation() {
     // Don't process if share modal is open
     if (document.getElementById('share-modal')) return;
     
-    // Note: ArrowLeft/ArrowRight are NOT intercepted here
-    // This allows D-pad navigation between menu buttons and focus movement
-    // Use the ◀/▶ buttons or other navigation methods for page scrolling
+    // Backspace goes up one folder level
+    if (e.key === 'Backspace') {
+      e.preventDefault();
+      navigateToParentFolder();
+      return;
+    }
+
+    // ArrowLeft/ArrowRight page the grid, mirroring wheel up/down.
+    // A focused button or link keeps the arrows for D-pad focus movement.
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      if (activeElement.closest('button, a, [tabindex]')) return;
+
+      e.preventDefault();
+      if (scrollDebounce) return;
+
+      scrollDebounce = true;
+      setTimeout(() => scrollDebounce = false, 200);
+      e.key === 'ArrowLeft' ? prevGrid() : nextGrid();
+    }
   });
   
   // Options form wheel
