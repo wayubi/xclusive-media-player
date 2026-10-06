@@ -4,7 +4,7 @@ import { nextGrid, prevGrid, renderGrid, navigateToParentFolder, navigateToFileF
 import { playAll, shufflePlay } from './fullscreen.js';
 import { setupSearchListeners } from './search.js';
 import { runAudit, auditCurrentView, auditSelectedTiles } from './audit.js';
-import { setupUnauditedFilter } from './filter.js';
+import { setupUnauditedFilter, toggleUnauditedFilter } from './filter.js';
 import { toggleTileSelection, confirmDelete, selectAllFiles, clearAllSelections, isSelectAllMode, getSelectedTileCount, syncMuteIcons, selectAllVisibleTiles, areAllVisibleTilesSelected } from './ui.js';
 import { toggleTerminal, isTerminalActive, hideTerminal } from './terminal.js';
 
@@ -305,7 +305,7 @@ function setupDeleteHotkeys() {
     const isActionKey = key === 'Escape' || key === 'Delete' || key.toLowerCase() === 'd' ||
       key.toLowerCase() === 'a' || key === '.' || key === '`' || key === '~' ||
       key.toLowerCase() === 'b' || key.toLowerCase() === 'f' ||
-      key.toLowerCase() === 'g';
+      key.toLowerCase() === 'g' || key.toLowerCase() === 'u';
     if (!isNumKey && !isActionKey) return;
 
     // Don't process if user is typing in an input field
@@ -387,6 +387,14 @@ function setupDeleteHotkeys() {
       if (!file) return;
       e.preventDefault();
       navigateToFileFolder(file);
+      return;
+    }
+
+    if (key.toLowerCase() === 'u') {
+      if (isFullscreenActive) return;
+      if (!state.permissions.includes('audit')) return;
+      e.preventDefault();
+      toggleUnauditedFilter();
       return;
     }
 
