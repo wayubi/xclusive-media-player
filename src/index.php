@@ -317,7 +317,7 @@ $audioThumbs = (file_exists($audioCoversFile)) ? (json_decode(file_get_contents(
         <form id="options-form" method="get" action="/"
               class="<?= !in_array('audit', $permissions) ? 'no-audit' : '' ?>">
             <!-- File counter -->
-            <!-- <span id="file-count" style="min-width: 100px;">1 / <?= $allFilesCount ?></span> -->
+            <span id="file-count" style="min-width: 100px;">1 / <?= $allFilesCount ?></span>
 
             <?php foreach ($selected_path_parts_final as $part): ?>
                 <input type="hidden" name="path[]" value="<?= htmlspecialchars($part) ?>">
