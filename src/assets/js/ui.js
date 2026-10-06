@@ -129,6 +129,21 @@ export function setSelectAllMode(value) {
   selectAllMode = value;
 }
 
+function unmuteLastSelectedTile() {
+  if (selectedTiles.size === 0) return;
+  if (state.muted) return;
+
+  const index = Array.from(selectedTiles).pop();
+  const containers = document.querySelectorAll('#grid .video-container');
+  const mediaEl = containers[index]?.querySelector('video, audio');
+  if (!mediaEl) return;
+
+  document.querySelectorAll('#grid video, #grid audio').forEach(m => m.muted = true);
+  mediaEl.muted = false;
+  mediaEl.play().catch(() => {});
+  syncMuteIcons();
+}
+
 export function toggleTileSelection(index) {
   const containers = document.querySelectorAll('#grid .video-container');
   if (index < 0 || index >= containers.length) return false;
@@ -154,6 +169,7 @@ export function toggleTileSelection(index) {
     selectedTiles.add(index);
   }
   
+  unmuteLastSelectedTile();
   return true;
 }
 
@@ -300,6 +316,7 @@ export function selectAllFiles() {
   });
   
   selectAllMode = true;
+  unmuteLastSelectedTile();
 }
 
 export function clearAllSelections() {
@@ -330,6 +347,7 @@ export function selectAllVisibleTiles() {
     }
   });
   // NOTE: Do NOT set selectAllMode = true here
+  unmuteLastSelectedTile();
 }
 
 export function areAllVisibleTilesSelected() {
@@ -498,6 +516,7 @@ function createSelectButton(file) {
       selectBtn.classList.add('selected');
       container.classList.add('selected-for-delete');
       if (index !== -1) selectedTiles.add(index);
+      unmuteLastSelectedTile();
       return; // Stop here on first click
     }
     
