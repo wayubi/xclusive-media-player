@@ -448,6 +448,21 @@ export function navigateToParentFolder() {
   return true;
 }
 
+/**
+ * Browse to the folder that contains the given file (web path).
+ * Returns false when there is no parent folder to navigate to.
+ */
+export function navigateToFileFolder(file) {
+  const pathParts = (file || '').split('/').filter(p => p);
+  if (pathParts[0] === 'volumes') pathParts.shift();
+  pathParts.pop();
+
+  if (pathParts.length === 0) return false;
+
+  navigateToFolder(pathParts.join('/'));
+  return true;
+}
+
 function navigateToFolder(folderPath) {
   const pathSegments = folderPath.split('/').filter(p => p);
   const params = new URLSearchParams();

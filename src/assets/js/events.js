@@ -1,6 +1,6 @@
 // events.js - Event listeners and handlers
 import { state } from './state.js';
-import { nextGrid, prevGrid, renderGrid, navigateToParentFolder } from './grid.js';
+import { nextGrid, prevGrid, renderGrid, navigateToParentFolder, navigateToFileFolder } from './grid.js';
 import { playAll, shufflePlay } from './fullscreen.js';
 import { setupSearchListeners } from './search.js';
 import { runAudit, auditCurrentView, auditSelectedTiles } from './audit.js';
@@ -304,7 +304,8 @@ function setupDeleteHotkeys() {
     const isNumKey = (key >= '1' && key <= '9') || key === '0';
     const isActionKey = key === 'Escape' || key === 'Delete' || key.toLowerCase() === 'd' ||
       key.toLowerCase() === 'a' || key === '.' || key === '`' || key === '~' ||
-      key.toLowerCase() === 'b' || key.toLowerCase() === 'f';
+      key.toLowerCase() === 'b' || key.toLowerCase() === 'f' ||
+      key.toLowerCase() === 'g';
     if (!isNumKey && !isActionKey) return;
 
     // Don't process if user is typing in an input field
@@ -375,6 +376,17 @@ function setupDeleteHotkeys() {
       import('./favorites.js').then(module => {
         module.batchToggleFavorites();
       });
+      return;
+    }
+
+    if (key.toLowerCase() === 'g') {
+      if (isFullscreenActive) return;
+      if (getSelectedTileCount() !== 1) return;
+      const selectedBtn = document.querySelector('#grid .video-container button[data-selected="true"]');
+      const file = selectedBtn?.dataset.file;
+      if (!file) return;
+      e.preventDefault();
+      navigateToFileFolder(file);
       return;
     }
 
