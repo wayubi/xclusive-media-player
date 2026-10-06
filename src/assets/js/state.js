@@ -1,4 +1,6 @@
 // state.js - Centralized state management
+const PREFS_KEY = 'xclusive.prefs';
+
 export const state = {
   // Core data
   allVideos: [],
@@ -255,7 +257,50 @@ export const state = {
     }
     
     this.startIndex = 0;
+    this.persistPrefs();
     return this.allVideos.length;
+  },
+
+  // Apply stored view preferences (localStorage always wins over server/URL defaults)
+  applyPrefs() {
+    let prefs = {};
+    try {
+      prefs = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}') || {};
+    } catch (e) {
+      prefs = {};
+    }
+
+    if (typeof prefs.muted === 'boolean') {
+      this.muted = prefs.muted;
+    }
+
+    // Reset filters, then apply the single stored one (filters are mutually exclusive)
+    this.unauditedFilter = false;
+    this.favoritesFilter = false;
+    this.optimizationFilter = false;
+    this.allVideos = [...this.originalVideos];
+
+    if (prefs.unaudited) {
+      this.setFilter('unaudited');
+    } else if (prefs.favorites) {
+      this.setFilter('favorites');
+    } else if (prefs.optimization) {
+      this.setFilter('optimization');
+    }
+  },
+
+  // Persist view preferences
+  persistPrefs() {
+    try {
+      localStorage.setItem(PREFS_KEY, JSON.stringify({
+        muted: this.muted,
+        unaudited: this.unauditedFilter,
+        favorites: this.favoritesFilter,
+        optimization: this.optimizationFilter
+      }));
+    } catch (e) {
+      // Ignore storage failures (private mode, quota, etc.)
+    }
   },
   
   // Audit context tracking methods to prevent race conditions

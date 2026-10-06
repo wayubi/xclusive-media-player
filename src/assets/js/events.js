@@ -257,7 +257,10 @@ function toggleMute() {
   state.muted = !state.muted;
   const btn = document.getElementById('mute-button');
   if (btn) btn.innerHTML = state.muted ? '🔇' : '🔊';
+  const mutedInput = document.querySelector('input[name="muted"]');
+  if (mutedInput) mutedInput.value = state.muted ? 'true' : 'false';
   if (state.muted) state.lastFullscreen = { file: null, time: 0 };
+  state.persistPrefs();
   renderGrid();
 }
 

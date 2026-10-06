@@ -10,6 +10,13 @@ document.addEventListener('DOMContentLoaded', () => {
   requestAnimationFrame(() => {
     const cfg = window.APP;
     state.init(cfg);
+    state.applyPrefs();
+
+    // Keep the server-rendered mute controls in sync with the stored preference
+    const muteBtn = document.getElementById('mute-button');
+    if (muteBtn) muteBtn.innerHTML = state.muted ? '🔇' : '🔊';
+    const mutedInput = document.querySelector('input[name="muted"]');
+    if (mutedInput) mutedInput.value = state.muted ? 'true' : 'false';
 
     setVhUnit();
     setupEventListeners();
