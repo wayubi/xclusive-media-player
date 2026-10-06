@@ -305,7 +305,8 @@ function setupDeleteHotkeys() {
     const isActionKey = key === 'Escape' || key === 'Delete' || key.toLowerCase() === 'd' ||
       key.toLowerCase() === 'a' || key === '.' || key === '`' || key === '~' ||
       key.toLowerCase() === 'b' || key.toLowerCase() === 'f' ||
-      key.toLowerCase() === 'g' || key.toLowerCase() === 'u';
+      key.toLowerCase() === 'g' || key.toLowerCase() === 'u' ||
+      key.toLowerCase() === 'm';
     if (!isNumKey && !isActionKey) return;
 
     // Don't process if user is typing in an input field
@@ -395,6 +396,13 @@ function setupDeleteHotkeys() {
       if (!state.permissions.includes('audit')) return;
       e.preventDefault();
       toggleUnauditedFilter();
+      return;
+    }
+
+    if (key.toLowerCase() === 'm') {
+      if (isFullscreenActive) return;
+      e.preventDefault();
+      toggleMute();
       return;
     }
 
