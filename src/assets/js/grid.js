@@ -4,6 +4,7 @@ import { mediaPool } from './mediaPool.js';
 import { mediaQueue } from './mediaQueue.js';
 import { createMediaContainer, transformToUnsupportedVideo, loadTextContent, LAZY_LOAD_OFFSET } from './mediaContainer.js';
 import { syncMuteIcons, clearSelectedTiles, clearAllSelections } from './ui.js';
+import { resetQuickView } from './quickview.js';
 import { decodeBase64UTF8 } from './utils.js';
 
 // IntersectionObserver for lazy loading media
@@ -43,6 +44,9 @@ export function renderGrid() {
  * Properly recycle all media elements back to the pool
  */
 function cleanupGrid(grid) {
+  // Reset any in-grid quick view (DOM is about to be wiped)
+  resetQuickView();
+
   // Disconnect any existing observer
   if (gridObserver) {
     gridObserver.disconnect();

@@ -110,6 +110,50 @@
   .video-container.audio-active::after { animation: none; opacity: 0.55; }
 }
 
+/* Quick view: a single number-selected tile expands to a centered box */
+.video-container.quick-view {
+  position: absolute;
+  margin: 0;
+  z-index: 500;
+  transition:
+    top 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+    left 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+    width 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+    height 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.video-container.quick-view:hover {
+  transform: none;
+}
+
+.video-container.quick-view video,
+.video-container.quick-view img {
+  object-fit: contain;
+}
+
+.quick-view-placeholder {
+  visibility: hidden;
+}
+
+.quick-view-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 499;
+  background: rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  backdrop-filter: blur(2px);
+}
+
+.quick-view-backdrop.visible {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .video-container.quick-view { transition: none; }
+  .quick-view-backdrop { transition: none; }
+}
+
 .video-container.unsupported-video {
   border: 2px solid transparent;
   background:

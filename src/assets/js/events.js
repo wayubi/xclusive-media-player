@@ -7,6 +7,7 @@ import { runAudit, auditCurrentView, auditSelectedTiles } from './audit.js';
 import { setupUnauditedFilter, toggleUnauditedFilter } from './filter.js';
 import { toggleTileSelection, confirmDelete, selectAllFiles, clearAllSelections, isSelectAllMode, getSelectedTileCount, syncMuteIcons, selectAllVisibleTiles, areAllVisibleTilesSelected } from './ui.js';
 import { toggleTerminal, isTerminalActive, hideTerminal } from './terminal.js';
+import { isQuickViewActive } from './quickview.js';
 
 let scrollDebounce = false;
 
@@ -317,6 +318,14 @@ function setupDeleteHotkeys() {
     if (key === 'Escape') {
       if (isFullscreenActive) return;
       if (!state.permissions.includes('delete')) return;
+
+      // While a quick view is open, Esc only collapses it (no double-press logout)
+      if (isQuickViewActive()) {
+        lastEscTime = 0;
+        e.preventDefault();
+        clearAllSelections();
+        return;
+      }
 
       const now = Date.now();
       const timeSinceLastEsc = now - lastEscTime;

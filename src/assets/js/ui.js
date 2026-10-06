@@ -3,6 +3,7 @@ import { state } from './state.js';
 import { startFullscreenFrom } from './fullscreen.js';
 import { renderGrid } from './grid.js';
 import { isTerminalActive } from './terminal.js';
+import { showQuickView, hideQuickView } from './quickview.js';
 
 // Track selected tiles for keyboard delete operations
 let selectedTiles = new Set();
@@ -144,6 +145,18 @@ function unmuteLastSelectedTile() {
   syncMuteIcons();
 }
 
+// Expand the sole selected tile (only from number-key selection) or collapse otherwise
+function updateQuickViewForSelection(allowExpand) {
+  if (allowExpand && selectedTiles.size === 1) {
+    showQuickView(Array.from(selectedTiles)[0]);
+  } else {
+    hideQuickView();
+  }
+}
+
+// Collapse the quick view when its backdrop is clicked
+document.addEventListener('quickview:dismiss', () => clearAllSelections());
+
 export function toggleTileSelection(index) {
   const containers = document.querySelectorAll('#grid .video-container');
   if (index < 0 || index >= containers.length) return false;
@@ -170,6 +183,7 @@ export function toggleTileSelection(index) {
   }
   
   unmuteLastSelectedTile();
+  updateQuickViewForSelection(true);
   return true;
 }
 
@@ -317,6 +331,7 @@ export function selectAllFiles() {
   
   selectAllMode = true;
   unmuteLastSelectedTile();
+  updateQuickViewForSelection(false);
 }
 
 export function clearAllSelections() {
@@ -332,6 +347,7 @@ export function clearAllSelections() {
   
   selectedTiles.clear();
   selectAllMode = false;
+  updateQuickViewForSelection(false);
 }
 
 export function selectAllVisibleTiles() {
@@ -348,6 +364,7 @@ export function selectAllVisibleTiles() {
   });
   // NOTE: Do NOT set selectAllMode = true here
   unmuteLastSelectedTile();
+  updateQuickViewForSelection(false);
 }
 
 export function areAllVisibleTilesSelected() {
@@ -517,6 +534,7 @@ function createSelectButton(file) {
       container.classList.add('selected-for-delete');
       if (index !== -1) selectedTiles.add(index);
       unmuteLastSelectedTile();
+      updateQuickViewForSelection(false);
       return; // Stop here on first click
     }
     
