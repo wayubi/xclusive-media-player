@@ -5,11 +5,12 @@ import { playAll, shufflePlay } from './fullscreen.js';
 import { setupSearchListeners } from './search.js';
 import { runAudit, auditCurrentView, auditSelectedTiles } from './audit.js';
 import { setupUnauditedFilter, toggleUnauditedFilter } from './filter.js';
-import { toggleTileSelection, confirmDelete, selectAllFiles, clearAllSelections, isSelectAllMode, getSelectedTileCount, syncMuteIcons, selectAllVisibleTiles, areAllVisibleTilesSelected } from './ui.js';
+import { toggleTileSelection, confirmDelete, selectAllFiles, clearAllSelections, isSelectAllMode, getSelectedTileCount, syncMuteIcons, selectAllVisibleTiles, areAllVisibleTilesSelected, moveSelection } from './ui.js';
 import { toggleTerminal, isTerminalActive, hideTerminal } from './terminal.js';
 import { isQuickViewActive } from './quickview.js';
 
 let scrollDebounce = false;
+let quickViewMoveDebounce = false;
 
 let overlayIdleTimer = null;
 const OVERLAY_IDLE_DELAY = 1000;
@@ -123,6 +124,16 @@ function setupGridNavigation() {
     // ArrowLeft/ArrowRight page the grid, mirroring wheel up/down.
     // A focused button or link keeps the arrows for D-pad focus movement.
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      // While a quick view is open, arrows move the selection within the current grid
+      if (isQuickViewActive()) {
+        e.preventDefault();
+        if (quickViewMoveDebounce) return;
+        quickViewMoveDebounce = true;
+        setTimeout(() => quickViewMoveDebounce = false, 150);
+        moveSelection(e.key === 'ArrowRight' ? 1 : -1);
+        return;
+      }
+
       if (activeElement.closest('button, a, [tabindex]')) return;
 
       e.preventDefault();

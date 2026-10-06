@@ -14,7 +14,7 @@ function getGrid() {
   return document.getElementById('grid');
 }
 
-function isEligible(container) {
+export function isQuickViewEligible(container) {
   if (!container) return false;
   if (container.classList.contains('unsupported-video')) return false;
   if (container.classList.contains('text-file-container')) return false;
@@ -43,7 +43,7 @@ export function showQuickView(index) {
   const containers = grid.querySelectorAll('.video-container');
   const container = containers[index];
 
-  if (!isEligible(container)) {
+  if (!isQuickViewEligible(container)) {
     if (activeContainer && activeContainer === container) hideQuickView();
     return;
   }

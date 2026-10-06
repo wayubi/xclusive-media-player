@@ -3,7 +3,7 @@ import { state } from './state.js';
 import { startFullscreenFrom } from './fullscreen.js';
 import { renderGrid } from './grid.js';
 import { isTerminalActive } from './terminal.js';
-import { showQuickView, hideQuickView } from './quickview.js';
+import { showQuickView, hideQuickView, isQuickViewEligible } from './quickview.js';
 
 // Track selected tiles for keyboard delete operations
 let selectedTiles = new Set();
@@ -156,6 +156,49 @@ function updateQuickViewForSelection(allowExpand) {
 
 // Collapse the quick view when its backdrop is clicked
 document.addEventListener('quickview:dismiss', () => clearAllSelections());
+
+function setTileSelected(index, selected) {
+  const container = document.querySelectorAll('#grid .video-container')[index];
+  if (!container) return;
+  const selectBtn = container.querySelector('button[data-file]');
+  if (selectBtn) {
+    selectBtn.dataset.selected = selected ? 'true' : 'false';
+    selectBtn.classList.toggle('selected', selected);
+  }
+  container.classList.toggle('selected-for-delete', selected);
+}
+
+// Move the single selection by delta within the current N tiles, wrapping around
+// and skipping tiles that can't be shown in quick view.
+export function moveSelection(delta) {
+  if (selectedTiles.size !== 1) return false;
+
+  const containers = document.querySelectorAll('#grid .video-container');
+  const n = containers.length;
+  if (!n) return false;
+
+  const current = Array.from(selectedTiles)[0];
+
+  let next = current;
+  for (let i = 1; i < n; i++) {
+    const candidate = ((current + delta * i) % n + n) % n;
+    if (isQuickViewEligible(containers[candidate])) {
+      next = candidate;
+      break;
+    }
+  }
+
+  if (next === current) return false;
+
+  setTileSelected(current, false);
+  setTileSelected(next, true);
+  selectedTiles.clear();
+  selectedTiles.add(next);
+
+  unmuteLastSelectedTile();
+  showQuickView(next);
+  return true;
+}
 
 export function toggleTileSelection(index) {
   const containers = document.querySelectorAll('#grid .video-container');
