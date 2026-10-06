@@ -670,5 +670,6 @@ export function syncMuteIcons() {
     const media = container.querySelector('video, audio');
     const btn = container.querySelector('.mute-btn');
     if (media && btn) btn.innerHTML = media.muted ? '🔇' : '🔊';
+    container.classList.toggle('audio-active', !!media && !media.muted && !state.muted);
   });
 }

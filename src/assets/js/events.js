@@ -231,6 +231,7 @@ function setupGlobalControls() {
   window.shufflePlay = shufflePlay;
   window.toggleMute = toggleMute;
   window.runAudit = runAudit;
+  window.syncMuteIcons = syncMuteIcons;
   
   window.playFavorites = () => {
     if (!state.permissions.includes('favorites')) return;

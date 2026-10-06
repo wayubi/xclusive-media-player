@@ -75,6 +75,10 @@ function showTerminal(startWebPath = null, mode = 'transparent') {
     media.muted = true;
   });
 
+  if (window.syncMuteIcons) {
+    window.syncMuteIcons();
+  }
+
   // Focus the input
   setTimeout(() => {
     if (inputElement) {
@@ -106,7 +110,7 @@ function hideTerminal() {
 
   // Update mute icons
   if (window.syncMuteIcons) {
-    syncMuteIcons();
+    window.syncMuteIcons();
   }
 }
 
