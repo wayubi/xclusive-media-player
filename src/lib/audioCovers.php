@@ -51,7 +51,7 @@ function generateAudioCovers(array $files): array
             file_put_contents($thumbAbs, $coverData);
         } else {
             // placeholder
-            copy(__DIR__ . '/../cache/no-cover.jpg', $thumbAbs);
+            copy(__DIR__ . '/../assets/img/no-cover.jpg', $thumbAbs);
         }
 
         $map[$file] = $thumbRel;

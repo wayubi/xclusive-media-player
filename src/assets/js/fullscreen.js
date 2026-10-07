@@ -230,7 +230,7 @@ function createAudioPlayer(file, startTime, container, close) {
   audio.className = 'fullscreen-audio';
 
   const thumb = document.createElement('img');
-  thumb.src = state.audioThumbs[file] || 'cache/no-cover.jpg';
+  thumb.src = state.audioThumbs[file] || '/assets/img/no-cover.jpg';
   thumb.className = 'fullscreen-thumb';
   thumb.ondblclick = close;
 

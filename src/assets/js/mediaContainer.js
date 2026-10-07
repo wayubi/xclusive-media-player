@@ -119,7 +119,7 @@ export function transformToUnsupportedVideo(container, file) {
 
     // Thumbnail image
     const img = document.createElement('img');
-    img.src = state.audioThumbs[file] || 'cache/no-cover-vid.jpg';
+    img.src = state.audioThumbs[file] || '/assets/img/no-cover-vid.jpg';
     img.className = 'unsupported-video-thumb';
     img.loading = 'lazy';
     wrapper.appendChild(img);
@@ -180,7 +180,7 @@ function createUnsupportedPlaceholder(container, file) {
 
   // Thumbnail image
   const img = document.createElement('img');
-  img.src = state.audioThumbs[file] || 'cache/no-cover-vid.jpg';
+  img.src = state.audioThumbs[file] || '/assets/img/no-cover-vid.jpg';
   img.className = 'unsupported-video-thumb';
   img.loading = 'lazy';
   wrapper.appendChild(img);
@@ -490,7 +490,7 @@ function createLazyMediaElement(file, isVideo, isAudio, container) {
   mediaEl.preload = 'metadata'; // Only load metadata, not full video
 
   if (isVideo) {
-    mediaEl.poster = state.audioThumbs[file] || 'cache/no-cover-vid.jpg';
+    mediaEl.poster = state.audioThumbs[file] || '/assets/img/no-cover-vid.jpg';
   }
 
   // Mute by default (unmuting handled by enforceSingleUnmuted)
@@ -500,7 +500,7 @@ function createLazyMediaElement(file, isVideo, isAudio, container) {
     container.classList.add('audio-grid-container');
     const img = document.createElement('img');
     img.className = 'audio-grid-thumb';
-    img.src = state.audioThumbs[file] || 'cache/no-cover.jpg';
+    img.src = state.audioThumbs[file] || '/assets/img/no-cover.jpg';
     img.onclick = () => startFullscreenFrom(file, mediaEl.currentTime);
     container.appendChild(img);
   }
