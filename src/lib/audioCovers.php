@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../vendor/getid3/getid3.php';
+require_once __DIR__ . '/../vendor/autoload.php';
 
 /**
  * @param array $files absolute file paths
