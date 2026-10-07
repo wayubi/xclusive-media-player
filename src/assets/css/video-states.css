@@ -89,6 +89,9 @@
 }
 
 .video-container.audio-active::after {
+  /* default: pink (non-new, non-selected) */
+  --audio-glow-core: 255, 45, 149;
+  --audio-glow-soft: 236, 72, 153;
   content: '';
   position: absolute;
   inset: 0;
@@ -96,9 +99,21 @@
   pointer-events: none;
   z-index: 6;
   box-shadow:
-    inset 0 0 28px 6px rgba(255, 45, 149, 0.58),
-    inset 0 0 66px 18px rgba(236, 72, 153, 0.25);
+    inset 0 0 28px 6px rgba(var(--audio-glow-core), 0.58),
+    inset 0 0 66px 18px rgba(var(--audio-glow-soft), 0.25);
   animation: audioBreath 2.4s ease-in-out infinite;
+}
+
+/* new/unaudited tile -> amber, matching its border */
+.video-container.audio-active.unaudited::after {
+  --audio-glow-core: 251, 191, 36;
+  --audio-glow-soft: 245, 158, 11;
+}
+
+/* selected tile -> red, matching its border */
+.video-container.audio-active.selected-for-delete::after {
+  --audio-glow-core: 239, 68, 68;
+  --audio-glow-soft: 220, 38, 38;
 }
 
 @keyframes audioBreath {
