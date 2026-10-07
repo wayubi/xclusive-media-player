@@ -1,5 +1,8 @@
 <?php
-require_once __DIR__ . '/../vendor/autoload.php';
+$autoload = __DIR__ . '/../vendor/autoload.php';
+if (is_file($autoload)) {
+    require_once $autoload;
+}
 
 /**
  * @param array $files absolute file paths
@@ -7,6 +10,10 @@ require_once __DIR__ . '/../vendor/autoload.php';
  */
 function generateAudioCovers(array $files): array
 {
+    if (!class_exists('getID3')) {
+        return [];
+    }
+
     $cacheDir = __DIR__ . '/../cache/audio-covers';
     if (!is_dir($cacheDir)) {
         mkdir($cacheDir, 0777, true);
